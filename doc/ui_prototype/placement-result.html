@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Echora · 定级结果</title>
+<link rel="stylesheet" href="assets/styles.css" />
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+</head>
+<body>
+<main class="center-shell" style="align-items: flex-start; padding: 48px 24px;">
+  <div style="width: 100%; max-width: 880px;">
+
+    <div style="text-align:center; margin-bottom: 28px;">
+      <span class="tag tag--success" style="height:28px; padding: 0 14px;">
+        <i data-lucide="check-circle-2" style="width:14px;height:14px;"></i> 短测完成
+      </span>
+      <h1 style="font-size: 32px; margin: 16px 0 8px; letter-spacing:-0.01em;">系统建议你从 <span style="color: var(--color-terracotta);">B1 中级</span> 开始</h1>
+      <p class="muted" style="margin: 0;">你的基础接近 B1，但完整句翻译中助动词使用不太稳定。</p>
+    </div>
+
+    <div class="stat-grid mb-3">
+      <div class="stat">
+        <div class="stat__label">CEFR 等级</div>
+        <div class="stat__value">B1</div>
+        <div class="stat__delta">中级（与你的自选一致）</div>
+      </div>
+      <div class="stat">
+        <div class="stat__label">difficultyScore</div>
+        <div class="stat__value mono">420</div>
+        <div class="stat__delta">基础分 400 + 修正 +20</div>
+      </div>
+      <div class="stat">
+        <div class="stat__label">短测总分</div>
+        <div class="stat__value">82</div>
+        <div class="stat__delta">10 题平均</div>
+      </div>
+      <div class="stat">
+        <div class="stat__label">用时</div>
+        <div class="stat__value">8m</div>
+        <div class="stat__delta">每题平均 48s</div>
+      </div>
+    </div>
+
+    <section class="card mb-3">
+      <header class="card__header">
+        <div>
+          <h2 class="card__title">阶段表现</h2>
+          <p class="card__subtitle">三阶段独立评分，便于判断你是词汇弱、结构弱，还是完整表达弱。</p>
+        </div>
+      </header>
+      <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
+        <div>
+          <div class="text-label">阶段 1 · 隐藏一个空</div>
+          <div style="display:flex; align-items:baseline; gap:6px; margin-top:4px;">
+            <strong style="font-size: 22px;">92</strong>
+            <span class="muted text-caption">/100</span>
+          </div>
+          <div class="progress mt-2"><div class="progress__bar" style="width: 92%;"></div></div>
+        </div>
+        <div>
+          <div class="text-label">阶段 2 · 隐藏一半空</div>
+          <div style="display:flex; align-items:baseline; gap:6px; margin-top:4px;">
+            <strong style="font-size: 22px;">81</strong>
+            <span class="muted text-caption">/100</span>
+          </div>
+          <div class="progress mt-2"><div class="progress__bar" style="width: 81%; background: var(--color-warning);"></div></div>
+        </div>
+        <div>
+          <div class="text-label">阶段 3 · 整句翻译</div>
+          <div style="display:flex; align-items:baseline; gap:6px; margin-top:4px;">
+            <strong style="font-size: 22px;">74</strong>
+            <span class="muted text-caption">/100</span>
+          </div>
+          <div class="progress mt-2"><div class="progress__bar" style="width: 74%; background: var(--color-error);"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card mb-3">
+      <header class="card__header">
+        <div>
+          <h2 class="card__title">初步薄弱点</h2>
+          <p class="card__subtitle">系统会把这些标签注入下一轮场景生成，自然地训练。</p>
+        </div>
+      </header>
+      <ul style="display: flex; flex-direction: column; gap: 12px;">
+        <li class="list-row" style="border:1px solid var(--color-border-cream); border-radius: 8px;">
+          <div class="list-row__main">
+            <div style="display:flex; gap:8px; align-items:center;">
+              <span class="tag tag--error">auxiliary_verb</span>
+              <strong>否定/疑问句中漏掉 do / does</strong>
+            </div>
+            <div class="list-row__meta">例：<span class="mono">it not work</span> → <span class="mono">it does not work</span></div>
+          </div>
+          <span class="muted text-caption">出现 4 次</span>
+        </li>
+        <li class="list-row" style="border:1px solid var(--color-border-cream); border-radius: 8px;">
+          <div class="list-row__main">
+            <div style="display:flex; gap:8px; align-items:center;">
+              <span class="tag tag--error">infinitive</span>
+              <strong>want / need 后面的 to do 不稳定</strong>
+            </div>
+            <div class="list-row__meta">例：<span class="mono">I want return this charger</span> → <span class="mono">I want to return …</span></div>
+          </div>
+          <span class="muted text-caption">出现 2 次</span>
+        </li>
+        <li class="list-row" style="border:1px solid var(--color-border-cream); border-radius: 8px;">
+          <div class="list-row__main">
+            <div style="display:flex; gap:8px; align-items:center;">
+              <span class="tag tag--warning">word_order</span>
+              <strong>宾语从句中疑问语序错位</strong>
+            </div>
+            <div class="list-row__meta">例：<span class="mono">Can you tell me where is the station?</span></div>
+          </div>
+          <span class="muted text-caption">出现 1 次</span>
+        </li>
+      </ul>
+    </section>
+
+    <section class="card mb-3">
+      <header class="card__header">
+        <h2 class="card__title">第一轮推荐场景</h2>
+        <span class="tag tag--neutral">B1 · 商务 / 餐厅</span>
+      </header>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="card card--white" style="padding: 16px;">
+          <span class="tag tag--neutral">restaurant_english</span>
+          <h3 style="font-size: 16px; margin: 8px 0 4px;">在餐厅询问素食菜单</h3>
+          <p class="muted text-caption" style="margin:0;">Asking about vegetarian options at a restaurant</p>
+        </div>
+        <div class="card card--white" style="padding: 16px;">
+          <span class="tag tag--neutral">business_english</span>
+          <h3 style="font-size: 16px; margin: 8px 0 4px;">向同事礼貌地解释项目延期</h3>
+          <p class="muted text-caption" style="margin:0;">Explaining a project delay to a coworker politely</p>
+        </div>
+      </div>
+    </section>
+
+    <div style="display:flex; justify-content: space-between; gap:8px; flex-wrap:wrap;">
+      <button class="btn btn--secondary"><i data-lucide="pencil"></i> 我想手动调整一下等级</button>
+      <a class="btn btn--primary btn--large" href="dashboard.html">
+        <i data-lucide="arrow-right"></i>
+        进入 Dashboard，开始第一轮练习
+      </a>
+    </div>
+
+    <p class="muted text-caption mt-3">
+      <i data-lucide="info" style="width:14px;height:14px;vertical-align:-2px;"></i>
+      初始定级最多上调或下调一个 CEFR 等级。手动调整会保留在历史记录中。
+    </p>
+  </div>
+</main>
+<script>lucide.createIcons();</script>
+</body>
+</html>
