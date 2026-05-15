@@ -34,6 +34,7 @@
 | 07 | [验收与迭代](07-acceptance-and-roadmap.md) | MVP 验收标准、Skill 扩展路线 |
 | 08 | [AI 工作流与 Widget 契约](08-ai-workflow-and-widget-contract.md) | 学习流状态机、AI/系统边界、Widget 协议、会话锁定、结构化学习记录 |
 | 09 | [原型与主题设计附录](09-prototype-and-theme-appendix.md) | V1 Plus 原型页面、明暗主题、色彩搭配、样式基准、验收口径 |
+| 10 | [产品工作流发散式迭代记录](10-product-workflow-iteration-log.md) | 需求树、发散想法、MVP 取舍、候选分支与砍掉项记录 |
 
 ## 架构速览
 
@@ -55,7 +56,7 @@ Skill.execute(context) 实时返回文本 + 合法 Widget
 用户可从消息打开右侧辅助追问继续深入
 ```
 
-V1 的实现基准以 `08-ai-workflow-and-widget-contract.md` 为准。其他文档描述功能时应遵守同一套状态机、Widget 生命周期、会话锁定和辅助追问边界。原型页面和主题样式以 `09-prototype-and-theme-appendix.md` 为准，并严格参照 `DESIGN.md`。
+V1 的实现基准以 `08-ai-workflow-and-widget-contract.md` 为准。其他文档描述功能时应遵守同一套状态机、Widget 生命周期、会话锁定和辅助追问边界。原型页面和主题样式以 `09-prototype-and-theme-appendix.md` 为准，并严格参照 `DESIGN.md`。需求发散、取舍和持续审计记录在 `10-product-workflow-iteration-log.md` 中；只有被标记为 MVP 且同步回 `08` 契约的内容才进入当前实现基准。
 
 ## 与旧 V1 的关系
 

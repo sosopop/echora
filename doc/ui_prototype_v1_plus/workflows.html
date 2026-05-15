@@ -96,6 +96,96 @@
         </aside>
       </section>
 
+      <section class="action-matrix" aria-labelledby="action-matrix-title">
+        <div class="matrix-head">
+          <span class="eyebrow">MVP Action Matrix</span>
+          <h2 id="action-matrix-title">每个状态的可落地主线动作</h2>
+          <p>这里保留 MVP 必需分支；不清晰或容易扩大范围的动作不进入主线，只能作为辅助追问解释。</p>
+        </div>
+        <div class="matrix-table" role="table" aria-label="状态动作矩阵">
+          <div role="row" class="matrix-row matrix-row--head">
+            <span role="columnheader">状态</span>
+            <span role="columnheader">允许动作</span>
+            <span role="columnheader">系统结果</span>
+          </div>
+          <div role="row" class="matrix-row">
+            <span role="cell">onboarding</span>
+            <span role="cell">自然回答 / 跳过 / 登录或注册保存</span>
+            <span role="cell">补齐画像后进入 scene_selecting</span>
+          </div>
+          <div role="row" class="matrix-row">
+            <span role="cell">scene_selecting</span>
+            <span role="cell">选择场景 / 输入自定义场景 / 换一批</span>
+            <span role="cell">锁定场景上下文，进入 practicing</span>
+          </div>
+          <div role="row" class="matrix-row">
+            <span role="cell">practicing</span>
+            <span role="cell">提交答案 / 要提示 / 跳过 / 打开辅助追问</span>
+            <span role="cell">正式答案进入 grading；辅助追问不改主线</span>
+          </div>
+          <div role="row" class="matrix-row">
+            <span role="cell">grading</span>
+            <span role="cell">等待批改 / 查看处理过程 / 打开辅助追问</span>
+            <span role="cell">写入批改与错误标签，进入 awaiting_next</span>
+          </div>
+          <div role="row" class="matrix-row">
+            <span role="cell">awaiting_next</span>
+            <span role="cell">下一题 / 类似题 / 换场景 / 查看复盘</span>
+            <span role="cell">分别进入 practicing、scene_selecting 或 reviewing</span>
+          </div>
+          <div role="row" class="matrix-row">
+            <span role="cell">reviewing</span>
+            <span role="cell">继续练习 / 重练薄弱点 / 换场景 / 查看历史</span>
+            <span role="cell">可创建新学习流或回到练习主线</span>
+          </div>
+          <div role="row" class="matrix-row">
+            <span role="cell">archived</span>
+            <span role="cell">只读查看 / 引用摘要新建学习流</span>
+            <span role="cell">不可继续答题，只能创建新的 active 会话</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="branch-lab" aria-labelledby="branch-lab-title">
+        <div class="matrix-head">
+          <span class="eyebrow">Product Tree</span>
+          <h2 id="branch-lab-title">主线稳定，分支开放生长</h2>
+          <p>这里展示需求审计中产生的发散方向。只有 MVP 保留和 MVP 收敛会进入真实演示；候选、暂不做和已砍掉项只作为取舍记录。</p>
+        </div>
+        <div class="branch-grid">
+          <article class="branch-card branch-card--keep">
+            <span class="status-chip status-chip--keep">MVP 保留</span>
+            <h3>单一主学习流</h3>
+            <p>场景、练习、批改、复盘和重练都在中间学习流完成，底部交互区是唯一主线输入入口。</p>
+          </article>
+          <article class="branch-card branch-card--narrow">
+            <span class="status-chip status-chip--narrow">MVP 收敛</span>
+            <h3>账号入口 Widget</h3>
+            <p>登录、注册、保存进度以 account-gate 出现，但真实鉴权和保存由系统执行，不交给 AI 自由处理。</p>
+          </article>
+          <article class="branch-card branch-card--keep">
+            <span class="status-chip status-chip--keep">MVP 保留</span>
+            <h3>辅助追问不改主线</h3>
+            <p>右侧支线只能解释来源上下文；想生成新题、换场景或进入复盘，必须回到主学习流确认。</p>
+          </article>
+          <article class="branch-card branch-card--candidate">
+            <span class="status-chip status-chip--candidate">后续候选</span>
+            <h3>长期学习计划</h3>
+            <p>可在后续版本基于薄弱点和历史目标生成周计划，但 V1 不依赖计划系统完成学习闭环。</p>
+          </article>
+          <article class="branch-card branch-card--hold">
+            <span class="status-chip status-chip--hold">暂不做</span>
+            <h3>复杂账号表单</h3>
+            <p>V1 原型不做真实表单校验、密码处理、第三方登录或家长账号绑定，只表达保存入口。</p>
+          </article>
+          <article class="branch-card branch-card--cut">
+            <span class="status-chip status-chip--cut">已砍掉</span>
+            <h3>旧式多页面学习平台</h3>
+            <p>不把错题本、设置页、复盘页恢复成主导航。它们的能力必须长在学习流和 Widget 里。</p>
+          </article>
+        </div>
+      </section>
+
       <section class="boundary-grid" aria-label="关键边界流程">
         <article class="boundary-card">
           <span class="catalog-icon"><i data-lucide="split"></i></span>
@@ -137,8 +227,8 @@
           <p>用户只看到普通菜单。点击后系统决定直接执行、展示确认，或交给 Echo 生成下一步内容。</p>
           <div class="menu-panel menu-panel--static is-visible">
             <div class="menu-list">
-              <button class="menu-item" type="button"><i data-lucide="target"></i><strong>开始练习</strong><span>进入练习或先推荐场景</span></button>
-              <button class="menu-item" type="button"><i data-lucide="history"></i><strong>查看复盘</strong><span>读取结构化记录</span></button>
+              <button class="menu-item" type="button" data-prototype-toast="Menu action：start_practice。已有场景进入 practicing，否则进入 scene_selecting。"><i data-lucide="target"></i><strong>开始练习</strong><span>进入练习或先推荐场景</span></button>
+              <button class="menu-item" type="button" data-prototype-toast="Menu action：show_review。读取 attempts / grading / tags 后进入 reviewing。"><i data-lucide="history"></i><strong>查看复盘</strong><span>读取结构化记录</span></button>
             </div>
           </div>
         </article>
@@ -150,7 +240,7 @@
           <div class="account-card">
             <h3>登录或注册后保存这次学习进度</h3>
             <p>账号动作在对话里发起，由系统完成鉴权与保存。</p>
-            <div class="quick-actions"><button class="btn btn--primary" type="button">登录并保存</button><button class="btn btn--secondary" type="button">注册账号</button><button class="btn btn--secondary" type="button">稍后</button></div>
+            <div class="quick-actions"><button class="btn btn--primary" type="button" data-prototype-toast="Account action：login。登录成功后保存进度。">登录并保存</button><button class="btn btn--secondary" type="button" data-prototype-toast="Account action：register。注册成功后保存进度。">注册账号</button><button class="btn btn--secondary" type="button" data-prototype-toast="Account action：save_later。继续当前学习流。">稍后</button></div>
           </div>
         </article>
 
@@ -159,8 +249,8 @@
           <h2>低置信度意图确认</h2>
           <p>当 Echo 不确定用户想做什么时，只展示自然选项，不展示分数、路由或内部判断。</p>
           <div class="intent-grid">
-            <button class="choice-card" type="button"><h3>继续练习</h3><p>生成下一题</p></button>
-            <button class="choice-card" type="button"><h3>查看复盘</h3><p>总结表现</p></button>
+            <button class="choice-card" type="button" data-prototype-toast="Intent action：confirm_intent → practicing。"><h3>继续练习</h3><p>生成下一题</p></button>
+            <button class="choice-card" type="button" data-prototype-toast="Intent action：confirm_intent → reviewing。"><h3>查看复盘</h3><p>总结表现</p></button>
           </div>
         </article>
       </section>

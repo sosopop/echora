@@ -638,21 +638,38 @@ function appendFollowUpMessage(message) {
 
 function bindDynamicActions(root = document) {
   $all('[data-action-state]', root).forEach(btn => {
+    if (btn.dataset.boundActionState === 'true') return;
+    btn.dataset.boundActionState = 'true';
     btn.addEventListener('click', () => activateState(btn.dataset.actionState));
   });
   $all('[data-action-follow-up]', root).forEach(btn => {
+    if (btn.dataset.boundActionFollowUp === 'true') return;
+    btn.dataset.boundActionFollowUp = 'true';
     btn.addEventListener('click', () => renderFollowUpThread(btn.dataset.actionFollowUp));
   });
   $all('[data-action-mode]', root).forEach(btn => {
+    if (btn.dataset.boundActionMode === 'true') return;
+    btn.dataset.boundActionMode = 'true';
     btn.addEventListener('click', () => {
       setComposerMode(btn.dataset.actionMode);
       const modeBadge = $('#modeBadge');
       if (modeBadge) modeBadge.textContent = btn.dataset.actionMode === 'chat' ? '交互：自然对话' : '交互：选择';
-      showToast('底部交互区已调整');
+      if (btn.dataset.actionToast) showToast(btn.dataset.actionToast);
+      else showToast('底部交互区已调整');
     });
   });
   $all('[data-action-toast]', root).forEach(btn => {
-    btn.addEventListener('click', () => showToast(btn.dataset.actionToast));
+    if (btn.dataset.actionMode) return;
+    if (btn.dataset.boundActionToast === 'true') return;
+    btn.dataset.boundActionToast = 'true';
+    btn.addEventListener('click', () => {
+      showToast(btn.dataset.actionToast);
+    });
+  });
+  $all('[data-prototype-toast]', root).forEach(btn => {
+    if (btn.dataset.boundPrototypeToast === 'true') return;
+    btn.dataset.boundPrototypeToast = 'true';
+    btn.addEventListener('click', () => showToast(btn.dataset.prototypeToast));
   });
 }
 

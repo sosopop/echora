@@ -62,13 +62,13 @@
             <span class="badge widget-status-label">ready</span>
           </div>
           <div class="scene-grid">
-            <button class="scene-card is-selected" type="button">
+            <button class="scene-card is-selected" type="button" data-prototype-toast="Widget action：select_scene。系统校验状态后进入练习。">
               <div class="scene-icon"><i data-lucide="utensils"></i></div>
               <h3>餐厅点餐</h3>
               <p>would like、冠词、礼貌请求。</p>
               <div class="tag-row"><span class="badge">B1</span><span class="badge">会影响主线</span></div>
             </button>
-            <button class="scene-card" type="button">
+            <button class="scene-card" type="button" data-prototype-toast="Widget action：select_scene。选择后影响主学习流。">
               <div class="scene-icon"><i data-lucide="school"></i></div>
               <h3>校园对话</h3>
               <p>一般现在时、情态动词。</p>
@@ -92,7 +92,7 @@
             <div class="sentence-template">Translate the sentence politely.</div>
             <div class="tag-row"><span class="badge">整句翻译</span><span class="badge">会影响主线</span></div>
           </div>
-          <div class="quick-actions"><button class="btn btn--secondary btn--small" type="button">给点提示</button><button class="btn btn--secondary btn--small" type="button">跳过</button></div>
+          <div class="quick-actions"><button class="btn btn--secondary btn--small" type="button" data-prototype-toast="Widget action：hint。Echo 只给提示，主状态仍为 practicing。">给点提示</button><button class="btn btn--secondary btn--small" type="button" data-prototype-toast="Widget action：skip。系统确认后进入下一题或等待下一步。">跳过</button></div>
         </article>
 
         <article class="catalog-card widget-demo" data-widget-demo data-widget-name="fill-blank">
@@ -105,7 +105,7 @@
             <span class="badge widget-status-label">ready</span>
           </div>
           <div class="fill-template">I would like to <span class="blank">_____</span> a medium steak.</div>
-          <div class="fill-row"><input class="fill-input" value="order" aria-label="填空示例" /><button class="btn btn--primary" type="button">提交</button></div>
+          <div class="fill-row"><input class="fill-input" value="order" aria-label="填空示例" /><button class="btn btn--primary" type="button" data-prototype-toast="Widget action：submit_answer。系统创建 attempt 后进入 grading。">提交</button></div>
           <p class="catalog-note">提交后系统创建练习记录，并进入批改状态。</p>
         </article>
 
@@ -119,9 +119,9 @@
             <span class="badge widget-status-label">ready</span>
           </div>
           <div class="intent-grid">
-            <button class="choice-card" type="button"><h3>in</h3><p>用于较长时间范围</p></button>
-            <button class="choice-card is-selected" type="button"><h3>on</h3><p>用于具体日期或某天上午</p></button>
-            <button class="choice-card" type="button"><h3>at</h3><p>用于具体时刻</p></button>
+            <button class="choice-card" type="button" data-prototype-toast="Widget action：submit_choice = in。系统保存选择后批改。"><h3>in</h3><p>用于较长时间范围</p></button>
+            <button class="choice-card is-selected" type="button" data-prototype-toast="Widget action：submit_choice = on。系统保存选择后批改。"><h3>on</h3><p>用于具体日期或某天上午</p></button>
+            <button class="choice-card" type="button" data-prototype-toast="Widget action：submit_choice = at。系统保存选择后批改。"><h3>at</h3><p>用于具体时刻</p></button>
           </div>
         </article>
 
@@ -171,7 +171,7 @@
             <div class="compare-box"><div class="compare-label">题目</div>我想要一份沙拉。</div>
             <div class="compare-box"><div class="compare-label">错因</div>漏掉冠词 a。</div>
           </div>
-          <div class="quick-actions"><button class="btn btn--secondary btn--small" type="button">追问这题</button></div>
+          <div class="quick-actions"><button class="btn btn--secondary btn--small" type="button" data-prototype-toast="Widget action：open_follow_up。右侧解释，不改变主线。">追问这题</button></div>
         </article>
 
         <article class="catalog-card widget-demo" data-widget-demo data-widget-name="intent-confirm">
@@ -184,9 +184,9 @@
             <span class="badge widget-status-label">ready</span>
           </div>
           <div class="intent-grid">
-            <button class="choice-card" type="button"><h3>继续练习</h3><p>生成下一题</p></button>
-            <button class="choice-card" type="button"><h3>查看复盘</h3><p>总结表现</p></button>
-            <button class="choice-card" type="button"><h3>换个场景</h3><p>重新选择话题</p></button>
+            <button class="choice-card" type="button" data-prototype-toast="Widget action：confirm_intent → practicing。"><h3>继续练习</h3><p>生成下一题</p></button>
+            <button class="choice-card" type="button" data-prototype-toast="Widget action：confirm_intent → reviewing。"><h3>查看复盘</h3><p>总结表现</p></button>
+            <button class="choice-card" type="button" data-prototype-toast="Widget action：confirm_intent → scene_selecting。"><h3>换个场景</h3><p>重新选择话题</p></button>
           </div>
         </article>
 
@@ -201,9 +201,9 @@
           </div>
           <div class="menu-panel menu-panel--static is-visible">
             <div class="menu-list">
-              <button class="menu-item" type="button"><i data-lucide="target"></i><strong>开始练习</strong><span>生成下一题</span></button>
-              <button class="menu-item" type="button"><i data-lucide="history"></i><strong>查看复盘</strong><span>总结表现</span></button>
-              <button class="menu-item" type="button"><i data-lucide="save"></i><strong>保存学习进度</strong><span>登录后同步</span></button>
+              <button class="menu-item" type="button" data-prototype-toast="Menu action：start_practice。系统先校验当前 learningState。"><i data-lucide="target"></i><strong>开始练习</strong><span>生成下一题</span></button>
+              <button class="menu-item" type="button" data-prototype-toast="Menu action：show_review。系统读取结构化记录后交给 Echo 总结。"><i data-lucide="history"></i><strong>查看复盘</strong><span>总结表现</span></button>
+              <button class="menu-item" type="button" data-prototype-toast="Menu action：save_progress。未登录时展示 account-gate。"><i data-lucide="save"></i><strong>保存学习进度</strong><span>登录后同步</span></button>
             </div>
           </div>
         </article>
@@ -220,7 +220,7 @@
           <div class="account-card">
             <h3>登录或注册后保存这次学习进度</h3>
             <p>登录后可以在其他设备继续查看历史、复盘和薄弱点。新用户也可以在这里直接注册。</p>
-            <div class="quick-actions"><button class="btn btn--primary" type="button">登录并保存</button><button class="btn btn--secondary" type="button">注册账号</button><button class="btn btn--secondary" type="button">稍后再说</button></div>
+            <div class="quick-actions"><button class="btn btn--primary" type="button" data-prototype-toast="Account action：login。真实鉴权由系统处理。">登录并保存</button><button class="btn btn--secondary" type="button" data-prototype-toast="Account action：register。注册成功后保存学习进度。">注册账号</button><button class="btn btn--secondary" type="button" data-prototype-toast="Account action：save_later。主学习流继续，不强制登录。">稍后再说</button></div>
           </div>
         </article>
 
