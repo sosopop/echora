@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Echora V1 Plus · Workflows</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+</head>
+<body data-page="workflows">
+  <div class="app">
+    <header class="top-nav">
+      <a class="brand" href="./index.html" aria-label="Echora V1 Plus">
+        <span class="brand-symbol" aria-hidden="true"><i data-lucide="sparkles"></i></span>
+        <span>Echora</span>
+        <span class="badge">工作流</span>
+      </a>
+      <nav class="page-nav" aria-label="原型页面">
+        <a class="page-nav__link" href="./index.html">入口</a>
+        <a class="page-nav__link" href="./demo.html">完整演示</a>
+        <a class="page-nav__link" href="./widgets.html">Widget</a>
+        <a class="page-nav__link is-active" href="./workflows.html">工作流</a>
+      </nav>
+      <div class="nav-actions">
+        <button class="btn btn--secondary btn--icon" type="button" data-theme-toggle aria-label="切换明暗主题"><i data-lucide="sun-moon"></i></button>
+        <a class="btn btn--primary" href="./demo.html"><i data-lucide="play"></i> 完整演示</a>
+      </div>
+    </header>
+
+    <main class="prototype-shell reference-page">
+      <section class="reference-hero" aria-labelledby="workflow-title">
+        <span class="eyebrow">Learning Flow</span>
+        <h1 id="workflow-title" class="entry-title">状态机驱动的 AI 学习流。</h1>
+        <p class="entry-copy">
+          主学习流只有一条。AI 负责生成、解释和推荐；系统负责保存、提交、锁定、权限和状态转换。
+        </p>
+      </section>
+
+      <section class="workflow-board" aria-label="学习流状态机">
+        <div class="flow-map">
+          <button class="flow-node is-active" type="button" data-flow="onboarding">
+            <span>01</span>
+            <strong>onboarding</strong>
+            <small>建立学习档案</small>
+          </button>
+          <button class="flow-node" type="button" data-flow="scene_selecting">
+            <span>02</span>
+            <strong>scene_selecting</strong>
+            <small>选择练习场景</small>
+          </button>
+          <button class="flow-node" type="button" data-flow="practicing">
+            <span>03</span>
+            <strong>practicing</strong>
+            <small>出题与答题</small>
+          </button>
+          <button class="flow-node" type="button" data-flow="grading">
+            <span>04</span>
+            <strong>grading</strong>
+            <small>批改中</small>
+          </button>
+          <button class="flow-node" type="button" data-flow="awaiting_next">
+            <span>05</span>
+            <strong>awaiting_next</strong>
+            <small>等待下一步</small>
+          </button>
+          <button class="flow-node" type="button" data-flow="reviewing">
+            <span>06</span>
+            <strong>reviewing</strong>
+            <small>复盘与重练</small>
+          </button>
+          <button class="flow-node" type="button" data-flow="archived">
+            <span>07</span>
+            <strong>archived</strong>
+            <small>历史只读</small>
+          </button>
+        </div>
+
+        <aside class="flow-detail" aria-live="polite">
+          <span class="eyebrow">Current State</span>
+          <h2 id="flowTitle">onboarding</h2>
+          <p id="flowDescription">Echo 用自然对话收集用户画像，系统保存必要字段，并在完成后进入场景选择。</p>
+          <div class="flow-detail-grid">
+            <div>
+              <span class="compare-label">系统负责</span>
+              <p id="flowSystem">保存画像、校验账号入口、创建当前会话。</p>
+            </div>
+            <div>
+              <span class="compare-label">AI 负责</span>
+              <p id="flowAi">询问关键信息、总结画像、推荐下一步。</p>
+            </div>
+          </div>
+          <div class="quick-actions" id="flowWidgets">
+            <span class="badge">account-gate</span>
+            <span class="badge">intent-confirm</span>
+          </div>
+        </aside>
+      </section>
+
+      <section class="boundary-grid" aria-label="关键边界流程">
+        <article class="boundary-card">
+          <span class="catalog-icon"><i data-lucide="split"></i></span>
+          <h2>AI 建议 + 系统确定动作</h2>
+          <p>AI 可以建议练什么、怎么解释、下一步去哪；系统负责提交答案、保存、登录、新建会话、锁定历史和权限判断。</p>
+          <div class="process-steps">
+            <div class="process-step is-current"><span>1</span><p>用户点击学习菜单</p></div>
+            <div class="process-step"><span>2</span><p>系统校验当前状态</p></div>
+            <div class="process-step"><span>3</span><p>AI 生成内容或建议</p></div>
+          </div>
+        </article>
+
+        <article class="boundary-card">
+          <span class="catalog-icon"><i data-lucide="message-circle-question"></i></span>
+          <h2>辅助追问不改变主线</h2>
+          <p>右侧追问只解释来源上下文。用户想换场景、出新题或复盘时，必须回到主学习流确认。</p>
+          <div class="branch-source branch-source--light">
+            <span class="badge badge--coral">来自：这道题</span>
+            <p>解释 order / book / reserve 的区别，主线仍停留在当前题。</p>
+          </div>
+        </article>
+
+        <article class="boundary-card">
+          <span class="catalog-icon"><i data-lucide="lock-keyhole"></i></span>
+          <h2>练习中历史锁定</h2>
+          <p>当前题未完成时，旧会话可见但答案、参考答案和批改详情隐藏或只读，避免用户回看答案影响练习。</p>
+          <div class="lock-card">
+            <i data-lucide="lock"></i>
+            <div>
+              <h3>暂不可查看完整答案</h3>
+              <p>完成当前题后恢复完整复盘。</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="boundary-card">
+          <span class="catalog-icon"><i data-lucide="panel-left-open"></i></span>
+          <h2>学习菜单触发结构化动作</h2>
+          <p>用户只看到普通菜单。点击后系统决定直接执行、展示确认，或交给 Echo 生成下一步内容。</p>
+          <div class="menu-panel menu-panel--static is-visible">
+            <div class="menu-list">
+              <button class="menu-item" type="button"><i data-lucide="target"></i><strong>开始练习</strong><span>进入练习或先推荐场景</span></button>
+              <button class="menu-item" type="button"><i data-lucide="history"></i><strong>查看复盘</strong><span>读取结构化记录</span></button>
+            </div>
+          </div>
+        </article>
+
+        <article class="boundary-card">
+          <span class="catalog-icon"><i data-lucide="shield-check"></i></span>
+          <h2>账号保存入口</h2>
+          <p>登录注册可以作为对话内小部件出现，但真实鉴权、保存和恢复仍由系统执行。</p>
+          <div class="account-card">
+            <h3>保存这次学习进度</h3>
+            <p>登录后同步历史、复盘和薄弱点。</p>
+            <div class="quick-actions"><button class="btn btn--primary" type="button">登录并保存</button><button class="btn btn--secondary" type="button">稍后</button></div>
+          </div>
+        </article>
+
+        <article class="boundary-card">
+          <span class="catalog-icon"><i data-lucide="help-circle"></i></span>
+          <h2>低置信度意图确认</h2>
+          <p>当 Echo 不确定用户想做什么时，只展示自然选项，不展示分数、路由或内部判断。</p>
+          <div class="intent-grid">
+            <button class="choice-card" type="button"><h3>继续练习</h3><p>生成下一题</p></button>
+            <button class="choice-card" type="button"><h3>查看复盘</h3><p>总结表现</p></button>
+          </div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+  <script src="assets/scripts.js"></script>
+</body>
+</html>

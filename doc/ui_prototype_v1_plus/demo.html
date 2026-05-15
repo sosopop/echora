@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Echora V1 Plus · Demo</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+</head>
+<body data-page="demo">
+  <div class="app app--product">
+    <header class="top-nav">
+      <a class="brand" href="./index.html" aria-label="Echora V1 Plus">
+        <span class="brand-symbol" aria-hidden="true"><i data-lucide="sparkles"></i></span>
+        <span>Echora</span>
+        <span class="badge">AI 学习流</span>
+      </a>
+      <nav class="page-nav" aria-label="原型页面">
+        <a class="page-nav__link" href="./index.html">入口</a>
+        <a class="page-nav__link is-active" href="./demo.html">完整演示</a>
+        <a class="page-nav__link" href="./widgets.html">Widget</a>
+        <a class="page-nav__link" href="./workflows.html">工作流</a>
+      </nav>
+      <div class="nav-actions">
+        <button class="btn btn--text" type="button" data-set-state="review"><i data-lucide="history"></i> 复盘</button>
+        <button class="btn btn--secondary" type="button" data-open-branch="review"><i data-lucide="message-circle-question"></i> 辅助追问</button>
+        <button class="btn btn--secondary btn--icon" type="button" data-theme-toggle aria-label="切换明暗主题"><i data-lucide="sun-moon"></i></button>
+        <button class="btn btn--primary" type="button" data-set-state="practice"><i data-lucide="play"></i> 继续练习</button>
+      </div>
+    </header>
+
+    <main class="prototype-shell prototype-shell--product">
+      <section class="chat-workbench" aria-label="Echora 聊天工作台">
+        <aside class="history-panel" aria-label="历史对话列表">
+          <div class="panel-head">
+            <div>
+              <span class="eyebrow">History</span>
+              <h2>历史对话</h2>
+            </div>
+            <button class="btn btn--secondary btn--icon" type="button" aria-label="新建学习流"><i data-lucide="plus"></i></button>
+          </div>
+          <div class="conversation-list">
+            <button class="conversation-item is-active" type="button" data-history-title="餐厅点餐练习" data-history-state="grade">
+              <span class="conversation-title">餐厅点餐练习</span>
+              <span class="conversation-summary">当前练习中 · 完成这一题后可完整复盘</span>
+              <span class="conversation-time">刚刚</span>
+            </button>
+            <button class="conversation-item" type="button" data-history-title="校园对话" data-history-state="review">
+              <span class="conversation-title">校园对话</span>
+              <span class="conversation-summary">已完成 · 可复盘</span>
+              <span class="conversation-time">昨天</span>
+            </button>
+            <button class="conversation-item is-locked" type="button" data-history-title="旅行问路" data-history-state="scene" data-history-locked="true">
+              <span class="conversation-title">旅行问路</span>
+              <span class="conversation-summary">暂不可进入 · 先完成当前练习</span>
+              <span class="conversation-time">5/14</span>
+            </button>
+          </div>
+        </aside>
+
+        <div class="center-stack">
+          <section class="chat-frame" aria-label="主学习流">
+            <div class="session-bar">
+              <div class="session-heading">
+                <span class="session-icon" aria-hidden="true"><i data-lucide="activity"></i></span>
+                <div>
+                  <p class="session-title" id="sessionTitle">餐厅点餐练习</p>
+                  <div class="session-meta">
+                    <span class="badge" id="flowBadge">当前：批改结果</span>
+                    <span class="badge" id="modeBadge">交互：自然对话</span>
+                    <span class="badge">已保存学习进度</span>
+                  </div>
+                </div>
+              </div>
+              <div class="connection" id="connectionStatus">
+                <span class="connection-dot" aria-hidden="true"></span>
+                <span id="connectionText">准备好了</span>
+              </div>
+            </div>
+
+            <div class="message-list" id="messageList" aria-live="polite"></div>
+          </section>
+
+          <section class="composer-wrap" aria-label="主聊天智能输入区">
+            <div class="composer">
+              <div class="menu-panel" id="menuPanel">
+                <div class="menu-panel__head">
+                  <span>学习菜单</span>
+                  <span class="badge badge--dark">不打断当前练习</span>
+                </div>
+                <div class="menu-list">
+                  <button class="menu-item" type="button" data-menu-state="practice">
+                    <i data-lucide="target"></i>
+                    <strong>开始练习</strong>
+                    <span>根据当前水平生成下一题</span>
+                  </button>
+                  <button class="menu-item" type="button" data-menu-state="review">
+                    <i data-lucide="history"></i>
+                    <strong>查看复盘</strong>
+                    <span>总结最近表现和薄弱点</span>
+                  </button>
+                  <button class="menu-item" type="button" data-menu-state="retry">
+                    <i data-lucide="refresh-cw"></i>
+                    <strong>复习薄弱点</strong>
+                    <span>生成相同知识点的新题</span>
+                  </button>
+                  <button class="menu-item" type="button" data-menu-state="scene">
+                    <i data-lucide="map"></i>
+                    <strong>换个场景</strong>
+                    <span>重新选择或自定义练习场景</span>
+                  </button>
+                  <button class="menu-item" type="button" data-menu-toast="学习进度已保存。登录后可在其他设备继续。">
+                    <i data-lucide="save"></i>
+                    <strong>保存学习进度</strong>
+                    <span>把当前学习流安全保存下来</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="composer-mode is-active" data-composer-mode="chat">
+                <div class="chat-input-row">
+                  <button class="btn btn--secondary btn--icon" type="button" id="menuBtn" aria-label="打开学习菜单"><i data-lucide="panel-left-open"></i></button>
+                  <textarea class="chat-input" id="chatInput" rows="1" placeholder="说说你想练什么，或直接回答当前题目..."></textarea>
+                  <button class="btn btn--primary btn--icon" type="button" id="sendBtn" aria-label="发送"><i data-lucide="send"></i></button>
+                </div>
+                <div class="mode-hints">
+                  <span>Enter 发送</span>
+                  <span>Shift + Enter 换行</span>
+                  <span>Echo 会自动接住上下文</span>
+                </div>
+              </div>
+
+              <div class="composer-mode" data-composer-mode="fill">
+                <div class="fill-template">I would like to <span class="blank">_____</span> a medium steak.</div>
+                <div class="fill-row">
+                  <input class="fill-input" id="fillInput" value="order" aria-label="填空答案" />
+                  <button class="btn btn--primary" type="button" id="submitFill"><i data-lucide="check"></i> 提交</button>
+                </div>
+                <div class="mode-hints">
+                  <span>填入空格</span>
+                  <span>Enter 提交</span>
+                  <span>需要解释时点题目里的解析</span>
+                </div>
+              </div>
+
+              <div class="composer-mode" data-composer-mode="select">
+                <div class="select-mode-grid">
+                  <button class="choice-card is-selected" type="button" data-set-state="practice">
+                    <h3>餐厅点餐</h3>
+                    <p>would like · 一般疑问句</p>
+                  </button>
+                  <button class="choice-card" type="button" data-set-state="practice">
+                    <h3>校园对话</h3>
+                    <p>一般现在时 · 情态动词</p>
+                  </button>
+                  <button class="choice-card" type="button" data-set-state="practice">
+                    <h3>自定义场景</h3>
+                    <p>切回输入框描述你想练什么</p>
+                  </button>
+                </div>
+                <div class="mode-hints">
+                  <span>点击即可选择</span>
+                  <span>也可以自己描述场景</span>
+                </div>
+              </div>
+
+              <div class="composer-mode" data-composer-mode="intent">
+                <div class="intent-grid">
+                  <button class="choice-card" type="button" data-set-state="practice">
+                    <h3>开始练习</h3>
+                    <p>继续生成适合当前水平的题目</p>
+                  </button>
+                  <button class="choice-card" type="button" data-set-state="review">
+                    <h3>查看复盘</h3>
+                    <p>看看最近练得怎么样</p>
+                  </button>
+                  <button class="choice-card" type="button" data-set-state="scene">
+                    <h3>换个场景</h3>
+                    <p>重新挑一个更合适的话题</p>
+                  </button>
+                </div>
+                <div class="mode-hints">
+                  <span>Echo 需要你确认下一步</span>
+                  <span>点击一个方向即可继续</span>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <aside class="branch-panel" aria-label="辅助追问窗口">
+          <div class="panel-head">
+            <div>
+              <span class="eyebrow">Follow-up</span>
+              <h2>辅助追问</h2>
+            </div>
+            <button class="btn btn--secondary btn--icon" type="button" id="closeBranch" aria-label="关闭辅助追问"><i data-lucide="x"></i></button>
+          </div>
+          <div class="branch-source" id="branchSource">
+            <span class="badge badge--coral">来自：这次批改</span>
+            <p>围绕当前内容临时追问，主线练习不会被带偏。</p>
+          </div>
+          <div class="branch-messages" id="branchMessages"></div>
+          <div class="branch-composer">
+            <textarea class="branch-input" id="branchInput" rows="2" placeholder="继续追问这个点..."></textarea>
+            <button class="btn btn--primary btn--small" type="button" id="sendBranch"><i data-lucide="send"></i> 发送</button>
+          </div>
+        </aside>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+  <script src="assets/scripts.js"></script>
+</body>
+</html>
