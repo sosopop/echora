@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Echora · 场景选择</title>
+<link rel="stylesheet" href="assets/chat-styles.css" />
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+</head>
+<body>
+<div class="chat-shell">
+
+  <!-- Top Bar -->
+  <header class="chat-topbar">
+    <div class="chat-topbar__left">
+      <div class="chat-topbar__brand">
+        <span class="chat-topbar__brand-mark">E</span> Echora
+      </div>
+      <span class="chat-topbar__status">
+        <span class="chat-topbar__status-dot"></span> scene-select
+      </span>
+    </div>
+    <div class="chat-topbar__right">
+      <span class="tag tag--level" style="margin-right:8px;">A2-B1</span>
+      <div class="chat-avatar">小</div>
+    </div>
+  </header>
+
+  <!-- Messages -->
+  <div class="chat-messages" id="chat-messages">
+    <div class="chat-messages__inner" id="chat-messages-inner">
+
+      <!-- Previous context (collapsed) -->
+      <div class="msg msg--system">↑ onboarding 完成 · 用户画像已建立</div>
+
+      <!-- AI intro text -->
+      <div class="msg msg--ai">
+        <div class="msg__sender"><i data-lucide="sparkles"></i> Echo</div>
+        <div>根据你的情况（初三 · A2-B1 · 语法薄弱 · 中考+日常），推荐这几个场景：</div>
+      </div>
+
+      <!-- AI with Scene Cards Widget -->
+      <div class="msg msg--ai">
+        <div class="msg__sender"><i data-lucide="sparkles"></i> Echo</div>
+        <div class="msg__widget">
+          <div class="scene-cards">
+            <div class="scene-card" onclick="selectScene('餐厅点餐', this)">
+              <div class="scene-card__icon">🍔</div>
+              <div class="scene-card__title">餐厅点餐</div>
+              <div class="scene-card__tags">
+                <span class="tag tag--neutral">would like</span>
+                <span class="tag tag--neutral">一般疑问句</span>
+              </div>
+              <span class="scene-card__level">B1 难度</span>
+            </div>
+            <div class="scene-card" onclick="selectScene('校园对话', this)">
+              <div class="scene-card__icon">🏫</div>
+              <div class="scene-card__title">校园对话</div>
+              <div class="scene-card__tags">
+                <span class="tag tag--neutral">一般现在时</span>
+                <span class="tag tag--neutral">情态动词</span>
+              </div>
+              <span class="scene-card__level">A2 难度</span>
+            </div>
+            <div class="scene-card" onclick="selectScene('旅行问路', this)">
+              <div class="scene-card__icon">✈️</div>
+              <div class="scene-card__title">旅行问路</div>
+              <div class="scene-card__tags">
+                <span class="tag tag--neutral">there be</span>
+                <span class="tag tag--neutral">介词搭配</span>
+              </div>
+              <span class="scene-card__level">A2 难度</span>
+            </div>
+            <div class="scene-card" onclick="selectScene('图书馆借书', this)">
+              <div class="scene-card__icon">📚</div>
+              <div class="scene-card__title">图书馆借书</div>
+              <div class="scene-card__tags">
+                <span class="tag tag--neutral">can / could</span>
+                <span class="tag tag--neutral">礼貌请求</span>
+              </div>
+              <span class="scene-card__level">A2 难度</span>
+            </div>
+          </div>
+        </div>
+        <div class="quick-actions">
+          <button class="qact" onclick="randomScene()">✨ 随便来一个</button>
+          <button class="qact" onclick="customScene()">📝 自定义场景...</button>
+        </div>
+      </div>
+
+      <!-- Selected scene result (hidden by default) -->
+      <div id="selected-result" style="display:none;">
+        <div class="msg msg--user" id="selected-msg"></div>
+        <div class="msg msg--ai" id="confirm-msg">
+          <div class="msg__sender"><i data-lucide="sparkles"></i> Echo</div>
+          <div id="confirm-text"></div>
+          <div class="quick-actions" style="margin-top:10px;">
+            <button class="qact" onclick="location.href='chat-practice-fill.html'">✅ 开始练习 <i data-lucide="chevron-right" style="width:14px;height:14px;"></i></button>
+            <button class="qact" onclick="location.reload()">🔄 重新选择</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Composer — select mode by default -->
+  <div class="chat-composer" id="composer-area">
+    <div class="chat-composer__inner">
+      <!-- Select mode: scene options as buttons -->
+      <div class="select-options" id="select-mode">
+        <button class="select-option" onclick="selectScene('餐厅点餐', null)">
+          <span class="select-option__icon">🍔</span> 餐厅点餐
+        </button>
+        <button class="select-option" onclick="selectScene('校园对话', null)">
+          <span class="select-option__icon">🏫</span> 校园对话
+        </button>
+        <button class="select-option" onclick="selectScene('旅行问路', null)">
+          <span class="select-option__icon">✈️</span> 旅行问路
+        </button>
+        <button class="select-option" onclick="selectScene('图书馆借书', null)">
+          <span class="select-option__icon">📚</span> 图书馆借书
+        </button>
+        <button class="select-option select-option--custom" onclick="customScene()">
+          <span class="select-option__icon">📝</span> 自定义场景...
+        </button>
+      </div>
+      <!-- Chat mode (hidden, shown for custom input) -->
+      <div id="chat-mode" style="display:none;">
+        <div class="chat-composer__input-row">
+          <textarea class="chat-composer__input" id="composer-input"
+            placeholder="描述你想练习的场景..."
+            rows="1"></textarea>
+          <button class="chat-composer__send" id="send-btn" aria-label="发送">
+            <i data-lucide="send" style="width:16px;height:16px;"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="assets/chat-scripts.js"></script>
+<script>
+  lucide.createIcons();
+
+  function selectScene(name, cardEl) {
+    // Highlight card
+    if (cardEl) {
+      document.querySelectorAll('.scene-card').forEach(c => c.style.borderColor = '');
+      cardEl.style.borderColor = 'var(--color-terracotta)';
+      cardEl.style.boxShadow = '0 0 0 1px var(--color-terracotta)';
+    }
+
+    // Show selection result
+    document.getElementById('selected-msg').textContent = name;
+    document.getElementById('confirm-text').innerHTML =
+      '好的！那我们就从 <strong>' + name + '</strong> 开始吧。' +
+      '我会根据你的水平出题，先来一道热热身——';
+    document.getElementById('selected-result').style.display = 'contents';
+    echora.scrollToBottom('chat-messages');
+
+    // Hide select mode, show quick transition
+    document.getElementById('select-mode').style.display = 'none';
+
+    echora.showToast('场景已选择：' + name + ' · 触发 practice skill');
+  }
+
+  function randomScene() {
+    const scenes = ['餐厅点餐', '校园对话', '旅行问路', '图书馆借书'];
+    const pick = scenes[Math.floor(Math.random() * scenes.length)];
+    selectScene(pick, null);
+  }
+
+  function customScene() {
+    document.getElementById('select-mode').style.display = 'none';
+    document.getElementById('chat-mode').style.display = 'block';
+    document.getElementById('composer-input').focus();
+
+    // Init composer for custom input
+    echora.initComposer((text) => {
+      if (!text.trim()) return;
+      document.getElementById('selected-msg').textContent = text;
+      document.getElementById('confirm-text').innerHTML =
+        '好的！我根据 <strong>"' + text + '"</strong> 来生成练习内容。让我们开始吧——';
+      document.getElementById('selected-result').style.display = 'contents';
+      document.getElementById('chat-mode').style.display = 'none';
+      echora.scrollToBottom('chat-messages');
+      echora.showToast('自定义场景已提交 · AI 正在生成练习');
+    });
+  }
+</script>
+</body>
+</html>

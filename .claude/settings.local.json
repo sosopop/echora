@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cp 'D:\\\\code\\\\echora\\\\doc\\\\ui_prototype\\\\assets\\\\styles.css' 'D:\\\\code\\\\echora\\\\doc\\\\ui_prototype_v1\\\\assets\\\\styles.css')",
+      "Bash(cp 'D:\\\\code\\\\echora\\\\doc\\\\ui_prototype\\\\assets\\\\scripts.js' 'D:\\\\code\\\\echora\\\\doc\\\\ui_prototype_v1\\\\assets\\\\scripts.js')"
+    ]
+  }
+}

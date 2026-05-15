@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Echora · 练习 · 翻译模式</title>
+<link rel="stylesheet" href="assets/chat-styles.css" />
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+</head>
+<body>
+<div class="chat-shell">
+
+  <!-- Top Bar -->
+  <header class="chat-topbar">
+    <div class="chat-topbar__left">
+      <div class="chat-topbar__brand">
+        <span class="chat-topbar__brand-mark">E</span> Echora
+      </div>
+      <span class="chat-topbar__status">
+        <span class="chat-topbar__status-dot"></span> practice
+      </span>
+    </div>
+    <div class="chat-topbar__right">
+      <span class="tag tag--stage" style="margin-right:8px;">第 5 / 8 题</span>
+      <span class="tag tag--level">B1</span>
+      <div class="chat-avatar">小</div>
+    </div>
+  </header>
+
+  <!-- Messages -->
+  <div class="chat-messages" id="chat-messages">
+    <div class="chat-messages__inner" id="chat-messages-inner">
+
+      <div class="msg msg--system">场景：餐厅点餐 · 输入模式：chat（翻译）</div>
+
+      <!-- Previous exercise context -->
+      <div class="msg msg--ai">
+        <div class="msg__sender"><i data-lucide="sparkles"></i> Echo</div>
+        <div style="font-size:13px; color:var(--color-stone);">第 1-4 题已完成 · 平均 88 分</div>
+        <div style="margin-top:4px;">接下来试试整句翻译。把下面的中文翻译成英文——</div>
+      </div>
+
+      <!-- Exercise card -->
+      <div class="msg msg--ai">
+        <div class="msg__sender"><i data-lucide="sparkles"></i> Echo</div>
+        <div class="msg__widget">
+          <div style="background:var(--color-white);border:1px solid var(--color-border-cream);border-radius:var(--radius-lg);padding:16px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+              <span class="tag tag--stage">整句翻译</span>
+              <span class="tag tag--level">B1</span>
+            </div>
+            <div style="font-size:14px; color:var(--color-stone); margin-bottom:8px;">
+              🎯 场景：你想点一份五分熟的牛排，配薯条和沙拉。
+            </div>
+            <div style="font-size:16px; font-weight:600; color:var(--color-ink); margin-bottom:4px;">
+              请翻译：
+            </div>
+            <div style="font-size:18px; color:var(--color-ink); line-height:1.6; padding:10px 14px; background:var(--color-warm-sand-soft); border-radius:var(--radius-md);">
+              "我想要一份五分熟的牛排，配薯条和沙拉。"
+            </div>
+            <div style="font-size:12px; color:var(--color-stone); margin-top:8px;">
+              知识点：would like / polite request / food vocabulary
+            </div>
+          </div>
+        </div>
+        <div class="quick-actions">
+          <button class="qact" onclick="showHint()">💡 给提示</button>
+          <button class="qact" onclick="skipExercise()">⏭ 跳过</button>
+        </div>
+      </div>
+
+      <!-- User answer + grading (hidden initially) -->
+      <div id="result-area"></div>
+
+    </div>
+  </div>
+
+  <!-- Composer — chat mode -->
+  <div class="chat-composer">
+    <div class="chat-composer__inner">
+      <div class="chat-composer__input-row">
+        <textarea class="chat-composer__input" id="composer-input"
+          placeholder="输入你的翻译..."
+          rows="2"></textarea>
+        <button class="chat-composer__send" id="send-btn" aria-label="发送">
+          <i data-lucide="send" style="width:16px;height:16px;"></i>
+        </button>
+      </div>
+      <div class="chat-composer__hint">
+        <span>Enter 提交</span><span>Shift+Enter 换行</span><span>/practice</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="assets/chat-scripts.js"></script>
+<script>
+  lucide.createIcons();
+  echora.scrollToBottom('chat-messages');
+
+  const refAnswer = "I would like a medium steak, with fries and a salad.";
+
+  function submitAnswer(text) {
+    if (!text.trim()) return;
+
+    // Show user answer
+    echora.addMessage(`<div class="msg msg--user">${text}</div>`);
+    document.getElementById('composer-input').value = '';
+    document.getElementById('send-btn').disabled = true;
+
+    // Simulate AI grading
+    echora.setGenerating(true);
+
+    setTimeout(() => {
+      echora.setGenerating(false);
+      const score = text.toLowerCase().includes('would like') ? 88 :
+                    text.toLowerCase().includes('want') ? 78 : 65;
+      const isOk = score >= 80;
+      const issues = !text.toLowerCase().includes('would like') ?
+        '<li><strong>"I want" → "I\'d like"</strong>：点餐时 I\'d like 比 I want 更礼貌自然。</li>' : '';
+      const articleIssue = !text.toLowerCase().includes('a salad') && text.toLowerCase().includes('salad') ?
+        '<li><strong>"salad" → "a salad"</strong>：可数名词 salad 前需要冠词 a。</li>' : '';
+
+      const gradingHtml = `
+        <div class="msg msg--ai">
+          <div class="msg__sender"><i data-lucide="sparkles"></i> Echo</div>
+          <div class="msg__widget">
+            <div class="grading-result">
+              <div class="grading-result__bar grading-result__bar--${isOk ? 'correct' : 'partial'}">
+                ${isOk ? '<i data-lucide="check-circle-2" style="width:18px;height:18px;"></i>' : '<i data-lucide="alert-circle" style="width:18px;height:18px;"></i>'}
+                <span>${isOk ? '不错！' : '还需完善'} · </span>
+                <span class="grading-result__score">${score}</span>
+                <span>分</span>
+              </div>
+              <div class="grading-result__body">
+                <div>
+                  <div class="grading-result__section-label">你的答案</div>
+                  <div class="grading-result__answer">${text}</div>
+                </div>
+                <div>
+                  <div class="grading-result__section-label">参考答案</div>
+                  <div class="grading-result__answer" style="background:var(--color-success-soft);">${refAnswer}</div>
+                </div>
+                ${(issues || articleIssue) ? `
+                <div>
+                  <div class="grading-result__section-label">📝 分析</div>
+                  <ul class="grading-result__correction">
+                    ${issues}
+                    ${articleIssue}
+                    <li style="color:var(--color-success);">✅ 意思表达完整，语序正确。</li>
+                  </ul>
+                </div>` : ''}
+                <div>
+                  <div class="grading-result__section-label">错误标签</div>
+                  <div class="grading-result__tags">
+                    ${isOk ? '<span class="tag tag--success">词汇准确</span>' : ''}
+                    ${!text.toLowerCase().includes('would like') ? '<span class="tag tag--error">politeness</span>' : ''}
+                    ${articleIssue ? '<span class="tag tag--error">article</span>' : ''}
+                  </div>
+                </div>
+                <div style="font-size:14px; color:var(--color-charcoal);line-height:1.6;padding:10px 14px;background:var(--color-warm-sand-soft);border-radius:var(--radius-md);">
+                  💬 意思完全正确！${issues || articleIssue ? '两个小细节可以让表达更地道。点餐时说 <strong>I\'d like</strong> 更有礼貌，别漏了 <strong>a salad</strong> 的冠词。' : '表达自然流畅！'}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="quick-actions">
+            <button class="qact" onclick="location.href='chat-grading.html'">💡 为什么 want 不够礼貌？</button>
+            <button class="qact" onclick="location.href='chat-review.html'">📊 查看学习进度</button>
+          </div>
+        </div>
+      `;
+      echora.addMessage(gradingHtml);
+      echora.scrollToBottom('chat-messages');
+      document.getElementById('send-btn').disabled = false;
+    }, 1200);
+  }
+
+  function skipExercise() {
+    echora.showToast('已跳过 · 进入下一题');
+  }
+
+  function showHint() {
+    echora.showToast('提示：点餐时用 "I would like..." 比 "I want..." 更礼貌。');
+  }
+
+  echora.initComposer(submitAnswer);
+</script>
+</body>
+</html>

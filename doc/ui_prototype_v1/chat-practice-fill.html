@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Echora · 练习 · 填空模式</title>
+<link rel="stylesheet" href="assets/chat-styles.css" />
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+</head>
+<body>
+<div class="chat-shell">
+
+  <!-- Top Bar -->
+  <header class="chat-topbar">
+    <div class="chat-topbar__left">
+      <div class="chat-topbar__brand">
+        <span class="chat-topbar__brand-mark">E</span> Echora
+      </div>
+      <span class="chat-topbar__status">
+        <span class="chat-topbar__status-dot"></span> practice
+      </span>
+    </div>
+    <div class="chat-topbar__right">
+      <span class="tag tag--stage" style="margin-right:8px;">第 2 / 6 题</span>
+      <span class="tag tag--level">B1</span>
+      <div class="chat-avatar">小</div>
+    </div>
+  </header>
+
+  <!-- Messages -->
+  <div class="chat-messages" id="chat-messages">
+    <div class="chat-messages__inner" id="chat-messages-inner">
+
+      <div class="msg msg--system">场景：餐厅点餐 · 输入模式：fill</div>
+
+      <!-- Scene intro -->
+      <div class="msg msg--ai">
+        <div class="msg__sender"><i data-lucide="sparkles"></i> Echo</div>
+        <div style="font-weight:600; margin-bottom:4px;">🍔 餐厅点餐 · B1</div>
+        <div style="font-size:14px; color:var(--color-charcoal);">
+          场景：你在国外餐厅，想点一份牛排。请根据中文提示，在空白处填入正确的英文单词或短语。
+        </div>
+      </div>
+
+      <!-- Previous exercise (completed) -->
+      <div class="msg msg--ai">
+        <div class="msg__sender"><i data-lucide="sparkles"></i> Echo</div>
+        <div style="font-size:13px; color:var(--color-stone);">第 1 题（已完成 ✅）</div>
+        <div class="fill-template" style="margin-top:6px;">
+          餐厅里有<span class="fill-blank" style="background:var(--color-success-soft);border-color:var(--color-success);">很多</span>人。<br>
+          The restaurant is <span class="fill-blank" style="background:var(--color-success-soft);border-color:var(--color-success);color:var(--color-success);">very</span> busy.
+        </div>
+        <div style="font-size:12px; color:var(--color-success); margin-top:4px;">✅ 正确 · 热身题完成</div>
+      </div>
+
+      <!-- Current exercise -->
+      <div class="msg msg--ai" id="current-exercise">
+        <div class="msg__sender"><i data-lucide="sparkles"></i> Echo</div>
+        <div style="font-size:13px; color:var(--color-stone);">第 2 题 · 填空模式</div>
+        <div style="margin-top:8px; font-size:14px; color:var(--color-charcoal);">
+          <strong>中文：</strong>请问你们有素食选项吗？我吃素。
+        </div>
+        <div class="fill-template" style="margin-top:8px;">
+          <span class="fill-blank fill-blank--active" id="blank-1" data-answer="Do">____</span> you
+          <span class="fill-blank" id="blank-2" data-answer="have">____</span> any vegetarian
+          <span class="fill-blank" id="blank-3" data-answer="options">____</span>?
+          I <span class="fill-blank" id="blank-4" data-answer="am">____</span> vegetarian.
+        </div>
+        <div class="quick-actions" style="margin-top:8px;">
+          <button class="qact" onclick="skipExercise()">⏭ 跳过</button>
+          <button class="qact" onclick="showHint()">💡 给提示</button>
+        </div>
+      </div>
+
+      <!-- Grading result (hidden) -->
+      <div id="grading-area"></div>
+
+    </div>
+  </div>
+
+  <!-- Composer — fill mode -->
+  <div class="chat-composer" id="composer-area">
+    <div class="chat-composer__inner">
+      <!-- Fill mode: sentence template + answer input -->
+      <div class="fill-template" style="margin-bottom:8px; font-size:17px; text-align:center;">
+        <span id="fill-preview-1" style="color:var(--color-terracotta);font-weight:600;border-bottom:2px solid var(--color-terracotta);">___</span> you
+        <span id="fill-preview-2">___</span> any vegetarian
+        <span id="fill-preview-3">___</span>?
+        I <span id="fill-preview-4">___</span> vegetarian.
+      </div>
+      <div class="chat-composer__input-row">
+        <textarea class="chat-composer__input" id="composer-input"
+          placeholder="输入第 1 个空的答案，按 Tab 切换下一空..."
+          rows="1" style="text-align:center; font-size:16px;"></textarea>
+        <button class="chat-composer__send" id="send-btn" aria-label="提交">
+          <i data-lucide="check" style="width:16px;height:16px;"></i>
+        </button>
+      </div>
+      <div style="font-size:12px; color:var(--color-stone); text-align:center; padding-top:6px;">
+        当前空：<strong id="current-blank-label">1</strong> / 4 · Tab 切换空位 · Enter 提交全部
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="assets/chat-scripts.js"></script>
+<script>
+  lucide.createIcons();
+  echora.scrollToBottom('chat-messages');
+
+  const answers = ['Do', 'have', 'options', 'am'];
+  let currentBlank = 0;
+  let filledAnswers = ['', '', '', ''];
+  const input = document.getElementById('composer-input');
+
+  function updateFillPreview() {
+    for (let i = 0; i < 4; i++) {
+      const el = document.getElementById('fill-preview-' + (i + 1));
+      if (filledAnswers[i]) {
+        el.textContent = filledAnswers[i];
+        el.style.color = 'var(--color-terracotta)';
+        el.style.fontWeight = '600';
+        el.style.borderBottom = '2px solid var(--color-terracotta)';
+      } else if (i === currentBlank) {
+        el.textContent = '___';
+        el.style.color = 'var(--color-terracotta)';
+        el.style.fontWeight = '600';
+        el.style.borderBottom = '2px solid var(--color-terracotta)';
+      } else {
+        el.textContent = '___';
+        el.style.color = 'var(--color-stone)';
+        el.style.fontWeight = '400';
+        el.style.borderBottom = '1px dashed var(--color-ring-warm)';
+      }
+    }
+    // Update blank highlights in message
+    document.querySelectorAll('.fill-blank').forEach((b, i) => {
+      b.classList.toggle('fill-blank--active', i === currentBlank);
+      if (filledAnswers[i]) {
+        b.textContent = filledAnswers[i];
+        b.style.color = 'var(--color-terracotta)';
+        b.style.fontWeight = '600';
+      } else {
+        b.textContent = '____';
+        b.style.color = 'var(--color-terracotta-soft)';
+        b.style.fontWeight = '400';
+      }
+    });
+    document.getElementById('current-blank-label').textContent = currentBlank + 1;
+  }
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      // Save current value
+      filledAnswers[currentBlank] = input.value.trim();
+      // Move to next blank
+      currentBlank = (currentBlank + 1) % 4;
+      input.value = filledAnswers[currentBlank] || '';
+      updateFillPreview();
+    } else if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      submitAnswers();
+    }
+  });
+
+  input.addEventListener('input', () => {
+    filledAnswers[currentBlank] = input.value;
+    updateFillPreview();
+  });
+
+  function submitAnswers() {
+    filledAnswers[currentBlank] = input.value.trim();
+    // Check answers
+    let correct = 0;
+    const results = filledAnswers.map((a, i) => {
+      const ok = a.toLowerCase() === answers[i].toLowerCase();
+      if (ok) correct++;
+      return { user: a, correct: answers[i], ok };
+    });
+    const score = Math.round((correct / 4) * 100);
+    const isOk = score >= 75;
+
+    // Show user answer
+    echora.addMessage(`<div class="msg msg--user">${filledAnswers.map((a,i) => a || '___').join(' / ')}</div>`);
+
+    // Simulate grading delay
+    document.getElementById('send-btn').disabled = true;
+    input.disabled = true;
+
+    setTimeout(() => {
+      const gradingHtml = `
+        <div class="msg msg--ai">
+          <div class="msg__sender"><i data-lucide="sparkles"></i> Echo</div>
+          <div class="msg__widget">
+            <div class="grading-result">
+              <div class="grading-result__bar grading-result__bar--${isOk ? 'correct' : 'partial'}">
+                ${isOk ? '<i data-lucide="check-circle-2" style="width:18px;height:18px;"></i>' : '<i data-lucide="alert-circle" style="width:18px;height:18px;"></i>'}
+                <span>${isOk ? '不错！' : '还需加油'} · </span>
+                <span class="grading-result__score">${score}</span>
+                <span>分</span>
+              </div>
+              <div class="grading-result__body">
+                <div>
+                  <div class="grading-result__section-label">参考答案</div>
+                  <div class="grading-result__answer">${answers.join(' / ')}</div>
+                </div>
+                <div>
+                  <div class="grading-result__section-label">你的答案</div>
+                  <ul class="grading-result__correction">
+                    ${results.map((r, i) => `
+                      <li>
+                        <strong>空 ${i + 1}:</strong>
+                        ${r.ok
+                          ? '<span style="color:var(--color-success);">✅ ' + r.correct + '</span>'
+                          : '<span style="color:var(--color-error);">❌ 你填了 "' + (r.user || '空') + '" → 应为 "' + r.correct + '"</span>'}
+                      </li>
+                    `).join('')}
+                  </ul>
+                </div>
+                <div>
+                  <div class="grading-result__section-label">错误标签</div>
+                  <div class="grading-result__tags">
+                    ${isOk ? '<span class="tag tag--success">词汇掌握良好</span>' : ''}
+                    ${!results[0].ok ? '<span class="tag tag--error">auxiliary_verb</span>' : ''}
+                    ${!results[3].ok ? '<span class="tag tag--error">be_verb</span>' : ''}
+                  </div>
+                </div>
+                <div style="font-size:14px; color:var(--color-charcoal);padding:8px 12px;background:var(--color-warm-sand-soft);border-radius:var(--radius-md);">
+                  💬 疑问句需要助动词 <strong>Do</strong> 开头。我吃素 = <strong>I am vegetarian</strong>，用 be 动词，不说 I eat vegetarian。
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="quick-actions">
+            <button class="qact" onclick="location.href='chat-grading.html'">💡 为什么这里用 Do？</button>
+            <button class="qact" onclick="location.href='chat-practice-translate.html'">🔄 下一题（翻译模式）</button>
+          </div>
+        </div>
+      `;
+      echora.addMessage(gradingHtml);
+      echora.scrollToBottom('chat-messages');
+    }, 800);
+  }
+
+  function skipExercise() {
+    echora.addMessage(`<div class="msg msg--system">已跳过第 2 题</div>`);
+    echora.showToast('已跳过 · 进入下一题');
+    setTimeout(() => location.href = 'chat-practice-translate.html', 600);
+  }
+
+  function showHint() {
+    echora.showToast('提示：疑问句需要在句首加助动词。');
+  }
+
+  // Initialize
+  updateFillPreview();
+  document.getElementById('send-btn').addEventListener('click', submitAnswers);
+  input.focus();
+</script>
+</body>
+</html>

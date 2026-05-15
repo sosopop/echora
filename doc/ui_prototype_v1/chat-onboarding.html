@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Echora · AI 对话式 Onboarding</title>
+<link rel="stylesheet" href="assets/chat-styles.css" />
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+</head>
+<body>
+<div class="chat-shell">
+
+  <!-- Top Bar -->
+  <header class="chat-topbar">
+    <div class="chat-topbar__left">
+      <div class="chat-topbar__brand">
+        <span class="chat-topbar__brand-mark">E</span> Echora
+      </div>
+      <span class="chat-topbar__status">
+        <span class="chat-topbar__status-dot"></span> onboarding
+      </span>
+    </div>
+    <div class="chat-topbar__right">
+      <button class="btn btn--ghost btn--icon" aria-label="帮助"><i data-lucide="help-circle"></i></button>
+      <div class="chat-avatar">小</div>
+    </div>
+  </header>
+
+  <!-- Messages -->
+  <div class="chat-messages" id="chat-messages">
+    <div class="chat-messages__inner" id="chat-messages-inner">
+
+      <!-- AI greeting -->
+      <div class="msg msg--ai">
+        <div class="msg__sender"><i data-lucide="sparkles"></i> Echo</div>
+        <div>嗨！我是你的英语教练 Echo。先简单认识一下你吧～</div>
+      </div>
+
+      <!-- AI asks name/age/grade -->
+      <div class="msg msg--ai">
+        <div class="msg__sender"><i data-lucide="sparkles"></i> Echo</div>
+        <div>你叫什么名字？今年多大了？在读几年级（或者已经工作了）？</div>
+      </div>
+
+      <!-- User replies -->
+      <div class="msg msg--user">
+        我叫小明，15岁，初三
+      </div>
+
+      <!-- AI asks level -->
+      <div class="msg msg--ai">
+        <div class="msg__sender"><i data-lucide="sparkles"></i> Echo</div>
+        <div>小明你好！初三正是英语打基础的关键时候。<br><br>你英语大概是什么水平？比如考试能拿多少分，或者自己感觉怎么样？</div>
+      </div>
+
+      <!-- User replies -->
+      <div class="msg msg--user">
+        中考模拟英语大概 100 分左右，满分 120。语法比较弱。
+      </div>
+
+      <!-- AI asks goal -->
+      <div class="msg msg--ai">
+        <div class="msg__sender"><i data-lucide="sparkles"></i> Echo</div>
+        <div>明白了。语法弱是很多同学的共同问题，多练练句型就好了。<br><br>你学英语主要是为了考试，还是自己也想用起来？</div>
+      </div>
+
+      <!-- User replies -->
+      <div class="msg msg--user">
+        主要是中考吧，但我也想能开口说几句
+      </div>
+
+      <!-- AI summary with profile widget -->
+      <div class="msg msg--ai">
+        <div class="msg__sender"><i data-lucide="sparkles"></i> Echo</div>
+        <div>了解了！那我帮你梳理一下：</div>
+        <div class="msg__widget">
+          <div class="profile-summary">
+            <div class="profile-summary__title">📋 你的学习档案</div>
+            <div class="profile-summary__item">
+              <span class="profile-summary__item-label">姓名：</span><span>小明</span>
+            </div>
+            <div class="profile-summary__item">
+              <span class="profile-summary__item-label">年龄：</span><span>15 岁 / 初三</span>
+            </div>
+            <div class="profile-summary__item">
+              <span class="profile-summary__item-label">水平：</span>
+              <span>约 <span class="tag tag--level">A2-B1</span>（中考 100/120）</span>
+            </div>
+            <div class="profile-summary__item">
+              <span class="profile-summary__item-label">短板：</span>
+              <span class="tag tag--warning">语法</span>
+            </div>
+            <div class="profile-summary__item">
+              <span class="profile-summary__item-label">目标：</span><span>中考 + 日常交流</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI transitions to scene select -->
+      <div class="msg msg--ai">
+        <div class="msg__sender"><i data-lucide="sparkles"></i> Echo</div>
+        <div>根据你的情况，我来推荐几个适合的练习场景——</div>
+        <div class="quick-actions">
+          <button class="qact" onclick="location.href='chat-scene-select.html'">🎯 查看推荐场景 <i data-lucide="chevron-right" style="width:14px;height:14px;"></i></button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Composer -->
+  <div class="chat-composer">
+    <div class="chat-composer__inner">
+      <div class="chat-composer__input-row">
+        <textarea class="chat-composer__input" id="composer-input"
+          placeholder="输入你想说的，或输入 / 查看命令..."
+          rows="1"></textarea>
+        <button class="chat-composer__send" id="send-btn" aria-label="发送">
+          <i data-lucide="send" style="width:16px;height:16px;"></i>
+        </button>
+      </div>
+      <div class="chat-composer__hint">
+        <span>/practice</span><span>/review</span><span>/retry</span><span>/help</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="assets/chat-scripts.js"></script>
+<script>
+  lucide.createIcons();
+
+  // Simulate sending a message
+  function sendMessage(text) {
+    if (!text.trim()) return;
+    // Add user message
+    echora.addMessage(`<div class="msg msg--user">${text}</div>`);
+    document.getElementById('composer-input').value = '';
+    echora.scrollToBottom('chat-messages');
+
+    // Simulate AI thinking
+    setTimeout(() => {
+      // Simulate streaming
+      const aiDiv = document.createElement('div');
+      aiDiv.className = 'msg msg--ai';
+      aiDiv.innerHTML = `
+        <div class="msg__sender"><i data-lucide="sparkles"></i> Echo</div>
+        <div id="stream-text-${Date.now()}"><span class="typing-indicator"><span></span><span></span><span></span></span></div>
+      `;
+      document.getElementById('chat-messages-inner').appendChild(aiDiv);
+      echora.scrollToBottom('chat-messages');
+      lucide.createIcons();
+
+      // After a delay, show transition to scene select
+      setTimeout(() => {
+        const streamEl = aiDiv.querySelector('[id^="stream-text"]');
+        streamEl.innerHTML = '信息已记录。接下来让我为你推荐几个适合的练习场景吧 👇';
+        const qaDiv = document.createElement('div');
+        qaDiv.className = 'quick-actions';
+        qaDiv.style.marginTop = '10px';
+        qaDiv.innerHTML = `<button class="qact" onclick="location.href='chat-scene-select.html'">🎯 查看推荐场景 <i data-lucide="chevron-right" style="width:14px;height:14px;"></i></button>`;
+        aiDiv.appendChild(qaDiv);
+        lucide.createIcons();
+        echora.scrollToBottom('chat-messages');
+      }, 1200);
+    }, 500);
+  }
+
+  echora.initComposer(sendMessage);
+</script>
+</body>
+</html>

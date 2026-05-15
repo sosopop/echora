@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Echora V1 MVP · 原型导航</title>
+<link rel="stylesheet" href="assets/styles.css" />
+<style>
+  body { background: var(--color-parchment); }
+  .proto-header {
+    padding: 40px 24px 24px;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  .proto-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 24px 40px;
+  }
+  .proto-card {
+    background: var(--color-ivory);
+    border: 1px solid var(--color-border-cream);
+    border-radius: var(--radius-lg);
+    padding: 20px 24px;
+    text-decoration: none;
+    color: var(--color-ink);
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .proto-card:hover {
+    border-color: var(--color-terracotta-soft);
+    box-shadow: 0 0 0 1px var(--color-terracotta-soft);
+    text-decoration: none;
+  }
+  .proto-card__step {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-terracotta);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .proto-card__title {
+    font-weight: 600;
+    font-size: 17px;
+  }
+  .proto-card__desc {
+    font-size: 14px;
+    color: var(--color-stone);
+    line-height: 1.5;
+  }
+  .proto-card__skills {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+  }
+  .section-header {
+    max-width: 960px;
+    margin: 0 auto 16px;
+    padding: 0 24px;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+</style>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+</head>
+<body>
+
+<header class="proto-header">
+  <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+    <span style="width:36px;height:36px;border-radius:6px;background:var(--color-terracotta);display:grid;place-items:center;color:var(--color-white);font-family:var(--font-serif);font-weight:700;font-size:18px;">E</span>
+    <span style="font-size:20px; font-weight:600;">Echora</span>
+    <span class="tag tag--stage">V1 MVP 原型</span>
+  </div>
+  <h1 style="margin:0 0 6px; font-size:36px; letter-spacing:-0.01em;">Chat-First · Skills 驱动 · 流式交互</h1>
+  <p class="muted" style="margin:0; max-width:640px; font-size:15px;">
+    一个聊天输入框承载所有功能。AI 作为中央路由器，通过可插拔的 Skill 体系调度一切。
+    本目录是 V1 MVP 全部界面的 HTML 原型。
+  </p>
+</header>
+
+<div class="section-header">推荐浏览路径（新用户完整流程）</div>
+<div class="proto-grid">
+  <a href="login.html" class="proto-card">
+    <span class="proto-card__step">Step 1</span>
+    <span class="proto-card__title">登录 / 注册</span>
+    <span class="proto-card__desc">极简登录页，邮箱注册 + JWT。登录后直接进入聊天界面。</span>
+    <span class="proto-card__skills"><span class="tag tag--neutral">auth</span></span>
+  </a>
+  <a href="chat-onboarding.html" class="proto-card">
+    <span class="proto-card__step">Step 2</span>
+    <span class="proto-card__title">AI 对话式 Onboarding</span>
+    <span class="proto-card__desc">AI 通过对话收集用户姓名、年龄、年级、英语水平。完成后生成个性化画像。</span>
+    <span class="proto-card__skills"><span class="tag tag--stage">onboarding</span></span>
+  </a>
+  <a href="chat-scene-select.html" class="proto-card">
+    <span class="proto-card__step">Step 3</span>
+    <span class="proto-card__title">场景选择 · Scene Cards</span>
+    <span class="proto-card__desc">基于用户画像推荐 4 个场景卡片 Widget。可点击选择或自定义输入。</span>
+    <span class="proto-card__skills"><span class="tag tag--stage">scene-select</span></span>
+  </a>
+  <a href="chat-practice-fill.html" class="proto-card">
+    <span class="proto-card__step">Step 4</span>
+    <span class="proto-card__title">练习 · 填空模式</span>
+    <span class="proto-card__desc">输入框切换为 fill 模式，句子模板 + 空位高亮。Tab 键切换空位。</span>
+    <span class="proto-card__skills"><span class="tag tag--stage">practice</span><span class="tag tag--neutral">fill</span></span>
+  </a>
+  <a href="chat-practice-translate.html" class="proto-card">
+    <span class="proto-card__step">Step 5</span>
+    <span class="proto-card__title">练习 · 翻译模式</span>
+    <span class="proto-card__desc">整句汉译英，chat 模式输入框。展示 AI 出题卡片 + 用户提交答案。</span>
+    <span class="proto-card__skills"><span class="tag tag--stage">practice</span><span class="tag tag--neutral">translate</span></span>
+  </a>
+  <a href="chat-grading.html" class="proto-card">
+    <span class="proto-card__step">Step 6</span>
+    <span class="proto-card__title">批改结果 · Grading Widget</span>
+    <span class="proto-card__desc">AI 流式批改结果卡片：得分、正确/错误标识、逐点解析、错误标签、快捷追问。</span>
+    <span class="proto-card__skills"><span class="tag tag--stage">grade</span><span class="tag tag--info">explain</span></span>
+  </a>
+  <a href="chat-review.html" class="proto-card">
+    <span class="proto-card__step">Step 7</span>
+    <span class="proto-card__title">复盘 · Progress Summary</span>
+    <span class="proto-card__desc">对话式查看学习进度，AI 生成文字版总结 + 进步摘要 Widget。</span>
+    <span class="proto-card__skills"><span class="tag tag--stage">review</span><span class="tag tag--warning">retry</span></span>
+  </a>
+  <a href="chat-command.html" class="proto-card">
+    <span class="proto-card__step">交互细节</span>
+    <span class="proto-card__title">命令面板 · Command Mode</span>
+    <span class="proto-card__desc">输入 / 触发命令浮层，模糊搜索，键盘导航。展示所有可用命令。</span>
+    <span class="proto-card__skills"><span class="tag tag--neutral">command</span></span>
+  </a>
+</div>
+
+<div class="section-header" style="margin-top:32px;">设计原则</div>
+<div class="proto-grid">
+  <div class="card">
+    <div class="card__title">Chat-First</div>
+    <p class="muted text-caption" style="margin: 4px 0 0;">整个应用就是一个聊天界面，所有功能通过对话承载。没有 Dashboard、没有多栏布局。</p>
+  </div>
+  <div class="card">
+    <div class="card__title">Skills 架构</div>
+    <p class="muted text-caption" style="margin: 4px 0 0;">所有功能封装为可插拔 Skill。AI 作为路由器，根据意图自动调用对应 Skill。</p>
+  </div>
+  <div class="card">
+    <div class="card__title">Widgets in Chat</div>
+    <p class="muted text-caption" style="margin: 4px 0 0;">复杂交互以 Widget 形式嵌入对话流：场景卡片、批改结果、进度摘要。</p>
+  </div>
+  <div class="card">
+    <div class="card__title">输入模式切换</div>
+    <p class="muted text-caption" style="margin: 4px 0 0;">输入框根据 Skill 自动切换：chat / fill / select / command 四种模式。</p>
+  </div>
+</div>
+
+<footer class="muted text-caption" style="text-align:center; padding: 32px 24px 48px;">
+  Echora V1 MVP 原型 · 基于 doc/requirements_v1 需求基线
+</footer>
+
+<script>lucide.createIcons();</script>
+</body>
+</html>

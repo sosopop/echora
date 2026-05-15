@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Echora · 批改与追问</title>
+<link rel="stylesheet" href="assets/chat-styles.css" />
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+</head>
+<body>
+<div class="chat-shell">
+
+  <!-- Top Bar -->
+  <header class="chat-topbar">
+    <div class="chat-topbar__left">
+      <div class="chat-topbar__brand">
+        <span class="chat-topbar__brand-mark">E</span> Echora
+      </div>
+      <span class="chat-topbar__status">
+        <span class="chat-topbar__status-dot"></span> explain
+      </span>
+    </div>
+    <div class="chat-topbar__right">
+      <span class="tag tag--level">B1</span>
+      <div class="chat-avatar">小</div>
+    </div>
+  </header>
+
+  <!-- Messages -->
+  <div class="chat-messages" id="chat-messages">
+    <div class="chat-messages__inner" id="chat-messages-inner">
+
+      <div class="msg msg--system">↑ 上一题批改完成 · 用户点击追问</div>
+
+      <!-- Exercise context -->
+      <div class="msg msg--ai">
+        <div class="msg__sender"><i data-lucide="sparkles"></i> Echo</div>
+        <div style="font-size:13px; color:var(--color-stone);">📎 追问来源：第 5 题 · 整句翻译</div>
+        <div style="margin-top:4px;">原题："我想要一份五分熟的牛排，配薯条和沙拉。"</div>
+      </div>
+
+      <!-- Grading result (compact) -->
+      <div class="msg msg--ai">
+        <div class="msg__sender"><i data-lucide="sparkles"></i> Echo</div>
+        <div class="msg__widget">
+          <div class="grading-result">
+            <div class="grading-result__bar grading-result__bar--partial">
+              <i data-lucide="alert-circle" style="width:18px;height:18px;"></i>
+              <span>还需完善 · </span>
+              <span class="grading-result__score">78</span>
+              <span>分</span>
+            </div>
+            <div class="grading-result__body">
+              <div>
+                <div class="grading-result__section-label">你的答案</div>
+                <div class="grading-result__answer">I want a medium steak with fries and salad.</div>
+              </div>
+              <div>
+                <div class="grading-result__section-label">参考答案</div>
+                <div class="grading-result__answer" style="background:var(--color-success-soft);">I'd like a medium steak, with fries and a salad.</div>
+              </div>
+              <div>
+                <div class="grading-result__section-label">错误标签</div>
+                <div class="grading-result__tags">
+                  <span class="tag tag--error">politeness</span>
+                  <span class="tag tag--error">article</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- User follows up -->
+      <div class="msg msg--user">
+        为什么点餐时 I want 不够礼貌？
+      </div>
+
+      <!-- AI explain -->
+      <div class="msg msg--ai">
+        <div class="msg__sender"><i data-lucide="sparkles"></i> Echo</div>
+        <div style="line-height:1.7;">
+          <p style="margin:0 0 10px;">好问题！这涉及到英语中的<strong>语用礼貌</strong>——</p>
+
+          <p style="margin:0 0 8px;"><strong>1. "I want" 的语气</strong><br>
+          "I want" 在英语中听起来比较直接、像是命令或要求。比如孩子说 "I want ice cream!" 是正常的，
+          但成年人在餐厅说 "I want a steak" 就会显得有点生硬。</p>
+
+          <p style="margin:0 0 8px;"><strong>2. "I'd like" 更委婉</strong><br>
+          "I'd like" (= I would like) 是一种委婉表达，给对方留有回旋余地。
+          类似中文里说"我想要一份"vs"给我来一份"的区别。</p>
+
+          <p style="margin:0;"><strong>3. 其他礼貌点餐方式</strong></p>
+          <ul style="margin:6px 0 0; padding-left:18px;">
+            <li>Could I have a medium steak? <span class="muted text-caption">— 更客气</span></li>
+            <li>I'll have the steak, please. <span class="muted text-caption">— 常用口语</span></li>
+            <li>May I order a medium steak? <span class="muted text-caption">— 正式场合</span></li>
+          </ul>
+        </div>
+        <div class="quick-actions">
+          <button class="qact" onclick="continueAskAboutArticle()">那冠词 a salad 呢？</button>
+          <button class="qact" onclick="location.href='chat-practice-translate.html'">🔄 再来一道类似的</button>
+        </div>
+      </div>
+
+      <!-- User continues asking -->
+      <div id="followup-area"></div>
+
+    </div>
+  </div>
+
+  <!-- Composer -->
+  <div class="chat-composer">
+    <div class="chat-composer__inner">
+      <div class="chat-composer__input-row">
+        <textarea class="chat-composer__input" id="composer-input"
+          placeholder="继续追问... 比如「在更正式的场合应该怎么说？」"
+          rows="1"></textarea>
+        <button class="chat-composer__send" id="send-btn" aria-label="发送">
+          <i data-lucide="send" style="width:16px;height:16px;"></i>
+        </button>
+      </div>
+      <div class="chat-composer__hint">
+        <span>explain skill 已激活</span><span>/practice 开始练习</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="assets/chat-scripts.js"></script>
+<script>
+  lucide.createIcons();
+  echora.scrollToBottom('chat-messages');
+
+  function continueAskAboutArticle() {
+    // Add user message
+    echora.addMessage(`<div class="msg msg--user">那冠词 a salad 呢？为什么不能说 with salad？</div>`);
+
+    setTimeout(() => {
+      const explainHtml = `
+        <div class="msg msg--ai">
+          <div class="msg__sender"><i data-lucide="sparkles"></i> Echo</div>
+          <div style="line-height:1.7;">
+            <p style="margin:0 0 10px;">好问题！这和<strong>可数/不可数名词</strong>有关——</p>
+
+            <p style="margin:0 0 8px;"><strong>1. salad 是可数名词</strong><br>
+            一份沙拉 = <strong>a salad</strong>（可数）。类似：a burger、a coffee、a pizza。<br>
+            不加冠词的话听起来像在说"沙拉这种物质"，而不是"一份沙拉"。</p>
+
+            <p style="margin:0 0 8px;"><strong>2. 对比</strong></p>
+            <div style="display:flex;gap:16px;margin:8px 0;">
+              <div style="flex:1;padding:8px 12px;background:var(--color-error-soft);border-radius:var(--radius-md);font-size:14px;">
+                ❌ with salad
+              </div>
+              <div style="flex:1;padding:8px 12px;background:var(--color-success-soft);border-radius:var(--radius-md);font-size:14px;">
+                ✅ with a salad
+              </div>
+            </div>
+
+            <p style="margin:0 0 8px;"><strong>3. 例外</strong><br>
+            如果是不可数名词则不需要冠词：with <strong>rice</strong>、with <strong>bread</strong>。</p>
+
+            <p style="margin:0;">简单记：点餐时说一份具体的食物，前面加 a/an 👍</p>
+          </div>
+          <div class="quick-actions">
+            <button class="qact" onclick="location.href='chat-practice-translate.html'">🔄 再练一道</button>
+            <button class="qact" onclick="location.href='chat-review.html'">📊 查看学习进度</button>
+          </div>
+        </div>
+      `;
+      echora.addMessage(explainHtml);
+      echora.scrollToBottom('chat-messages');
+      echora.showToast('explain skill · 追问链已保存到 thread');
+    }, 600);
+  }
+
+  function sendMessage(text) {
+    if (!text.trim()) return;
+    echora.addMessage(`<div class="msg msg--user">${text}</div>`);
+    document.getElementById('composer-input').value = '';
+    echora.scrollToBottom('chat-messages');
+    echora.showToast('追问已发送 · explain skill 处理中');
+  }
+
+  echora.initComposer(sendMessage);
+</script>
+</body>
+</html>
