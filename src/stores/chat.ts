@@ -134,13 +134,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
           handleStreamEvent(set, get, resp.assistantMessageId, evt);
         },
         onDone: () => {
-          set({ streamingMessageId: null });
+          clearStreamBuffer(set, resp.assistantMessageId, null);
         },
         onError: (err) => {
-          set({
-            streamingMessageId: null,
-            error: err.message,
-          });
+          clearStreamBuffer(set, resp.assistantMessageId, err.message);
         },
       });
     } catch (e) {
@@ -164,8 +161,12 @@ function handleStreamEvent(
 ): void {
   if (evt.type === 'text-chunk') {
     const prev = get().streamBuffer[messageId] ?? '';
+    const next = prev + evt.payload.text;
     set((s) => ({
-      streamBuffer: { ...s.streamBuffer, [messageId]: prev + evt.payload.text },
+      streamBuffer: { ...s.streamBuffer, [messageId]: next },
+      messages: s.messages.map((m) =>
+        m.id === messageId ? { ...m, content: next } : m
+      ),
     }));
   } else if (evt.type === 'widget-init' || evt.type === 'widget-ready') {
     const widget =
@@ -197,4 +198,23 @@ function handleStreamEvent(
     // 异步刷新画像,RouteGuard / 视图凭新 profile 决定下一步导航
     void useProfileStore.getState().reload();
   }
+}
+
+function clearStreamBuffer(
+  set: (
+    partial:
+      | Partial<ChatState>
+      | ((s: ChatState) => Partial<ChatState>)
+  ) => void,
+  messageId: number,
+  error: string | null
+): void {
+  set((s) => {
+    const { [messageId]: _removed, ...rest } = s.streamBuffer;
+    return {
+      streamingMessageId: null,
+      streamBuffer: rest,
+      error,
+    };
+  });
 }
