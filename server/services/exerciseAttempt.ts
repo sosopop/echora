@@ -124,8 +124,21 @@ export function getAttempt(
  */
 export function findLatestAttempt(
   db: Db,
-  conversationId: number
+  conversationId: number,
+  sceneId?: string | null
 ): ExerciseAttemptDTO | null {
+  if (sceneId) {
+    const row = db
+      .prepare<[number, string], ExerciseAttemptRow>(
+        `SELECT * FROM exercise_attempts
+         WHERE conversation_id = ?
+           AND scene_id = ?
+         ORDER BY id DESC
+         LIMIT 1`
+      )
+      .get(conversationId, sceneId);
+    return row ? rowToDTO(row) : null;
+  }
   const row = db
     .prepare<[number], ExerciseAttemptRow>(
       `SELECT * FROM exercise_attempts
@@ -179,8 +192,23 @@ export function markNeedsReview(db: Db, attemptId: number): void {
 export function countStagePassed(
   db: Db,
   conversationId: number,
-  stage: number
+  stage: number,
+  sceneId?: string | null
 ): number {
+  if (sceneId) {
+    const row = db
+      .prepare<[number, number, string], { c: number }>(
+        `SELECT COUNT(*) AS c
+         FROM exercise_attempts a
+         JOIN grading_results g ON g.attempt_id = a.id
+         WHERE a.conversation_id = ?
+           AND a.stage = ?
+           AND a.scene_id = ?
+           AND g.is_correct = 1`
+      )
+      .get(conversationId, stage, sceneId);
+    return row?.c ?? 0;
+  }
   const row = db
     .prepare<[number, number], { c: number }>(
       `SELECT COUNT(*) AS c

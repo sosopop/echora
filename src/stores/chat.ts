@@ -18,6 +18,7 @@ import { openStream } from '../api/sse.js';
 import { useAuthStore } from './auth.js';
 import { useLearningStateStore } from './learningState.js';
 import { useProfileStore } from './profile.js';
+import { describeChatAction } from '@shared/api';
 import type {
   ConversationDTO,
   MessageDTO,
@@ -115,37 +116,60 @@ async function sendInternal(
     return;
   }
   const conversationId = get().currentConversationId ?? undefined;
-  set({ isLoading: true, error: null });
+  const optimisticContent = getUserMessageContent(body);
+  const optimisticConversationId = conversationId ?? 0;
+  const optimisticUserId = nextOptimisticId();
+  const optimisticAssistantId = nextOptimisticId();
+  const optimisticUserMsg: MessageDTO = {
+    id: optimisticUserId,
+    conversationId: optimisticConversationId,
+    type: 'text',
+    role: 'user',
+    skillName: null,
+    content: optimisticContent,
+    widgetSnapshot: null,
+    seq: 0,
+    createdAt: new Date().toISOString(),
+  };
+  const optimisticAssistantMsg: MessageDTO = {
+    id: optimisticAssistantId,
+    conversationId: optimisticConversationId,
+    type: 'text',
+    role: 'assistant',
+    skillName: null,
+    content: '',
+    widgetSnapshot: null,
+    seq: 0,
+    createdAt: new Date().toISOString(),
+  };
+  set((s) => ({
+    messages: [...s.messages, optimisticUserMsg, optimisticAssistantMsg],
+    streamingMessageId: optimisticAssistantId,
+    isLoading: true,
+    error: null,
+  }));
   try {
     const resp = await chatApi.send({ conversationId, ...body });
-    const optimisticContent = body.text
-      ? body.text
-      : `[action] ${JSON.stringify(body.action)}`;
-    const optimisticUserMsg: MessageDTO = {
-      id: resp.userMessageId,
-      conversationId: resp.conversationId,
-      type: 'text',
-      role: 'user',
-      skillName: null,
-      content: optimisticContent,
-      widgetSnapshot: null,
-      seq: 0,
-      createdAt: new Date().toISOString(),
-    };
-    const optimisticAssistantMsg: MessageDTO = {
-      id: resp.assistantMessageId,
-      conversationId: resp.conversationId,
-      type: 'text',
-      role: 'assistant',
-      skillName: resp.decision.skillName,
-      content: '',
-      widgetSnapshot: null,
-      seq: 0,
-      createdAt: new Date().toISOString(),
-    };
     set((s) => ({
       currentConversationId: resp.conversationId,
-      messages: [...s.messages, optimisticUserMsg, optimisticAssistantMsg],
+      messages: s.messages.map((m) => {
+        if (m.id === optimisticUserId) {
+          return {
+            ...m,
+            id: resp.userMessageId,
+            conversationId: resp.conversationId,
+          };
+        }
+        if (m.id === optimisticAssistantId) {
+          return {
+            ...m,
+            id: resp.assistantMessageId,
+            conversationId: resp.conversationId,
+            skillName: resp.decision.skillName,
+          };
+        }
+        return m;
+      }),
       streamingMessageId: resp.assistantMessageId,
       isLoading: false,
     }));
@@ -163,11 +187,34 @@ async function sendInternal(
       },
     });
   } catch (e) {
+    const message = e instanceof Error ? e.message : '发送失败';
     set({
       isLoading: false,
-      error: e instanceof Error ? e.message : '发送失败',
+      streamingMessageId: null,
+      error: message,
+      messages: get().messages.map((m) =>
+        m.id === optimisticAssistantId
+          ? { ...m, content: `发送失败:${message}` }
+          : m
+      ),
     });
   }
+}
+
+let optimisticId = -1;
+
+function nextOptimisticId(): number {
+  return optimisticId--;
+}
+
+function getUserMessageContent(
+  body: Pick<ChatSendReq, 'text' | 'action'>
+): string {
+  if (body.text) return body.text;
+  if (body.action?.type === 'submit-answer') {
+    return body.action.payload.answer;
+  }
+  return describeChatAction(body.action);
 }
 
 function handleStreamEvent(
@@ -194,15 +241,22 @@ function handleStreamEvent(
       evt.type === 'widget-init'
         ? evt.payload.widget
         : ({
-            ...(get().activeWidgets[evt.payload.widgetId] ?? {}),
+            ...(get().activeWidgets[evt.payload.widgetId] ??
+              findMessageWidget(get().messages, messageId, evt.payload.widgetId) ??
+              {}),
             ...evt.payload.patch,
             id: evt.payload.widgetId,
           } as LearningWidgetInstance);
     set((s) => ({
       activeWidgets: { ...s.activeWidgets, [widget.id]: widget },
+      messages: s.messages.map((m) =>
+        m.id === messageId ? { ...m, widgetSnapshot: widget } : m
+      ),
     }));
   } else if (evt.type === 'widget-update') {
-    const prev = get().activeWidgets[evt.payload.widgetId];
+    const prev =
+      get().activeWidgets[evt.payload.widgetId] ??
+      findMessageWidget(get().messages, messageId, evt.payload.widgetId);
     if (!prev) return;
     const merged: LearningWidgetInstance = {
       ...prev,
@@ -210,6 +264,9 @@ function handleStreamEvent(
     };
     set((s) => ({
       activeWidgets: { ...s.activeWidgets, [merged.id]: merged },
+      messages: s.messages.map((m) =>
+        m.id === messageId ? { ...m, widgetSnapshot: merged } : m
+      ),
     }));
   } else if (evt.type === 'mode-switch') {
     set({ inputMode: evt.payload.mode });
@@ -219,6 +276,23 @@ function handleStreamEvent(
     // 异步刷新画像,RouteGuard / 视图凭新 profile 决定下一步导航
     void useProfileStore.getState().reload();
   }
+}
+
+function findMessageWidget(
+  messages: MessageDTO[],
+  messageId: number,
+  widgetId: string
+): LearningWidgetInstance | null {
+  const msg = messages.find((m) => m.id === messageId);
+  const snap = msg?.widgetSnapshot as Partial<LearningWidgetInstance> | null;
+  if (!snap?.id || snap.id !== widgetId || !snap.type) return null;
+  return {
+    id: snap.id,
+    type: snap.type,
+    status: snap.status ?? 'ready',
+    data: snap.data ?? {},
+    version: snap.version ?? 1,
+  };
 }
 
 function clearStreamBuffer(

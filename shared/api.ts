@@ -117,6 +117,24 @@ export type ChatAction =
   | { type: 'skip-question'; payload: { attemptId: number } }
   | { type: 'next-question' };
 
+export function describeChatAction(action: ChatAction | undefined): string {
+  if (!action) return '执行操作';
+  switch (action.type) {
+    case 'select-scene':
+      return `选择场景:${action.payload.sceneId}`;
+    case 'request-new-scenes':
+      return '换一批场景';
+    case 'submit-answer':
+      return action.payload.answer || '提交答案';
+    case 'skip-question':
+      return '跳过本题';
+    case 'next-question':
+      return '下一题';
+    default:
+      return '执行操作';
+  }
+}
+
 export interface ChatSendReq {
   conversationId?: number; // 不传则自动新建
   /** 自由文本输入(与 action 二选一) */

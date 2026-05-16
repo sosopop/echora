@@ -10,7 +10,13 @@ export default function WidgetSlot({
   widget,
 }: {
   widget: LearningWidgetInstance;
-}): JSX.Element {
+}): JSX.Element | null {
+  if (widget.type === 'grading-result' && widget.status !== 'ready') {
+    return null;
+  }
+  if (widget.type === 'scene-cards' && widget.status === 'loading') {
+    return null;
+  }
   return (
     <div className={styles.widgetSlot}>
       <WidgetRenderer widget={widget} />

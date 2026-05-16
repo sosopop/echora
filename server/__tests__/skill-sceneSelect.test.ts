@@ -3,8 +3,8 @@
  *
  *   - 无 action(默认展示候选)→ propose + selectTopK → widget-ready + 候选数据
  *   - action=request-new-scenes → 同上 + 过滤已用
- *   - action=select-scene → runDialogueGeneration → 落 scene_dialogues + scene_history + state-transition
- *   - propose 失败 → yield error
+ *   - action=select-scene → runDialogueGeneration → 落 scene_dialogues + scene_history + 自动出第一题
+ *   - propose 失败 → widget error + mode-switch(chat) + yield error
  *   - dialogue 生成失败 → yield error
  */
 
@@ -161,7 +161,7 @@ describe('sceneSelect skill', () => {
     expect(cards.find((c) => c.id === 'restaurant')).toBeUndefined();
   });
 
-  it('action=select-scene → 生成 dialogue + scene_history + state-transition', async () => {
+  it('action=select-scene → 生成 dialogue + scene_history + 自动出第一题', async () => {
     const provider = makeProvider({
       dialogue: {
         roles: ['Customer', 'Waiter'],
@@ -180,12 +180,26 @@ describe('sceneSelect skill', () => {
       })
     );
 
-    expect(events.find((e) => e.type === 'state-transition')).toBeDefined();
     const transition = events.find((e) => e.type === 'state-transition') as {
       payload: { nextLearningState: string; activeSkill: string | null };
     };
     expect(transition.payload.nextLearningState).toBe('practicing');
     expect(transition.payload.activeSkill).toBe('practice');
+    const mode = events.find((e) => e.type === 'mode-switch') as {
+      payload: { mode: string };
+    };
+    expect(mode.payload.mode).toBe('fill');
+    const exerciseReady = events.find(
+      (e) =>
+        e.type === 'widget-ready' &&
+        (e as { payload: { widgetId: string } }).payload.widgetId.includes(
+          'exercise-card'
+        )
+    ) as {
+      payload: { patch: { data: { attemptId: number; stage: number } } };
+    };
+    expect(exerciseReady.payload.patch.data.attemptId).toBeGreaterThan(0);
+    expect(exerciseReady.payload.patch.data.stage).toBe(1);
 
     // scene_dialogue 已落库
     const dialogue = getActiveSceneDialogue(db, conversationId);
@@ -198,7 +212,7 @@ describe('sceneSelect skill', () => {
     expect(history).toContain('restaurant ordering');
   });
 
-  it('propose 失败 → yield error,无 widget-ready', async () => {
+  it('propose 失败 → widget error + mode-switch(chat) + yield error', async () => {
     const provider = makeProvider({ proposeShouldThrow: true });
     const events = await collect(makeCtx(provider));
     const errors = events.filter((e) => e.type === 'error');
@@ -206,8 +220,15 @@ describe('sceneSelect skill', () => {
     expect((errors[0] as { payload: { code: string } }).payload.code).toBe(
       'SCENE_PROPOSE_FAILED'
     );
-    // 已发了 widget-init(loading)但不应有 ready
-    expect(events.find((e) => e.type === 'widget-ready')).toBeUndefined();
+    const ready = events.find((e) => e.type === 'widget-ready') as {
+      payload: { patch: { status: string; data: { errorCode: string } } };
+    };
+    expect(ready.payload.patch.status).toBe('error');
+    expect(ready.payload.patch.data.errorCode).toBe('SCENE_PROPOSE_FAILED');
+    const modes = events.filter((e) => e.type === 'mode-switch') as Array<{
+      payload: { mode: string };
+    }>;
+    expect(modes[modes.length - 1].payload.mode).toBe('chat');
   });
 
   it('dialogue 生成失败 → yield error,无 state-transition', async () => {

@@ -8,6 +8,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { ERROR_CODES, type ErrorCode } from '../../shared/errors.js';
+import { getDevErrorDetails } from '../utils/devError.js';
 
 export class HttpError extends Error {
   constructor(
@@ -42,22 +43,29 @@ export function errorHandler(
   }
 
   if (err instanceof HttpError) {
+    const debug = getDevErrorDetails(err);
+    const details =
+      err.details || debug
+        ? { ...(err.details ?? {}), ...(debug ? { debug } : {}) }
+        : undefined;
     res.status(err.status).json({
       error: {
         code: err.code,
         message: err.message,
-        ...(err.details ? { details: err.details } : {}),
+        ...(details ? { details } : {}),
       },
     });
     return;
   }
 
   console.error('[errorHandler] 未捕获错误', err);
+  const details = getDevErrorDetails(err);
   res.status(500).json({
     error: {
       code: ERROR_CODES.INTERNAL_ERROR,
       message:
         err instanceof Error ? err.message : '服务器内部错误',
+      ...(details ? { details } : {}),
     },
   });
 }

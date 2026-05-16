@@ -92,6 +92,29 @@
   cursor: not-allowed;
 }
 
+.sceneEmpty {
+  background: var(--color-surface-soft);
+  border: 1px dashed var(--color-hairline);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.sceneEmptyTitle {
+  font-size: 14px;
+  color: var(--color-ink);
+  line-height: 1.5;
+}
+
+.sceneEmptyDesc {
+  font-size: 12px;
+  color: var(--color-muted);
+  line-height: 1.5;
+}
+
 /* ============================================================
  * exercise-card
  * ========================================================== */
@@ -259,6 +282,14 @@
   display: flex;
   gap: 10px;
   margin-top: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.gradingRetryHint {
+  color: var(--color-muted);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .btnPrimary {

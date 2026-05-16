@@ -69,7 +69,7 @@
   max-width: 800px;
   width: 100%;
   margin: 0 auto;
-  padding: 24px 24px 220px;
+  padding: 24px 24px 280px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -106,12 +106,13 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  padding-bottom: 24px;
 }
 
 .messageRow {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 16px;
 }
 
 .msgAi,
@@ -280,4 +281,35 @@
   font-size: 14px;
   background: var(--color-surface-soft);
   border-radius: var(--radius-md);
+}
+
+.recoveryRow {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--color-muted-soft);
+}
+
+.retrySceneBtn {
+  background: transparent;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  color: var(--color-muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
+.retrySceneBtn:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.retrySceneBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }

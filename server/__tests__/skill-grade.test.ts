@@ -208,6 +208,63 @@ describe('grade skill', () => {
     expect(transition.payload.nextLearningState).toBe('awaiting_next');
   });
 
+  it('阶段完成统计只计算当前 sceneId', async () => {
+    for (let stage = 1; stage <= 2; stage++) {
+      for (let q = 1; q <= 2; q++) {
+        const a = createAttempt(db, {
+          conversationId,
+          sceneId: 'old-scene',
+          stage,
+          questionNo: q,
+          questionType: 'x',
+          prompt: 'x',
+        });
+        createGrading(db, {
+          attemptId: a.id,
+          score: 100,
+          isCorrect: true,
+          corrections: {},
+        });
+      }
+    }
+    createSceneDialogue(db, {
+      userId,
+      conversationId,
+      sceneId: 'new-scene',
+      title: '新场景',
+      difficulty: 'B1',
+      roles: ['A', 'B'],
+      turns: [
+        { role: 'A', en: 'Thanks.', zh: '谢谢。' },
+        { role: 'B', en: 'You are welcome.', zh: '不客气。' },
+      ],
+    });
+    const attemptId = createAttempt(db, {
+      conversationId,
+      sceneId: 'new-scene',
+      stage: 1,
+      questionNo: 1,
+      questionType: 'fill_word',
+      prompt: 'x',
+    }).id;
+    const provider = makeProvider({
+      score: 100,
+      is_correct: true,
+      reference_answer: 'Thanks.',
+      explanation: '正确',
+      tags: [],
+    });
+
+    const events = await collect(
+      makeCtx(provider, {
+        type: 'submit-answer',
+        payload: { attemptId, answer: 'Thanks.' },
+      })
+    );
+
+    expect(events.find((e) => e.type === 'state-transition')).toBeUndefined();
+  });
+
   it('已 needs_review 的 attempt 再 submit → error ATTEMPT_LOCKED', async () => {
     const attemptId = seedAttempt(1, 1);
     markNeedsReview(db, attemptId);

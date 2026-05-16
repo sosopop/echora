@@ -32,7 +32,7 @@ export class ApiClientError extends Error {
     public readonly status: number,
     public readonly apiError: ApiError
   ) {
-    super(apiError.message);
+    super(formatApiErrorMessage(apiError));
     this.name = 'ApiClientError';
   }
 }
@@ -82,6 +82,14 @@ async function request<T>(
     const apiError: ApiError = payload && 'error' in payload
       ? payload.error
       : { code: 'NETWORK_ERROR', message: `HTTP ${res.status}` };
+    if (import.meta.env.DEV) {
+      console.error('[apiClient] request failed', {
+        method,
+        path,
+        status: res.status,
+        error: apiError,
+      });
+    }
     throw new ApiClientError(res.status, apiError);
   }
 
@@ -102,3 +110,8 @@ export const apiClient = {
     return request<T>('DELETE', path, undefined, opts);
   },
 };
+
+function formatApiErrorMessage(apiError: ApiError): string {
+  if (!import.meta.env.DEV || !apiError.details) return apiError.message;
+  return `${apiError.message}\n${JSON.stringify(apiError.details, null, 2)}`;
+}

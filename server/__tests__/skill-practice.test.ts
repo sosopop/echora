@@ -4,6 +4,8 @@
  *   - 无 scene_dialogue → error NO_ACTIVE_SCENE
  *   - 阶段 1 第 1 题 → widget exercise-card + mode-switch(fill) + 落 attempt(stage=1)
  *   - 阶段 1 已通过 2 题 → 进阶段 2(mode-switch chat)
+ *   - 未通过/重复题不把 question_no 推到模板之外
+ *   - 新场景不继承旧场景已通过进度
  *   - 阶段 2 已通过 2 题 → state-transition('awaiting_next')
  *   - dialogue.turns 不足 → error NO_QUESTION_TEMPLATE
  */
@@ -144,6 +146,90 @@ describe('practice skill', () => {
     };
     expect(ready.payload.patch.data.stage).toBe(2);
     expect(ready.payload.patch.data.questionType).toBe('sentence_translation');
+  });
+
+  it('未通过/重复题不把 question_no 推到模板之外', async () => {
+    seedDialogue(4);
+    // 阶段 1 已完成,进入阶段 2
+    for (let q = 1; q <= 2; q++) {
+      const a = createAttempt(db, {
+        conversationId, sceneId: 'test-scene',
+        stage: 1, questionNo: q, questionType: 'fill_word', prompt: 'x',
+      });
+      createGrading(db, {
+        attemptId: a.id,
+        score: 100,
+        isCorrect: true,
+        corrections: {},
+      });
+    }
+    // 旧版本可能留下很多阶段 2 未通过 attempt;下一题应仍补第 1 个未通过目标。
+    for (let q = 1; q <= 6; q++) {
+      const a = createAttempt(db, {
+        conversationId, sceneId: 'test-scene',
+        stage: 2, questionNo: q, questionType: 'sentence_translation', prompt: 'x',
+      });
+      createGrading(db, {
+        attemptId: a.id,
+        score: 40,
+        isCorrect: false,
+        corrections: {},
+      });
+    }
+
+    const events = await collect();
+    expect(events.find((e) => e.type === 'error')).toBeUndefined();
+    const ready = events.find((e) => e.type === 'widget-ready') as {
+      payload: { patch: { data: { stage: number; questionNo: number } } };
+    };
+    expect(ready.payload.patch.data.stage).toBe(2);
+    expect(ready.payload.patch.data.questionNo).toBe(1);
+  });
+
+  it('新场景不继承旧场景已通过进度', async () => {
+    seedDialogue(4);
+    for (let stage = 1; stage <= 2; stage++) {
+      for (let q = 1; q <= 2; q++) {
+        const a = createAttempt(db, {
+          conversationId,
+          sceneId: 'test-scene',
+          stage,
+          questionNo: q,
+          questionType: 'x',
+          prompt: 'x',
+        });
+        createGrading(db, {
+          attemptId: a.id,
+          score: 100,
+          isCorrect: true,
+          corrections: {},
+        });
+      }
+    }
+    createSceneDialogue(db, {
+      userId,
+      conversationId,
+      sceneId: 'new-scene',
+      title: '新场景',
+      difficulty: 'B1',
+      roles: ['A', 'B'],
+      turns: [
+        { role: 'A', en: 'Good morning.', zh: '早上好。' },
+        { role: 'B', en: 'How are you?', zh: '你好吗？' },
+        { role: 'A', en: 'I need a ticket.', zh: '我需要一张票。' },
+        { role: 'B', en: 'Here you are.', zh: '给你。' },
+      ],
+    });
+
+    const events = await collect();
+    expect(events.find((e) => e.type === 'state-transition' && (
+      e as { payload: { nextLearningState?: string } }
+    ).payload.nextLearningState === 'awaiting_next')).toBeUndefined();
+    const ready = events.find((e) => e.type === 'widget-ready') as {
+      payload: { patch: { data: { stage: number; questionNo: number } } };
+    };
+    expect(ready.payload.patch.data.stage).toBe(1);
+    expect(ready.payload.patch.data.questionNo).toBe(1);
   });
 
   it('阶段 2 已通过 2 题 → state-transition awaiting_next', async () => {

@@ -12,3 +12,7 @@ export function isDeepSeekBaseURL(baseURL?: string): boolean {
     return baseURL.includes('api.deepseek.com');
   }
 }
+
+export function shouldOmitDeepSeekToolChoice(baseURL?: string): boolean {
+  return isDeepSeekBaseURL(baseURL);
+}

@@ -38,9 +38,21 @@ import type {
   SkillEvent,
   RouterInput,
   LearningState,
+  RouterDecision,
 } from '../../shared/skill.js';
 import { ALL_LEARNING_STATES } from '../../shared/skill.js';
-import type { ChatSendResp } from '../../shared/api.js';
+import {
+  describeChatAction,
+  type ChatAction,
+  type ConversationDTO,
+  type ChatSendResp,
+} from '../../shared/api.js';
+import { getDevErrorDetails } from '../utils/devError.js';
+import {
+  findLatestAttempt,
+  type ExerciseAttemptDTO,
+} from '../services/exerciseAttempt.js';
+import { getGradingByAttempt } from '../services/gradingResult.js';
 
 const chatActionSchema = z.discriminatedUnion('type', [
   z.object({
@@ -73,6 +85,8 @@ const sendSchema = z
     (b) => (b.text != null) !== (b.action != null),
     { message: 'text 与 action 必须二选一(不能同时给也不能都缺)' }
   );
+
+type ChatSendBody = z.infer<typeof sendSchema>;
 
 const createConversationSchema = z.object({
   title: z.string().min(1).max(200).optional(),
@@ -192,45 +206,42 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
         conv = createConversation(db, userId);
       }
 
+      const normalizedInput = normalizeChatSendInput(db, conv, body);
+
       // 2. 持久化用户消息
-      //    text 直接落 content;action 则把 JSON 字符串化进 content 便于历史回看
-      const messageContent = body.text
-        ? body.text
-        : `[action] ${JSON.stringify(body.action)}`;
+      //    text 直接落 content;action 落自然文案;submit-answer 落用户真实答案。
       const userMsg = appendMessage(db, {
         conversationId: conv.id,
         type: 'text',
         role: 'user',
-        content: messageContent,
+        content: normalizedInput.userMessageContent,
       });
 
-      // 3. AI Router 决策
-      //    失败不做 fallback,直接抛错让客户端看到具体原因
-      //    action 优先体现为路由 userText 提示(skill 内部从 decision.params.action 拿)
-      const routerInput: RouterInput = {
-        userText: body.text ?? `[action:${body.action?.type}]`,
-        profile: null,
-        currentLearningState: conv.learningState,
-        conversationId: conv.id,
-        availableSkills: skillRegistry.names(),
-      };
-      let decision;
-      try {
-        decision = await aiRouter.decide(routerInput);
-      } catch (e) {
-        const reason = e instanceof Error ? e.message : String(e);
-        throw new HttpError(
-          502,
-          ERROR_CODES.PROVIDER_ERROR,
-          `AI 路由失败: ${reason}`
-        );
-      }
-      // 把 action 注入 decision.params,供 skill 读取
-      if (body.action) {
-        decision = {
-          ...decision,
-          params: { ...decision.params, action: body.action },
+      // 3. 调度决策
+      //    结构化 action 走确定性路由;自由文本才交给 AI Router。
+      let decision: RouterDecision;
+      if (normalizedInput.action) {
+        decision = createActionDecision(normalizedInput.action);
+      } else {
+        const routerInput: RouterInput = {
+          userText: normalizedInput.text ?? '',
+          profile: null,
+          currentLearningState: conv.learningState,
+          conversationId: conv.id,
+          availableSkills: skillRegistry.names(),
         };
+        try {
+          decision = await aiRouter.decide(routerInput);
+        } catch (e) {
+          const reason = e instanceof Error ? e.message : String(e);
+          const details = getDevErrorDetails(e);
+          throw new HttpError(
+            502,
+            ERROR_CODES.PROVIDER_ERROR,
+            `AI 路由失败: ${reason}`,
+            details ? { upstream: details } : undefined
+          );
+        }
       }
       const skill = skillRegistry.get(decision.skillName);
       if (!skill) {
@@ -238,6 +249,13 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
           500,
           ERROR_CODES.SKILL_NOT_FOUND,
           `Skill 不存在: ${decision.skillName}`
+        );
+      }
+      if (!isSkillAllowedInState(skill.allowedStates, conv.learningState)) {
+        throw new HttpError(
+          400,
+          ERROR_CODES.VALIDATION_FAILED,
+          `当前状态 ${conv.learningState} 不能执行 ${describeChatAction(normalizedInput.action)}`
         );
       }
 
@@ -364,6 +382,160 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
   });
 
   return router;
+}
+
+interface NormalizedChatSendInput {
+  text?: string;
+  action?: ChatAction;
+  userMessageContent: string;
+}
+
+function normalizeChatSendInput(
+  db: Db,
+  conv: ConversationDTO,
+  body: ChatSendBody
+): NormalizedChatSendInput {
+  if (body.action) {
+    return {
+      action: body.action,
+      userMessageContent: describeUserMessageForAction(body.action),
+    };
+  }
+
+  const text = body.text?.trim() ?? '';
+  const controlAction = createTextControlAction(conv, text);
+  if (controlAction) {
+    return {
+      action: controlAction,
+      userMessageContent: text,
+    };
+  }
+
+  const answerAction = createTextAnswerAction(db, conv, text);
+  if (answerAction) {
+    return {
+      action: answerAction,
+      userMessageContent: text,
+    };
+  }
+
+  return {
+    text,
+    userMessageContent: text,
+  };
+}
+
+function describeUserMessageForAction(action: ChatAction): string {
+  return action.type === 'submit-answer'
+    ? action.payload.answer
+    : describeChatAction(action);
+}
+
+function createTextControlAction(
+  conv: ConversationDTO,
+  text: string
+): ChatAction | null {
+  const isNext = isNextPracticeText(text);
+  const isScene = isSceneRequestText(text);
+  if (isNext || isScene) {
+    if (conv.learningState === 'practicing' && isNext) {
+      return { type: 'next-question' };
+    }
+    if (
+      conv.learningState === 'awaiting_next' ||
+      conv.learningState === 'scene_selecting' ||
+      conv.learningState === 'reviewing'
+    ) {
+      return { type: 'request-new-scenes' };
+    }
+  }
+  return null;
+}
+
+function createTextAnswerAction(
+  db: Db,
+  conv: ConversationDTO,
+  text: string
+): ChatAction | null {
+  if (conv.learningState !== 'practicing') return null;
+  if (isPracticeControlText(text)) return null;
+  const dialogue = getActiveSceneDialogue(db, conv.id);
+  const attempt = findLatestAttempt(db, conv.id, dialogue?.sceneId);
+  if (!attempt || !isAttemptAnswerable(db, attempt)) return null;
+  return {
+    type: 'submit-answer',
+    payload: { attemptId: attempt.id, answer: text },
+  };
+}
+
+function isContinuePracticeText(text: string): boolean {
+  return isNextPracticeText(text) || isSceneRequestText(text);
+}
+
+function isNextPracticeText(text: string): boolean {
+  const normalized = normalizeControlText(text);
+  if (!normalized) return false;
+  return [
+    '出题',
+    '开始',
+    '开始练习',
+    '继续',
+    '下一题',
+    '下一个',
+    'go',
+    'next',
+    'start',
+    'continue',
+  ].includes(normalized);
+}
+
+function isSceneRequestText(text: string): boolean {
+  const normalized = normalizeControlText(text);
+  if (!normalized) return false;
+  return ['换场景', '换一批', '重新生成场景'].includes(normalized);
+}
+
+function isPracticeControlText(text: string): boolean {
+  const normalized = normalizeControlText(text);
+  if (!normalized) return false;
+  return isContinuePracticeText(text);
+}
+
+function normalizeControlText(text: string): string {
+  return text.trim().toLowerCase().replace(/[.!?。！？\s]+/g, '');
+}
+
+function isAttemptAnswerable(db: Db, attempt: ExerciseAttemptDTO): boolean {
+  if (attempt.status === 'pending' || attempt.status === 'submitted') {
+    return true;
+  }
+  if (attempt.status !== 'graded' || attempt.retryCount >= 2) {
+    return false;
+  }
+  const grading = getGradingByAttempt(db, attempt.id);
+  return grading?.isCorrect === false;
+}
+
+function createActionDecision(action: ChatAction): RouterDecision {
+  const skillName =
+    action.type === 'request-new-scenes' || action.type === 'select-scene'
+      ? 'scene-select'
+      : action.type === 'submit-answer'
+      ? 'grade'
+      : 'practice';
+  return {
+    skillName,
+    params: { action },
+    confidence: 1,
+    rationale: `deterministic action route:${action.type}`,
+  };
+}
+
+function isSkillAllowedInState(
+  allowedStates: LearningState[],
+  current: LearningState
+): boolean {
+  return allowedStates.length === 0 || allowedStates.includes(current);
 }
 
 /* ============================================================
@@ -497,16 +669,23 @@ function runSkillInBackground(args: RunSkillArgs): void {
 
       // grade skill 003 已自身 yield state-transition,不再需要兼容分支
     } catch (err) {
+      const details = getDevErrorDetails(err);
       const errEvent: SkillEvent = {
         type: 'error',
         payload: {
           code: 'SKILL_HANDLER_FAILED',
           message: err instanceof Error ? err.message : String(err),
+          ...(details ? { details } : {}),
         },
         seq: seq + 1,
         streamId,
         timestamp: Date.now(),
       };
+      try {
+        appendStreamEvent(db, messageId, errEvent);
+      } catch {
+        /* 落盘失败不阻塞 */
+      }
       streamBus.publish(streamId, errEvent);
       runUpdate.run(
         'failed',

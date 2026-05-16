@@ -50,7 +50,7 @@ export function openStream(
           opts.onDone?.();
           close();
         } else if (evt.type === 'error') {
-          opts.onError?.(new Error(evt.payload.message));
+          opts.onError?.(formatSkillError(evt));
           close();
         }
       } catch (e) {
@@ -83,4 +83,15 @@ export function openStream(
 
   open();
   return { close };
+}
+
+function formatSkillError(evt: Extract<SkillEvent, { type: 'error' }>): Error {
+  const detailText =
+    import.meta.env.DEV && evt.payload.details
+      ? `\n${JSON.stringify(evt.payload.details, null, 2)}`
+      : '';
+  if (import.meta.env.DEV) {
+    console.error('[sse] skill error', evt.payload);
+  }
+  return new Error(`${evt.payload.code}: ${evt.payload.message}${detailText}`);
 }

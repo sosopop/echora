@@ -8,7 +8,7 @@
  *   - 关注 activeWidgets:assistant 消息渲染时,如果 widget_snapshot 中的 widgetId 在 activeWidgets 里有更新版本,优先用 activeWidgets
  */
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { useChatStore } from '../../stores/chat.js';
 import MessageBubble from './MessageBubble.js';
 import WidgetSlot from './WidgetSlot.js';
@@ -20,18 +20,63 @@ export default function MessageList(): JSX.Element {
   const streamingId = useChatStore((s) => s.streamingMessageId);
   const streamBuffer = useChatStore((s) => s.streamBuffer);
   const activeWidgets = useChatStore((s) => s.activeWidgets);
-  const endRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [messages, streamBuffer, activeWidgets]);
+  const listRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef<number | null>(null);
 
   const visible = messages.filter(
     (m) => m.role === 'user' || m.role === 'assistant' || m.role === 'system'
   );
 
+  const scrollToPageBottom = useCallback((behavior: ScrollBehavior): void => {
+    const root = document.scrollingElement ?? document.documentElement;
+    window.scrollTo({ top: root.scrollHeight, behavior });
+  }, []);
+
+  const scheduleScrollToBottom = useCallback(
+    (behavior: ScrollBehavior = 'auto'): void => {
+      if (rafRef.current !== null) {
+        window.cancelAnimationFrame(rafRef.current);
+      }
+      rafRef.current = window.requestAnimationFrame(() => {
+        rafRef.current = null;
+        scrollToPageBottom(behavior);
+        window.requestAnimationFrame(() => scrollToPageBottom('auto'));
+        window.setTimeout(() => scrollToPageBottom('auto'), 80);
+        window.setTimeout(() => scrollToPageBottom('auto'), 220);
+      });
+    },
+    [scrollToPageBottom]
+  );
+
+  useLayoutEffect(() => {
+    scheduleScrollToBottom('auto');
+  }, [visible.length, streamingId, scheduleScrollToBottom]);
+
+  useEffect(() => {
+    scheduleScrollToBottom(streamingId ? 'auto' : 'smooth');
+  }, [streamBuffer, activeWidgets, scheduleScrollToBottom, streamingId]);
+
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(() => {
+      scheduleScrollToBottom('auto');
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [scheduleScrollToBottom]);
+
+  useEffect(
+    () => () => {
+      if (rafRef.current !== null) {
+        window.cancelAnimationFrame(rafRef.current);
+      }
+    },
+    []
+  );
+
   return (
-    <div className={styles.messageList}>
+    <div className={styles.messageList} ref={listRef}>
       {visible.map((m) => {
         const isStreaming = streamingId === m.id;
         const text = isStreaming
@@ -50,7 +95,6 @@ export default function MessageList(): JSX.Element {
           </div>
         );
       })}
-      <div ref={endRef} />
     </div>
   );
 }

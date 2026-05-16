@@ -8,6 +8,7 @@ import SceneCards from '../../../components/widgets/SceneCards';
 import ExerciseCard from '../../../components/widgets/ExerciseCard';
 import GradingResult from '../../../components/widgets/GradingResult';
 import { useChatStore } from '../../../stores/chat';
+import { useLearningStateStore } from '../../../stores/learningState';
 import type { LearningWidgetInstance } from '@shared/skill';
 
 beforeEach(() => {
@@ -23,9 +24,23 @@ beforeEach(() => {
     isLoading: false,
     error: null,
   });
+  useLearningStateStore.setState({ state: 'scene_selecting' });
 });
 
 describe('SceneCards widget', () => {
+  it('loading 状态不显示空场景小部件', () => {
+    const widget: LearningWidgetInstance = {
+      id: 'w-loading',
+      type: 'scene-cards',
+      status: 'loading',
+      data: {},
+      version: 1,
+    };
+    const { container } = render(<SceneCards widget={widget} />);
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByText(/还没有可用场景/)).not.toBeInTheDocument();
+  });
+
   it('渲染 N 张卡片 + click 触发 sendAction(select-scene)', () => {
     const sendAction = vi.fn();
     useChatStore.setState({ sendAction });
@@ -80,6 +95,25 @@ describe('SceneCards widget', () => {
     fireEvent.click(screen.getByText('A'));
     expect(sendAction).not.toHaveBeenCalled();
   });
+
+  it('空候选展示可恢复提示 + 重新生成按钮', () => {
+    const sendAction = vi.fn();
+    useChatStore.setState({ sendAction });
+    const widget: LearningWidgetInstance = {
+      id: 'w4',
+      type: 'scene-cards',
+      status: 'error',
+      data: {
+        cards: [],
+        message: '场景生成失败,请重新生成或直接输入想练的主题。',
+      },
+      version: 1,
+    };
+    render(<SceneCards widget={widget} />);
+    expect(screen.getByText(/场景生成失败/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText('重新生成场景'));
+    expect(sendAction).toHaveBeenCalledWith({ type: 'request-new-scenes' });
+  });
 });
 
 describe('ExerciseCard widget', () => {
@@ -131,6 +165,19 @@ describe('ExerciseCard widget', () => {
 });
 
 describe('GradingResult widget', () => {
+  it('loading 状态不提前渲染 0 分结果', () => {
+    const widget: LearningWidgetInstance = {
+      id: 'g-loading',
+      type: 'grading-result',
+      status: 'loading',
+      data: {},
+      version: 1,
+    };
+    const { container } = render(<GradingResult widget={widget} />);
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByText('0')).not.toBeInTheDocument();
+  });
+
   it('correct 状态渲染分数 + badge + 参考答案 + 下一题按钮', () => {
     const sendAction = vi.fn();
     useChatStore.setState({ sendAction });
@@ -179,5 +226,7 @@ describe('GradingResult widget', () => {
     expect(screen.getByText('未通过')).toBeInTheDocument();
     expect(screen.getByText('tense')).toBeInTheDocument();
     expect(screen.getByText('preposition')).toBeInTheDocument();
+    expect(screen.getByText(/改一句再提交/)).toBeInTheDocument();
+    expect(screen.getByText(/跳过到下一题/)).toBeInTheDocument();
   });
 });

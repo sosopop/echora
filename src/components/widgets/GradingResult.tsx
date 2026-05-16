@@ -34,12 +34,19 @@ export default function GradingResult({
   widget,
 }: {
   widget: LearningWidgetInstance;
-}): JSX.Element {
+}): JSX.Element | null {
   const sendAction = useChatStore((s) => s.sendAction);
   const streaming = useChatStore((s) => s.streamingMessageId !== null);
   const data = (widget.data ?? {}) as GradingResultData;
-  const score = typeof data.score === 'number' ? data.score : 0;
-  const band = bandFor(score, !!data.isCorrect);
+  if (
+    widget.status !== 'ready' ||
+    typeof data.score !== 'number' ||
+    typeof data.isCorrect !== 'boolean'
+  ) {
+    return null;
+  }
+  const score = data.score;
+  const band = bandFor(score, data.isCorrect);
   const bandLabel = labelFor(band);
 
   return (
@@ -81,13 +88,18 @@ export default function GradingResult({
           </div>
         )}
         <div className={styles.gradingActions}>
+          {!data.isCorrect && (
+            <span className={styles.gradingRetryHint}>
+              可以在底部改一句再提交
+            </span>
+          )}
           <button
             type="button"
             className={styles.btnPrimary}
             disabled={streaming}
             onClick={() => void sendAction({ type: 'next-question' })}
           >
-            下一题 →
+            {data.isCorrect ? '下一题 →' : '跳过到下一题 →'}
           </button>
         </div>
       </div>

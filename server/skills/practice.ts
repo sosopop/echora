@@ -44,7 +44,11 @@ export const practiceSkill: Skill = {
       return;
     }
 
-    const next = decideNextQuestion(ctx.db, ctx.conversationId);
+    const next = decideNextQuestion(
+      ctx.db,
+      ctx.conversationId,
+      dialogue.sceneId
+    );
 
     // 整场已通过 MVP 阶段 → 转 awaiting_next
     if (next.stage > MAX_STAGE_MVP) {

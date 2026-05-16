@@ -31,6 +31,8 @@ import {
   type SceneCandidate,
 } from './_helpers/sceneSelectFsm.js';
 import type { ChatAction, CefrLevel } from '../../shared/api.js';
+import { getDevErrorDetails } from '../utils/devError.js';
+import { practiceSkill } from './practice.js';
 
 const PROPOSE_COUNT = 20; // PRD §2.5 100 候选 → MVP 简化 20
 const SHOW_COUNT = 5;
@@ -75,11 +77,13 @@ export const sceneSelectSkill: Skill = {
         });
         appendSceneHistory(ctx.db, ctx.user.id, scene.topic);
       } catch (e) {
+        const details = getDevErrorDetails(e);
         yield {
           type: 'error',
           payload: {
             code: 'SCENE_DIALOGUE_GEN_FAILED',
             message: e instanceof Error ? e.message : String(e),
+            ...(details ? { details } : {}),
           },
         };
         return;
@@ -88,11 +92,13 @@ export const sceneSelectSkill: Skill = {
         type: 'text-chunk',
         payload: { text: `场景准备好了,开始练习「${scene.title}」。` },
       };
-      yield {
-        type: 'state-transition',
-        payload: { nextLearningState: 'practicing', activeSkill: 'practice' },
-      };
-      yield { type: 'done', payload: {} };
+      for await (const ev of practiceSkill.handler({
+        ...ctx,
+        learningState: 'practicing',
+        params: {},
+      })) {
+        yield ev;
+      }
       return;
     }
 
@@ -102,7 +108,7 @@ export const sceneSelectSkill: Skill = {
     const used = listSceneHistory(ctx.db, ctx.user.id);
     yield {
       type: 'text-chunk',
-      payload: { text: '根据你的画像,我挑了几个场景。点击一张进入练习。' },
+      payload: { text: '我来根据你的画像准备几个场景。点击一张进入练习。' },
     };
     yield { type: 'mode-switch', payload: { mode: 'select' } };
     const widgetId = ctx.makeWidgetId('scene-cards');
@@ -128,11 +134,37 @@ export const sceneSelectSkill: Skill = {
         ctx.signal
       );
     } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      const details = getDevErrorDetails(e);
+      yield {
+        type: 'text-chunk',
+        payload: {
+          text:
+            '\n这次场景生成失败了。你可以重新生成场景,或者直接输入想练的主题。',
+        },
+      };
+      yield {
+        type: 'widget-ready',
+        payload: {
+          widgetId,
+          patch: {
+            status: 'error',
+            data: {
+              cards: [],
+              allowCustom: true,
+              errorCode: 'SCENE_PROPOSE_FAILED',
+              message: '场景生成失败,请重新生成或直接输入想练的主题。',
+            },
+          },
+        },
+      };
+      yield { type: 'mode-switch', payload: { mode: 'chat' } };
       yield {
         type: 'error',
         payload: {
           code: 'SCENE_PROPOSE_FAILED',
-          message: e instanceof Error ? e.message : String(e),
+          message,
+          ...(details ? { details } : {}),
         },
       };
       return;

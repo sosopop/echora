@@ -12,10 +12,7 @@
 
 import type { Db } from '../../db/connect.js';
 import type { SceneDialogueDTO } from '../../../shared/api.js';
-import {
-  countStagePassed,
-  maxQuestionNo,
-} from '../../services/exerciseAttempt.js';
+import { countStagePassed } from '../../services/exerciseAttempt.js';
 
 export const STAGE_GOAL = 2; // MVP 每阶段 2 题
 export const MAX_STAGE_MVP = 2; // MVP 仅做阶段 1+2
@@ -31,17 +28,17 @@ export interface NextQuestion {
  * 根据当前 attempts 推断下一题应是哪个阶段、第几题。
  * 规则:
  *   - 从阶段 1 起:countStagePassed(stage) 达到 STAGE_GOAL → 进下一阶段
- *   - 阶段内 maxQuestionNo + 1 = 下一题号
+ *   - 阶段内题号由"已通过数量 + 1"决定,避免未答/错题/重复点击把题号推到模板之外
  */
 export function decideNextQuestion(
   db: Db,
-  conversationId: number
+  conversationId: number,
+  sceneId?: string | null
 ): NextQuestion {
   for (let stage = 1; stage <= MAX_STAGE_MVP; stage++) {
-    const passed = countStagePassed(db, conversationId, stage);
+    const passed = countStagePassed(db, conversationId, stage, sceneId);
     if (passed < STAGE_GOAL) {
-      const maxNo = maxQuestionNo(db, conversationId, stage);
-      return { stage, questionNo: maxNo + 1 };
+      return { stage, questionNo: passed + 1 };
     }
   }
   // 所有 MVP 阶段已通

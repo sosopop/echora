@@ -12,7 +12,7 @@ import styles from './widgets.module.css';
 
 type WidgetComponent = (props: {
   widget: LearningWidgetInstance;
-}) => JSX.Element;
+}) => JSX.Element | null;
 
 const REGISTRY: Record<string, WidgetComponent> = {
   'scene-cards': SceneCards,

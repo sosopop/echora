@@ -65,7 +65,14 @@ export type SkillEventInput =
       };
     }
   | { type: 'done'; payload?: Record<string, unknown> }
-  | { type: 'error'; payload: { code: string; message: string } };
+  | {
+      type: 'error';
+      payload: {
+        code: string;
+        message: string;
+        details?: Record<string, unknown>;
+      };
+    };
 
 export type SkillEvent = SkillEventInput & SkillEventMeta;
 

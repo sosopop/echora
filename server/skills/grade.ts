@@ -187,7 +187,8 @@ export const gradeSkill: Skill = {
     const passedInStage = countStagePassed(
       ctx.db,
       ctx.conversationId,
-      attempt.stage
+      attempt.stage,
+      attempt.sceneId
     );
     const stageComplete = passedInStage >= STAGE_GOAL;
     if (stageComplete && attempt.stage >= MAX_STAGE_MVP) {

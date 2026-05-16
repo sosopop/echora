@@ -23,6 +23,7 @@ import type { RouterInput, RouterDecision } from '../../../shared/skill.js';
 import {
   DEEPSEEK_THINKING_DISABLED,
   isDeepSeekBaseURL,
+  shouldOmitDeepSeekToolChoice,
   type DeepSeekThinkingDisabled,
 } from './deepseek.js';
 
@@ -46,6 +47,7 @@ export class OpenAIProvider implements AIProvider {
   private readonly client: OpenAI;
   private readonly model: string;
   private readonly disableThinkingForRoute: boolean;
+  private readonly omitToolChoice: boolean;
 
   constructor(opts: OpenAIProviderOptions) {
     if (!opts.apiKey || opts.apiKey.trim() === '') {
@@ -57,6 +59,7 @@ export class OpenAIProvider implements AIProvider {
     });
     this.model = opts.model ?? 'gpt-4o-mini';
     this.disableThinkingForRoute = isDeepSeekBaseURL(opts.baseURL);
+    this.omitToolChoice = shouldOmitDeepSeekToolChoice(opts.baseURL);
   }
 
   async route(input: RouterInput): Promise<RouterDecision> {
@@ -110,10 +113,12 @@ export class OpenAIProvider implements AIProvider {
           },
         },
       ],
-      tool_choice: {
-        type: 'function',
-        function: { name: ROUTE_FUNCTION_NAME },
-      },
+      tool_choice: this.omitToolChoice
+        ? undefined
+        : {
+            type: 'function',
+            function: { name: ROUTE_FUNCTION_NAME },
+          },
     };
     if (this.disableThinkingForRoute) {
       routeParams.thinking = DEEPSEEK_THINKING_DISABLED.thinking;
@@ -163,12 +168,9 @@ export class OpenAIProvider implements AIProvider {
       })
     );
 
-    const toolChoice: OpenAI.ChatCompletionToolChoiceOption | undefined =
-      req.toolChoice === undefined
-        ? undefined
-        : req.toolChoice === 'auto'
-        ? 'auto'
-        : { type: 'function', function: { name: req.toolChoice.name } };
+    const toolChoice = toOpenAIToolChoice(req.toolChoice, {
+      omitToolChoice: this.omitToolChoice,
+    });
 
     const stream = await this.client.chat.completions.create(
       {
@@ -242,6 +244,16 @@ export class OpenAIProvider implements AIProvider {
 
     yield { type: 'message-stop', stopReason };
   }
+}
+
+export function toOpenAIToolChoice(
+  toolChoice: ChatRequest['toolChoice'],
+  opts: { omitToolChoice?: boolean } = {}
+): OpenAI.ChatCompletionToolChoiceOption | undefined {
+  if (opts.omitToolChoice) return undefined;
+  if (toolChoice === undefined) return undefined;
+  if (toolChoice === 'auto') return 'auto';
+  return { type: 'function', function: { name: toolChoice.name } };
 }
 
 function buildRouteSystemPrompt(input: RouterInput): string {

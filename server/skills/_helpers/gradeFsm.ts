@@ -6,6 +6,7 @@ import type { ExerciseAttemptDTO } from '../../services/exerciseAttempt.js';
 import type { SceneDialogueDTO } from '../../../shared/api.js';
 import type { ToolDef, AIProvider, ChatStreamEvent } from '../../ai/types.js';
 import type { GradingCorrections } from '../../services/gradingResult.js';
+import { buildQuestionFromTurn } from './practiceFsm.js';
 
 const ALLOWED_TAGS = [
   'spelling',
@@ -54,17 +55,23 @@ export function buildGradePrompt(
   const ctxLine = dialogue
     ? `场景:${dialogue.title} (${dialogue.difficulty}) · 角色:${dialogue.roles.join(' / ')}`
     : '(场景上下文缺失)';
+  const reference = dialogue
+    ? buildQuestionFromTurn(dialogue, attempt.stage, attempt.questionNo)
+        ?.referenceAnswer
+    : null;
   return [
     '你是 Echora 英语教练,负责批改用户的练习答案。',
     '',
     ctxLine,
     `题型:${attempt.questionType}(阶段 ${attempt.stage} 第 ${attempt.questionNo} 题)`,
     `题目:${attempt.prompt}`,
+    reference ? `参考答案:${reference}` : null,
     `用户答案:${userAnswer}`,
     `重试次数:${attempt.retryCount}(0=首答, 1=第二次)`,
     '',
     '批改原则:',
     '- 接受同义表达、大小写宽容、轻微标点宽容',
+    '- 若提供参考答案,必须以参考答案作为主要批改依据',
     '- 评分尺度:90+ 优秀;80-89 通过;60-79 部分对;<60 未通过',
     '- is_correct = score >= 80',
     '- 错误标签从 12 类中选(spelling / word_order / tense / preposition / article / ' +
@@ -73,7 +80,7 @@ export function buildGradePrompt(
     '- explanation 简体中文,1-2 句,先肯定后指出主要错误',
     '',
     '必须通过 grade_answer 工具调用回应。',
-  ].join('\n');
+  ].filter((line): line is string => line !== null).join('\n');
 }
 
 export interface GradeResult {

@@ -21,6 +21,7 @@ import type {
 import {
   DEEPSEEK_THINKING_DISABLED,
   isDeepSeekBaseURL,
+  shouldOmitDeepSeekToolChoice,
   type DeepSeekThinkingDisabled,
 } from './deepseek.js';
 
@@ -44,6 +45,7 @@ export class AnthropicProvider implements AIProvider {
   private readonly client: Anthropic;
   private readonly model: string;
   private readonly disableThinkingForRoute: boolean;
+  private readonly omitToolChoice: boolean;
 
   constructor(opts: AnthropicProviderOptions) {
     if (!opts.apiKey || opts.apiKey.trim() === '') {
@@ -55,6 +57,7 @@ export class AnthropicProvider implements AIProvider {
     });
     this.model = opts.model ?? 'claude-sonnet-4-6';
     this.disableThinkingForRoute = isDeepSeekBaseURL(opts.baseURL);
+    this.omitToolChoice = shouldOmitDeepSeekToolChoice(opts.baseURL);
   }
 
   async route(input: RouterInput): Promise<RouterDecision> {
@@ -102,7 +105,9 @@ export class AnthropicProvider implements AIProvider {
           },
         },
       ],
-      tool_choice: { type: 'tool', name: ROUTE_TOOL_NAME },
+      tool_choice: this.omitToolChoice
+        ? undefined
+        : { type: 'tool', name: ROUTE_TOOL_NAME },
     };
     if (this.disableThinkingForRoute) {
       routeParams.thinking = DEEPSEEK_THINKING_DISABLED.thinking;
@@ -129,7 +134,9 @@ export class AnthropicProvider implements AIProvider {
   }
 
   async *chat(req: ChatRequest): AsyncIterable<ChatStreamEvent> {
-    const toolChoice = toAnthropicToolChoice(req.toolChoice);
+    const toolChoice = toAnthropicToolChoice(req.toolChoice, {
+      omitToolChoice: this.omitToolChoice,
+    });
     const stream = this.client.messages.stream(
       {
         model: this.model,
@@ -222,8 +229,10 @@ export class AnthropicProvider implements AIProvider {
 }
 
 export function toAnthropicToolChoice(
-  toolChoice: ChatRequest['toolChoice']
+  toolChoice: ChatRequest['toolChoice'],
+  opts: { omitToolChoice?: boolean } = {}
 ): Anthropic.ToolChoice | undefined {
+  if (opts.omitToolChoice) return undefined;
   if (toolChoice === undefined) return undefined;
   if (toolChoice === 'auto') return { type: 'auto' };
   return { type: 'tool', name: toolChoice.name };

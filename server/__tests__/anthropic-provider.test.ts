@@ -16,4 +16,15 @@ describe('AnthropicProvider tool choice mapping', () => {
   it('omits tool_choice when caller does not request one', () => {
     expect(toAnthropicToolChoice(undefined)).toBeUndefined();
   });
+
+  it('omits tool_choice for DeepSeek-compatible endpoints', () => {
+    expect(
+      toAnthropicToolChoice({ type: 'tool', name: 'update_profile' }, {
+        omitToolChoice: true,
+      })
+    ).toBeUndefined();
+    expect(
+      toAnthropicToolChoice('auto', { omitToolChoice: true })
+    ).toBeUndefined();
+  });
 });

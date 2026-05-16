@@ -10,6 +10,7 @@
 import type { LearningWidgetInstance } from '@shared/skill';
 import type { CefrLevel } from '@shared/api';
 import { useChatStore } from '../../stores/chat.js';
+import { useLearningStateStore } from '../../stores/learningState.js';
 import styles from './widgets.module.css';
 
 interface SceneCard {
@@ -24,21 +25,49 @@ interface SceneCard {
 interface SceneCardsData {
   cards?: SceneCard[];
   allowCustom?: boolean;
+  message?: string;
 }
 
 export default function SceneCards({
   widget,
 }: {
   widget: LearningWidgetInstance;
-}): JSX.Element {
+}): JSX.Element | null {
   const sendAction = useChatStore((s) => s.sendAction);
   const streaming = useChatStore((s) => s.streamingMessageId !== null);
+  const learningState = useLearningStateStore((s) => s.state);
   const data = (widget.data ?? {}) as SceneCardsData;
   const cards = data.cards ?? [];
-  const disabled = widget.status !== 'ready' || streaming;
+  const disabled =
+    widget.status !== 'ready' ||
+    streaming ||
+    !['scene_selecting', 'awaiting_next', 'reviewing'].includes(learningState);
+
+  if (widget.status !== 'ready' && widget.status !== 'error') {
+    return null;
+  }
 
   if (cards.length === 0) {
-    return <div className={styles.fallback}>(暂无场景候选)</div>;
+    return (
+      <div className={styles.sceneEmpty}>
+        <div className={styles.sceneEmptyTitle}>
+          {widget.status === 'error'
+            ? data.message ?? '场景生成失败'
+            : '还没有可用场景候选'}
+        </div>
+        <div className={styles.sceneEmptyDesc}>
+          可以重新生成一批场景,也可以直接在下方输入想练的主题。
+        </div>
+        <button
+          type="button"
+          className={styles.btnGhost}
+          disabled={streaming}
+          onClick={() => void sendAction({ type: 'request-new-scenes' })}
+        >
+          重新生成场景
+        </button>
+      </div>
+    );
   }
 
   return (

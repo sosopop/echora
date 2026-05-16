@@ -61,7 +61,11 @@ type ChatAction =
   | { type: 'next-question' };
 ```
 
-`action` 与 `text` 二选一,zod refine 校验。`action` 自动注入到 `decision.params.action` 供 skill handler 读取。前端 widget 交互(点击场景卡片、提交答案、下一题等)统一走 `action` 路径,与 PRD §2.3 「结构化菜单动作优先走确定性路由」对齐。
+`action` 与 `text` 二选一,zod refine 校验。前端 widget 交互(点击场景卡片、提交答案、下一题等)统一走 `action` 路径。007 起 action 不再交给 AI Router,而是由后端确定性映射到 Skill:`request-new-scenes` / `select-scene` → `scene-select`,`submit-answer` → `grade`,`next-question` / `skip-question` → `practice`;随后仍校验目标 Skill 是否允许当前 `learningState`。
+
+008 起,`practicing` 态下的自由文本会先检查当前会话最新 attempt:若最新题仍是 `pending/submitted`,或已 `graded` 但结果错误且 `retry_count < 2`,后端会把非控制指令文本规范化为 `submit-answer` action 并走 `grade`。010 起 answer 绑定只看当前活跃 `scene_dialogue.sceneId` 下的 latest attempt,避免换场景后误提交旧场景题目。`出题` / `开始练习` / `继续` / `下一题` / `go` / `next` 等继续指令在 `practicing` 中确定性映射为 `next-question`,`awaiting_next` / `scene_selecting` / `reviewing` 中映射为 `request-new-scenes`;`换场景` / `换一批` / `重新生成场景` 在非 practicing 状态同样映射为 `request-new-scenes`。
+
+006 起,结构化 `action` 在消息历史中显示为自然文案,不再暴露 `[action] {...}` 原始 JSON。008 起 `submit-answer` 显示用户真实答案,其他映射保持:`request-new-scenes` → "换一批场景",`select-scene` → "选择场景:<sceneId>",`skip-question` → "跳过本题",`next-question` → "下一题"。前端仍兼容历史 raw action 消息,渲染时会转为同一套文案。
 
 ## SSE 协议
 
@@ -96,6 +100,10 @@ type ChatAction =
 ```json
 { "error": { "code": "ERROR_CODE", "message": "...", "details": { ... } } }
 ```
+
+`NODE_ENV !== 'production'` 时,HTTP 错误响应会在 `details.debug` 或 `details.upstream` 中附带错误 name/message/stack 与上游状态码等调试字段;前端 dev 模式会在控制台打印完整 API/SSE 错误并把 details 拼进错误提示。生产环境不附带这些调试细节。
+
+前端发送顺序(008):`useChatStore.sendMessage/sendAction` 会在 `/api/chat/send` 返回前先插入临时用户消息与空 assistant 消息;assistant 空流式消息渲染为 "Echo 正在思考中..."。服务端返回后再替换真实 messageId 并连接 SSE,随后 `text-chunk` / `widget-*` 覆盖为真实 AI 输出或小部件结果。
 
 ## 约束与失败点
 
