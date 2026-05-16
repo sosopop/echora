@@ -8,6 +8,8 @@ Read `doc/knowledge/task-handoff.md` first — it's a permanent workflow contrac
 
 The **手工测试** section is mandatory (002+ convention). Record actual commands + outputs (curl for backend, browser steps for UI), include at least one negative case, redact secrets to `<TOKEN>` / `<API_KEY>`, and document any diagnostic findings (现象 → 诊断 → 根因 → 处置) even when the issue is external (network, config, third-party endpoint). **Commands must be directly copy-pasteable** — never prefix with `$ `, `> `, or `PS> ` shell prompts; put the command alone in one code block and the output in a separate block.
 
+If the manual-test section contains **≥ 3 curl steps**, also produce a paired Python script `doc/task/<NNN>-test.py` that runs the equivalent flow end-to-end, auto-substituting placeholders (TOKEN / CONV_ID / STREAM_ID), printing full input + output for each step, and waiting for spacebar to continue (any other key aborts). Use stdlib only (`urllib` / `http.client`), Windows + POSIX cross-compatible. The script must stay in sync with the curl steps in the markdown — change one, change both.
+
 The authoritative product spec is `doc/prd.md` (V1 MVP), the authoritative engineering convention is `doc/esd.md`, and the design tokens are in `DESIGN.md` (with a live HTML prototype under `doc/design/`).
 
 ## Common Commands

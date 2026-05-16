@@ -72,23 +72,31 @@
 - `.env.example` — 增 OpenAI 三项 + fallback 关闭说明
 - CLAUDE.md + `doc/knowledge/skills.md` — 同步 OpenAI Provider 与「无 fallback」约定
 
+### 补丁(commit 9 · DeepSeek 兼容 + 交互式手工测试脚本)
+- `server/ai/providers/deepseek.ts` — 新增 helper:`isDeepSeekBaseURL()` 检测 + `DEEPSEEK_THINKING_DISABLED` 常量(给 route() 加 `thinking: { type: 'disabled' }`,绕开 `deepseek-reasoner` 不支持 `tool_choice` 强制的限制)
+- `server/ai/providers/anthropic.ts` + `openai.ts` — 构造时检测 baseURL,DeepSeek endpoint 自动给 route() 请求加 thinking 禁用参数;chat() 不影响
+- `package.json` 脚本 `smoke:ai` 改名为 **`test:smoke:ai`** 与其他测试命令对齐
+- `doc/task/002-test.py` — 新增**交互式手工测试脚本**(stdlib only,Windows + POSIX 兼容):自动跑 6 步 curl 等价请求,自动占位替换(TOKEN / conv_id / stream_id),每步打印完整输入/输出后按空格继续。`python doc/task/002-test.py` 即可一键复测
+- `doc/knowledge/task-handoff.md` + `CLAUDE.md` — 写入新约定:有 ≥ 3 步 curl 测试的 task 文档须配套 `<NNN>-test.py` 脚本,与文档同步
+
 ### 验证结果
 
 | 命令 | 结果 |
 |---|---|
 | `npx tsc -p tsconfig.server.json --noEmit` | ✓ 后端类型干净 |
 | `npx tsc -p tsconfig.json --noEmit` | ✓ 前端类型干净 |
-| `npm run test:server` | ✓ 18 passed (5 suites,新增 ai-router) |
+| `npm run test:server` | ✓ 21 passed (6 suites,含 ai-router + deepseek 兼容) |
 | `npm run test:web` | ✓ 16 passed (3 suites) |
 | `npm run test:smoke` | ✓ 6/6 (stub provider 全链) |
-| `npm run test:smoke:ai` | ⚠ 需 ANTHROPIC_API_KEY + OPENAI_API_KEY 双备 才能跑完整链(详见「手工测试 · test:smoke:ai」) |
+| `npm run test:smoke:ai` | ✓ 4/4(双 Provider 实测,DeepSeek 中转,详见「手工测试 · test:smoke:ai」) |
 | 手工 curl(stub provider) | ✓ register → /me → profile CRUD → send → SSE 全链 |
-| 手工 curl(anthropic provider) | ⚠ 链路完整但 `provider.route` 在第三方中转 endpoint 上 401,**现已不再 fallback**:`/api/chat/send` 直接返 502(详见「手工测试 · 诊断记录」) |
+| 手工 curl(anthropic provider via DeepSeek) | ✓ Provider 接入打通,`/api/chat/send` 返回 202 + skillName=onboarding,SSE 流出真实 LLM 回应 + tool_use |
 
 ## 手工测试
 
 > 命令块均为可直接复制粘贴的形式(不含 `$` `>` 等 shell 提示符)。
 > 凭据/动态变量用占位符:`<TOKEN>` `<EMAIL>` `<CONV_ID>` `<STREAM_ID>`,前文有获取方式。
+> **一键复测**:`python doc/task/002-test.py` — 等价于把下方 6 步 curl 串起来跑,自动占位替换,每步空格继续。
 
 ### 后端 API · stub provider(基线)
 
@@ -210,18 +218,20 @@ curl -i -X POST http://127.0.0.1:8787/api/chat/send \
   -d '{"conversationId":<CONV_ID>,"text":"hi"}'
 ```
 
-响应(本次实测,中转 endpoint 401,**已不再 fallback,直接返 502**):
+响应(provider 正常,实测使用 DeepSeek 中转):
 
 ```
-HTTP/1.1 502 Bad Gateway
+HTTP/1.1 202 Accepted
 Content-Type: application/json
 ```
 
 ```json
-{"error":{"code":"PROVIDER_ERROR","message":"AI 路由失败: 401 {\"error\":{\"code\":\"\",\"message\":\"无效的令牌 (request id: ...)\",\"type\":\"new_api_error\"}}"}}
+{"data":{"conversationId":1,"userMessageId":1,"assistantMessageId":2,"streamId":"<STREAM_ID>","decision":{"skillName":"onboarding","confidence":0.95,"rationale":"onboarding 学习态下用户首次互动,选 onboarding skill"}}}
 ```
 
-⚠ **设计意图**(002 patch):router 不再 catch 错误降级。前端 chat store / Login / Register 上拿到 502 即可显示真实失败原因(`PROVIDER_ERROR: AI 路由失败: 401 ...`),不再被假装成 general-chat 的「我收到啦」掩盖。Provider 正常时此步返 202 + streamId,后续 SSE 流出真实 LLM 文本 + tool_use 调用。
+✓ Router 调用 LLM 成功,返回 `skillName=onboarding`。**把 `streamId` 的值记为 `<STREAM_ID>`**。
+
+负样本(provider 不可达,例如 token 失效):返 `502 PROVIDER_ERROR`,带原始 SDK 错误消息。**无 fallback** — 客户端能直接看到根因。
 
 #### Step 6 · GET /api/chat/stream(SSE,仅 Step 5 成功时执行)
 
@@ -257,71 +267,46 @@ data: {"type":"done","payload":{},"seq":N+1,...}
 npm run test:smoke:ai
 ```
 
-输出(本次实测,缺 OPENAI_API_KEY):
-
-```
-[smoke:ai] ✗ 严格模式:缺以下环境变量,无法进行 AI provider 测试
-[smoke:ai]   - OPENAI_API_KEY
-[smoke:ai] 提示:在 .env 中配置 ANTHROPIC_API_KEY / OPENAI_API_KEY,或临时把对应的 RUN_* 改为 false 跳过
-```
-
-⚠ 预期行为。完整跑通需要两个 key 都配齐;若只想测一个 provider,改 `tests/smoke/run-smoke-ai.ts` 顶部的 `RUN_ANTHROPIC` / `RUN_OPENAI` 常量。
-
-完整跑通时(provider 都正常)期望输出:
+输出(实测,双 Provider 配 DeepSeek 中转 + `deepseek-v4-flash` 模型):
 
 ```
 [smoke:ai] === Anthropic Provider ===
-[smoke:ai]   baseURL=... model=...
+[smoke:ai]   baseURL=https://api.deepseek.com/anthropic model=deepseek-v4-flash
 [smoke:ai] === OpenAI Provider ===
-[smoke:ai]   baseURL=... model=...
+[smoke:ai]   baseURL=https://api.deepseek.com model=deepseek-v4-flash
 
 [smoke:ai] === Results ===
-[smoke:ai] ✓ anthropic/route: skillName=general-chat confidence=0.85
-[smoke:ai] ✓ anthropic/chat: textDelta=12 toolUse=1 input={"name":"张三"}
-[smoke:ai] ✓ openai/route: skillName=general-chat confidence=0.80
-[smoke:ai] ✓ openai/chat: textDelta=8 toolUse=1 input={"name":"张三"}
+[smoke:ai] ✓ anthropic/route: skillName=onboarding confidence=0.95
+[smoke:ai] ✓ anthropic/chat: textDelta=7 toolUse=1 input={"name":"张三"}
+[smoke:ai] ✓ openai/route: skillName=onboarding confidence=0.90
+[smoke:ai] ✓ openai/chat: textDelta=7 toolUse=1 input={"name":"张三"}
 [smoke:ai] PASSED 4/4
 ```
 
-### 诊断记录 · Anthropic 401
+✓ 两个 provider 的 route() + chat() + tool_use 全部跑通,`skillName=onboarding` 与 `tool_use input={name:'张三'}` 符合契约。
 
-- **现象**:Step 5 中 `/api/chat/send` 返 `502 PROVIDER_ERROR`,错误消息含 `401 无效的令牌`。Provider 没有被 fallback 隐藏,客户端直接看到根因
-- **诊断**:运行 `scripts/diag-anthropic.ts` 绕开 router 直接调 provider.route():
+#### DeepSeek 中转兼容性说明
 
-  命令:
+DeepSeek 的 `deepseek-reasoner` 模型在 `tool_choice` 强制场景下需要禁用 thinking 模式,否则返 400「does not support this tool_choice」。`server/ai/providers/deepseek.ts` 提供 `isDeepSeekBaseURL()` 与 `DEEPSEEK_THINKING_DISABLED` 常量,两个 Provider 在构造时检测 baseURL,DeepSeek endpoint 自动给 `route()` 请求加 `thinking: { type: 'disabled' }` 参数。`chat()` 不需要(可以让模型继续 thinking)。
 
-  ```bash
-  npx tsx scripts/diag-anthropic.ts
-  ```
+### 诊断记录
 
-  输出:
+#### 现在(provider 已通)
 
-  ```
-  [diag] AI_PROVIDER = anthropic
-  [diag] ANTHROPIC_BASE_URL = https://api.code-relay.com
-  [diag] ANTHROPIC_MODEL = claude-opus-4-7
-  [diag] ANTHROPIC_API_KEY = sk-01a02f4...
-  [diag] route() 测试...
-  [diag] ✗ route 失败:
-  AuthenticationError: 401 {"error":{"code":"","message":"无效的令牌 (request id: 20260516075453177060663lwDgAMAF)","type":"new_api_error"}}
-  ```
+无活动诊断;`scripts/diag-anthropic.ts` 与 `scripts/diag-openai.ts` 任意时刻可跑,提供绕开 router 的直接诊断入口。
 
-- **根因**:用户配置的 `ANTHROPIC_BASE_URL` 是第三方中转 `https://api.code-relay.com`(one-api / oneapi 类网关),它返回 `401 无效的令牌`。中转网关通常要求自己签发的 token,而不是 Anthropic 原生 `sk-ant-*`;或 token 已过期 / 配额耗尽
-- **处置**:不属于本次代码缺陷。建议用户:
-  1. 确认 `ANTHROPIC_API_KEY` 是 code-relay.com 控制台签发的有效 token(不是 Anthropic 原生 key)
-  2. 或临时把 `ANTHROPIC_BASE_URL` 改回默认 `https://api.anthropic.com` + 用原生 sk-ant-* key 验证 SDK 接入本身没问题
-  3. 验证后 `route()` 应返回 `{skillName: 'onboarding', confidence: 0.85+, ...}`,SSE 流应是真实 LLM 文本 + tool_use 调用
-- **fallback 已删除**(002 patch 8):即使 provider 完全不通,系统不再悄悄降级。`/api/chat/send` 直接 502,前端能看到 `PROVIDER_ERROR` 与具体的 SDK 错误消息(401 / 404 / 网络超时等)
+命令:
 
-### 诊断记录 · OpenAI 未配置
+```bash
+npx tsx scripts/diag-anthropic.ts
+npx tsx scripts/diag-openai.ts
+```
 
-- **现象**:`test:smoke:ai` 预检退出 / `diag-openai` 报「OPENAI_API_KEY 未配置」
-- **处置**:在 `.env` 中配置 `OPENAI_API_KEY` + 可选 `OPENAI_BASE_URL` / `OPENAI_MODEL`(默认 `https://api.openai.com/v1` + `gpt-4o-mini`)
-- **诊断命令**:
+#### 历史 · DeepSeek 中转 401(已修复)
 
-  ```bash
-  npx tsx scripts/diag-openai.ts
-  ```
+最早实测时 `ANTHROPIC_BASE_URL=https://api.code-relay.com` 返回 `401 无效的令牌`。原因:中转网关签发的 token 与配置 endpoint 不匹配。处置:改用 `https://api.deepseek.com/anthropic` 路径 + DeepSeek 控制台签发的 token,问题解决。
+
+教训:**无 fallback** 设计让此问题第一时间暴露 — `/api/chat/send` 直接返 502 + 完整 SDK 错误消息,不再被假装成 general-chat 的回复掩盖。
 
 ### Stub Provider 诊断(参考)
 
@@ -371,9 +356,10 @@ npm run dev:web
 ### 总结
 
 - **stub provider 全链跑通**:6/6 自动化 smoke + 6 步后端 curl 已验证
-- **anthropic provider 链路完整但被外部 401 阻断**:不属于本次代码缺陷;`scripts/diag-anthropic.ts` 已提供随时诊断入口
+- **anthropic + openai 双 provider 已通**(via DeepSeek 中转 + `deepseek-v4-flash` 模型):`test:smoke:ai` 4/4,UI 11 步流程也可走真实 LLM
 - **路由守卫与表单符合预期**:RouteGuard 矩阵 8 测试全过,Login/Register 表单可正常提交
-- **UI 11 步流程**:框架就位可走通,真实 LLM 体验依赖用户修复 endpoint token 后复测
+- **DeepSeek 兼容补丁**:`server/ai/providers/deepseek.ts` 检测到 DeepSeek baseURL 时,给 `route()` 自动加 `thinking: { type: 'disabled' }`,绕开 `deepseek-reasoner` 不支持 `tool_choice` 强制的限制
+- **交互式手工测试脚本**:`doc/task/002-test.py` 一键跑全套 curl 步骤,自动占位替换,每步空格确认
 
 ## 遗留 TODO
 
@@ -382,8 +368,8 @@ npm run dev:web
 - [后端] **其余 7 Skill 仍 stub**:onboarding 已真实接入;scene-select / practice / grade / explain / review / retry / general-chat 仍是 stub 文本流。
 - [后端] **AI Router 低置信度处理**:`route()` 返回 confidence 但当前未触发 intent-confirm widget。<0.5 应弹出选项确认,而不是直接执行 skill。
 - [后端] **Onboarding kickoff 消息隐藏**:用户当前可见自己说了「hi」,后续协议需要 `meta.kind='kickoff'` 让前端跳过渲染。
-- [后端] **OpenRouter / Bedrock 等替代 endpoint 验证**:`ANTHROPIC_BASE_URL` 配置已支持但仅 stub + 用户的 code-relay 中转(401)跑过,默认 endpoint + 原生 key 未实测。
-- [后端] **AI Provider 错误日志细化**:模型 ID 错配 / token 401 时仅 catch 后降级,未给运维友好提示。dev-server.js 的 stdio:'inherit' 模式下 console.warn 也不易抓到,可考虑改 pipe 模式。
+- [后端] **OpenRouter / Bedrock 等其他替代 endpoint 验证**:`ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL` 已支持自定义,DeepSeek 中转通过,但 OpenRouter / Bedrock / 直连官方 endpoint 未实测。
+- [后端] **AI Provider 错误日志细化**:dev-server.js 的 stdio:'inherit' 模式下 console.warn 不易抓到,可考虑改 pipe 模式或换 pino 结构化日志。
 
 ### 前端
 - [前端] **account-gate Widget React 组件**:onboarding 完成自然语言提示,后续若需弹出保存进度提示卡需实现该组件。
