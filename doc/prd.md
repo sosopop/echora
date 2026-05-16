@@ -14,7 +14,7 @@ Echora 是一个英语场景对话练习的 AI Agent 应用。AI 扮演英语教
 
 ### 1.3 核心设计理念
 
-- **对话即界面**：学习、练习、批改、复盘和历史回顾主要在一个对话界面完成。账号、隐私授权、数据删除等敏感操作可由系统级 Widget 承载，敏感字段不进入普通消息上下文
+- **对话即界面**：学习、练习、批改、复盘和历史回顾主要在一个对话界面完成。账号、保存进度等敏感操作可由系统级 Widget 承载，敏感字段不进入普通消息上下文；隐私授权、数据删除作为后续系统能力预留，不进入 V1 主流程
 - **AI 会话流式学习**：学习过程连续、自然、顺畅。AI 根据当前状态提出下一步建议，系统状态机负责新建/归档会话、锁定历史答案、保存进度等确定性动作
 - **小部件即功能**：Widget 是对话中的结构化交互单元。AI 可建议展示场景卡片、练习题、批改结果、账号提示等 Widget，系统负责校验 Widget schema、权限和可执行动作
 - **辅助追问**：普通对话一旦中途插话就会被带偏方向，辅助追问解决了这个问题——用户可以在主学习流不变的前提下，随时对当前或之前的任意消息、题目、批改结果打开右侧支线深入追问，问完回到主线继续
@@ -41,28 +41,30 @@ Echora 是一个英语场景对话练习的 AI Agent 应用。AI 扮演英语教
 
 ```
 新用户注册/登录
-  → AI 对话式收集画像（姓名、年龄、年级、英语水平）
+  → AI 对话式收集画像（姓名、英语水平必填；年龄、年级可跳过）
   → AI 推荐 3-5 个个性化场景卡片
   → 用户选择场景
-  → 练习（5-10 题/轮，题型自动匹配水平）
+  → 练习（每个场景 4 阶段推进，默认 5-10 个计分题）
   → 批改（流式反馈 + 错误标签）
   → 可打开辅助追问深入理解
   → 更新掌握度并复盘总结
   → 循环或换场景
 ```
 
+**画像完成条件**：`name` 与 `level` 是 V1 onboarding 必填字段；`age`、`grade` 用于个性化语境和难度提示，用户可选择跳过。跳过时系统仍可进入 `scene_selecting`，但场景推荐只能基于已知画像和历史表现生成。
+
 ### 2.2 Skill 体系（8 个 Skill）
 
 每个功能封装为独立 Skill，注册到运行时 `skillRegistry`，AI 可在系统允许范围内调用。Skill 可关联 Widget 和输入模式，通过对话流中的小部件呈现给用户。新增功能 = 新增 Skill + 注册，无需修改路由或核心框架。
 
 - **`onboarding`**：对话式收集用户画像，映射 CEFR 等级。首次登录自动触发。
-- **`scene-select`**：基于画像推荐 3-5 个场景卡片，支持自定义输入和手动换一批重新生成。画像完成后自动触发。
-- **`practice`**：生成情景练习题，支持 6 种题型。选场景后自动触发。
+- **`scene-select`**：AI 生成 100 个候选场景主题作为内部候选池，系统去重、排序后展示 3-5 个场景卡片（已用队列最大 10），支持手动换一批和自定义输入。画像完成后自动触发。
+- **`practice`**：基于场景对话数据，按 4 阶段递进出题（填空→整句翻译→对话接龙→角色互换），整场默认 5-10 个计分题。选场景后自动触发。
 - **`grade`**：批改用户答案，给出评分 + 解析 + 错误标签。提交答案后自动触发。
 - **`explain`**：针对题目/语法/词汇做深入解析。用户追问时触发。
 - **`review`**：查询学习记录，生成文字版学习报告。用户查看或一轮结束时触发。
 - **`retry`**：基于历史薄弱点生成新题。用户复习时触发。
-- **`general-chat`**：兜底 Skill，处理一般聊天。无法匹配其他 Skill 时默认调用。
+- **`general-chat`**：安全兜底 Skill，处理一般聊天。仅在非锁定学习态下作为低风险兜底；`practicing` / `grading` 中不得自动降级到 `general-chat`。
 
 ### 2.3 AI 调度机制
 
@@ -78,7 +80,7 @@ Echora 是一个英语场景对话练习的 AI Agent 应用。AI 扮演英语教
 
 **AI 与系统的边界**：AI 负责内容生成和调度建议（推荐场景、生成题目、批改解析、复盘总结），系统负责确定性动作（登录注册、保存进度、提交答案、新建/归档会话、会话锁定、权限判断）。AI 不能绕过系统状态机直接改变主学习流，也不能读取密码、令牌等敏感字段。
 
-**降级策略**：结构化菜单动作优先走确定性路由；自由文本低置信度时展示自然选项确认。`practicing` / `grading` 中不得降级到 `general-chat`，超时或失败时保持原状态并提供重试/恢复。
+**降级策略**：结构化菜单动作优先走确定性路由；自由文本低置信度时展示 `intent-confirm` 自然选项确认。非锁定学习态的低风险闲聊可兜底到 `general-chat`；`practicing` / `grading` 中不得降级到 `general-chat`，超时或失败时保持原状态并提供重试/恢复。真实 Provider 配置错误或调用失败必须显式报错，不得静默回退到 `stub` 或 `general-chat`。
 
 **工程无感知，可解释**：前端不出现 `SSE`、`command`、`Skill event` 等工程术语；用户只看到"Echo 正在生成""正在准备练习"等自然文案。同时保留简短解释，如“根据你最近介词错误较多，下一题会练 on/in/at”。
 
@@ -100,45 +102,89 @@ onboarding → scene_selecting → practicing → grading → awaiting_next
 - **`reviewing`**：展示复盘
 - **`archived`**：历史会话，只读
 
-### 2.5 练习与批改
+### 2.5 场景对话生成
 
-**6 种题型**：
+所有练习基于一段完整的情景对话展开，而非孤立的单句。AI 先生成结构化的场景对话数据，再基于该数据出题。
 
-- **单词填空**（`fill` 模式）：训练关键词汇，如 `I would like to ______ a steak.`
-- **短语填空**（`fill` 模式）：训练固定搭配，多个空位
-- **半句翻译**（`chat` 模式）：给出前半句，用户补全后半句
-- **整句翻译**（`chat` 模式）：只给中文，用户写出完整英文
-- **对话接龙**（`chat` 模式）：给上一句英文，翻译下一句
-- **选择填空**（`select` 模式）：给出选项，点击选择
+**生成流程**：
 
-**出题节奏**：热身（1-2 题简单）→ 核心训练（3-7 题）→ 错题强化 → 正向收尾。每轮 5-10 题。
+1. AI 根据用户画像和难度等级，一次性生成 100 个候选场景主题（标题 + 简述）
+2. 系统基于已用队列、难度匹配和主题多样性筛选 3-5 个场景卡片展示给用户
+3. 用户选择某个场景后，系统将该主题记入"已使用场景队列"（每用户最大容量 10）
+4. 用户点击"换一批"时，系统从当前候选池或新候选池中重新补齐 3-5 个卡片；生成新候选池时，prompt 明确排除已用队列中的主题
+5. 选定场景后，AI 生成该场景的完整对话内容（英汉双语），以 JSON 结构化格式返回，作为后续出题和判题的基础数据
+
+**场景对话数据结构**（示例）：
+
+```json
+{
+  "sceneId": "restaurant-ordering-001",
+  "title": "餐厅点餐",
+  "difficulty": "B1",
+  "roles": ["Customer", "Waiter"],
+  "turns": [
+    { "role": "Waiter", "en": "Good evening. Are you ready to order?", "zh": "晚上好，请问您准备好点餐了吗？" },
+    { "role": "Customer", "en": "Yes, I would like to have a steak, please.", "zh": "是的，我想要一份牛排。" },
+    ...
+  ]
+}
+```
+
+**难度约束**：场景生成时 prompt 中附带确定性约束参数，保证 AI 输出难度一致性：
+
+- **词汇范围**：指定该等级允许的核心词汇量（如 A1: 500词, B1: 2500词）和超纲词上限比例
+- **句子复杂度**：限定平均句长、从句层级、时态范围（如 A1 仅一般现在/过去时）
+- **对话轮数**：A1 级 4-6 轮，B1 级 6-10 轮，B2+ 级 8-14 轮
+- **语法结构**：明确列出该等级可使用和禁止使用的语法点
+
+### 2.6 练习与批改
+
+基于场景对话数据，按 4 个阶段递进出题，每个阶段全部通过后自动进入下一阶段，4 阶段全部通过则完成本场景学习。一次场景学习默认包含 5-10 个计分题；错题重做不计入计分题上限。
+
+**阶段 1 — 填空练习**（`fill` 模式）：显示对话某句的完整中文和部分缺空的英文句子，用户填入缺失单词/短语。全对后进入阶段 2。
+
+**阶段 2 — 整句翻译**（`chat` 模式）：显示对话某句的完整中文，用户翻译完整英文句子。全对后进入阶段 3。
+
+**阶段 3 — 对话接龙**（`chat` 模式）：显示英文第一句，用户写出对话中的下一句英文回复，逐句交互完成场景对话。全对后进入阶段 4。
+
+**阶段 4 — 角色互换**（`chat` 模式）：用户扮演原对话中的另一个角色，主动用英文写出第一句，系统输出对方回应。全对后完成本场景学习。
+
+**出题规则**：
+
+- 每个阶段从场景对话的多个句子中选取出题，不是只出一道；阶段 1-2 默认各 1-3 题，阶段 3-4 默认各 1-2 题，整场合计 5-10 个计分题
+- 单题通过标准为 `is_correct=true` 或评分达到 80 分；阶段内所有计分题通过后进入下一阶段
+- 阶段内某题答错时即时批改，原题最多重试 2 次。第 2 次仍未通过时，系统展示讲解并生成同知识点降难替换题；原题标记为 `needs_review`，避免用户被单题永久卡住
+- `choice-question` 不作为 4 阶段主线必需题型；V1 仅用于 A1/A2 降难补救、热身或低风险确认。若绑定 `exercise_attempts`，才计入练习统计
+- 4 个阶段全部通过后，系统更新掌握度并展示复盘总结
 
 **批改原则**：接受同义表达、先肯定后纠正、每次聚焦 1-2 个要点。自动标注 12 种错误标签：`spelling` / `word_order` / `tense` / `preposition` / `article` / `subject_verb_agreement` / `auxiliary_verb` / `collocation` / `politeness` / `literal_translation` / `missing_word` / `extra_word`。
 
 **闭环更新**：每次批改后更新错误标签、掌握度、难度分和下次重练建议；重练题优先覆盖未掌握薄弱点，达标后再进入新场景或更高难度。
 
-**难度自适应**：连续 3 题全对提高难度，连续 3 题有错降低难度，用户直说"太难/简单"立即调整。`difficultyScore`（0-1000）对用户不可见。
+**难度自适应**：连续 2 个场景全阶段一次通过则提高难度；连续 2 个场景在阶段 1-2 中超过半数题目进入二次重试或替换题，则降低难度。用户直说"太难/简单"时立即调整下一题或下一场景难度。`difficultyScore`（0-1000）对用户不可见。
 
-### 2.6 数据模型
+### 2.7 数据模型
 
 **核心实体**：
 
-- **`users`**：账号（email, password_hash）
-- **`user_profiles`**：画像（name, age, grade, level, weakness_tags, recent_topics）
-- **`conversations`**：会话（status, learning_state, active_skill, input_mode, lock_policy）
-- **`messages`**：消息（type, role, skill_name, content, widget_snapshot, stream_events）
-- **`branch_threads`**：辅助追问线程（source_message_id, source_ref）
-- **`exercise_attempts`**：练习索引（question_type, prompt, user_answer, status）
-- **`grading_results`**：批改索引（score, is_correct, corrections）
-- **`error_tag_events`**：错误标签事件（tag, severity, included_in_stats）
-- **`mastery_records`**：掌握度记录（tag, mastery_score, next_review_at）
-- **`agent_runs`**：Agent 执行记录（run_id, skill_name, status, latency_ms, error_type）
+- **`users`**：账号（id, email, password_hash, created_at）
+- **`user_profiles`**：画像（user_id, name, age?, grade?, level, weakness_tags_json, recent_topics_json）
+- **`conversations`**：会话（id, user_id, status, learning_state, active_skill, input_mode, lock_policy, archived_at?）
+- **`messages`**：消息（id, conversation_id, branch_thread_id?, type, role, skill_name, content, widget_snapshot, stream_events, created_at）
+- **`branch_threads`**：辅助追问线程（id, user_id, conversation_id, source_message_id, source_ref, status, created_at）
+- **`scene_dialogues`**：场景对话数据（id, user_id, conversation_id, scene_id, title, difficulty, roles_json, turns_json）
+- **`scene_history`**：已使用场景队列（id, user_id, scene_topic, used_at），每用户最大保留 10 条用于去重
+- **`exercise_attempts`**：练习索引（id, user_id, conversation_id, scene_id, stage, question_no, question_type, prompt_json, user_answer, retry_count, status）
+- **`grading_results`**：批改索引（id, attempt_id, score, is_correct, reference_answer, corrections_json, explanation）
+- **`error_tag_events`**：错误标签事件（id, user_id, attempt_id, grading_result_id, tag, severity, included_in_stats）
+- **`mastery_records`**：掌握度记录（id, user_id, tag, mastery_score, difficulty_score, next_review_at）
+- **`agent_runs`**：Agent 执行记录（run_id, user_id, conversation_id, message_id, skill_name, status, latency_ms, error_type, payload_json）
 
-> 复盘、重练、薄弱点统计从结构化表读取，不从自然语言消息中解析。消息只负责呈现，结构化记录负责学习闭环。
+> 复盘、重练、薄弱点统计从结构化表读取，不从自然语言消息中解析。消息只负责呈现，结构化记录负责学习闭环。JSON 字段统一以字符串存入 SQLite，由服务层 parse/stringify。
 
-### 2.7 流式通信
+### 2.8 流式通信
 
-Skill 通过 `AsyncIterable<SkillEvent>` 输出 8 种事件：
+Skill 通过 `AsyncIterable<SkillEvent>` 输出 9 种事件：
 
 - **`text-chunk`**：文本增量
 - **`widget-init`**：初始化 Widget
@@ -146,10 +192,11 @@ Skill 通过 `AsyncIterable<SkillEvent>` 输出 8 种事件：
 - **`widget-ready`**：Widget 可交互
 - **`mode-switch`**：切换输入模式
 - **`quick-actions`**：快捷按钮
+- **`state-transition`**：切换学习状态，并更新当前 active skill
 - **`done`**：完成
 - **`error`**：错误
 
-连接链路：`POST /api/chat/send` 创建消息 → `GET /api/chat/stream` SSE 推送 SkillEvent。断线从最后 `seq` 重连。
+连接链路：`POST /api/chat/send` 先持久化用户消息并创建流 → `GET /api/chat/stream` SSE 推送 SkillEvent。断线从最后 `seq` 重连；若 replay buffer 已过期，前端回退到消息历史快照恢复，而不是假装流完整。
 
 ---
 
@@ -170,6 +217,8 @@ Skill 通过 `AsyncIterable<SkillEvent>` 输出 8 种事件：
 - **不能**改变主学习流状态、生成下一题或替用户提交答案——主线始终不受干扰
 - 答题未提交前，辅助追问只提供提示和概念解释，不展示当前题标准答案、完整翻译或等价答案
 - 默认不计入薄弱点统计；只有用户明确选择"加入复盘"时才写入结构化记录
+- 支线消息复用 `messages` 表，通过 `branch_thread_id` 归属到对应辅助追问线程；`source_ref` 指向消息、题目、批改结果、语法标签或 Widget 的稳定引用
+- 选择"加入复盘"时，只写入用户确认的标签、解释摘要或错因记录，并以 `included_in_stats=true` 标记；普通支线聊天不影响主学习统计
 
 ### 3.3 Agent 质量与安全
 
@@ -177,6 +226,7 @@ Skill 通过 `AsyncIterable<SkillEvent>` 输出 8 种事件：
 - 关键动作采用 schema 校验、权限校验和状态机校验；高风险或敏感操作必须由用户显式确认
 - 用户可反馈“批改不准确 / 题目太难 / 解释看不懂”，反馈进入后续题目生成、批改规则和提示词迭代
 - 核心质量指标：Router 命中率、批改一致性、错误标签准确率、重练达标率、用户中断率
+- V1 验收目标：Router 人工抽样命中率 ≥ 90%；同一答案重复批改 3 次分差 ≤ 10 分；错误标签人工抽样准确率 ≥ 80%；重练后目标薄弱点掌握度不下降
 
 ### 3.4 性能目标
 
@@ -184,7 +234,16 @@ Skill 通过 `AsyncIterable<SkillEvent>` 输出 8 种事件：
 - **流式首字节**：< 1s
 - **AI 批改首字**：< 3s
 - **新用户注册到第一道题**：< 2 分钟
-- **消息丢失率**：0%
+- **已确认提交的消息不丢失**：`POST /api/chat/send` 成功前必须先落库；SSE 支持按 `lastSeq` 恢复最近事件，超出缓存时回退到历史消息快照
+
+### 3.5 异常与恢复
+
+- **AI 超时 / Provider 失败**：保持原 `learning_state`，展示可重试错误；真实 Provider 不得静默回退到 `stub` 或 `general-chat`
+- **用户停止生成**：取消当前 Skill，保留已生成内容和失败/取消状态，输入区恢复到当前学习态允许的模式
+- **重复提交答案**：同一题目同一 active attempt 只接受一次有效提交；重复请求返回已存在的批改结果或提示正在批改
+- **SSE 断线**：前端以最后收到的 `seq` 重连；若流已结束或缓存过期，通过历史消息与 widget snapshot 恢复界面
+- **Token 过期**：提示重新登录，保留本地草稿；未鉴权请求不得创建消息、提交答案或读取 SSE
+- **非法状态动作**：例如 `grading` 中换场景、`archived` 中继续答题，系统拒绝并返回自然语言提示或 `conversation-lock` Widget
 
 ---
 
@@ -274,7 +333,7 @@ Skill 通过 `AsyncIterable<SkillEvent>` 输出 8 种事件：
 
 ### 4.7 Widget 组件
 
-12 种 Widget 嵌入 AI 消息卡片中，统一遵守 `LearningWidget` 协议：
+12 种 Widget 嵌入 AI 消息卡片中，统一遵守 `LearningWidget` 协议。公共 envelope 为 `{ id, type, status, data, version }`，其中 `status` 只能为 `loading` / `ready` / `disabled` / `submitted` / `expired` / `error`。
 
 - **`scene-cards`**：场景推荐卡片组（水平排列，emoji + 标题 + 知识点 + 难度），hover 轻微上浮
 - **`exercise-card`**：练习题主卡片（题干 + 上下文 + 答题入口）
@@ -285,7 +344,7 @@ Skill 通过 `AsyncIterable<SkillEvent>` 输出 8 种事件：
 - **`answer-review`**：单题回看卡片
 - **`intent-confirm`**：低置信度确认卡片（2-3 个自然选项）
 - **`learning-menu`**：输入框左侧学习菜单
-- **`account-gate`**：登录/注册/保存进度提示
+- **`account-gate`**：登录/注册/保存进度提示；隐私授权、删除账号仅作为后续扩展 intent，不作为 V1 主流程
 - **`follow-up-source`**：辅助追问来源提示（"来自：这次批改"）
 - **`conversation-lock`**：历史答案锁定提示
 
@@ -314,3 +373,26 @@ Skill 通过 `AsyncIterable<SkillEvent>` 输出 8 种事件：
 - 不做语音/听力——纯文本
 - 不做 ECharts 图表——数据以文字摘要 + 简单进度环呈现
 - 不做游客模式、用户手输命令、用户自定义变体重练
+- 不做账号注销、数据导出、隐私授权中心；V1 仅保证敏感字段不进入普通消息上下文
+
+---
+
+## 5. V1 验收边界
+
+### 5.1 功能验收
+
+- **Onboarding**：新用户完成 `name` + `level` 后进入 `scene_selecting`；跳过 `age` / `grade` 不阻断主流程
+- **场景选择**：系统每次展示 3-5 个场景卡片；用户最近 10 个已用主题不得重复展示
+- **练习主线**：选定场景后生成结构化 `scene_dialogues`，并按 4 阶段推进；整场默认 5-10 个计分题，单题最多 2 次原题重试
+- **批改闭环**：每次提交答案后产生 `grading-result`、结构化 `grading_results`、必要的 `error_tag_events`，并更新掌握度或下次重练建议
+- **辅助追问**：支线追问不得改变主学习流、不得在答题未提交前泄露标准答案；用户显式选择"加入复盘"后才计入统计
+- **会话锁定**：`practicing` / `grading` 中隐藏历史答案、参考答案和批改详情；`awaiting_next` / `reviewing` 后恢复可见
+- **流式恢复**：SkillEvent 支持 9 类型；`state-transition` 是学习态变更的事实来源；SSE 断线可通过 `lastSeq` 或历史快照恢复
+
+### 5.2 负样本验收
+
+- 未登录访问聊天、提交答案或 SSE 端点必须失败，不创建消息
+- `grading` 中请求换场景必须被拒绝，并保持当前批改状态
+- `archived` 会话继续答题必须被拒绝，只允许复盘或引用为新学习流上下文
+- 真实 AI Provider 缺少 API key 或调用失败时必须显式失败，不得静默使用 `stub`
+- 同一 active attempt 重复提交答案不得生成两份有效批改记录
