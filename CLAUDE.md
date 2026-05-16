@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Before Starting Any Task
 
-Read `doc/knowledge/task-handoff.md` first — it's a permanent workflow contract. **Every task that changes code or docs must end by producing a `doc/task/<NNN>-<slug>.md` execution log** with four fixed sections: 任务背景 / 执行摘要 / 遗留 TODO / 下一阶段建议. Filename uses a 0-padded 3-digit serial starting from `001`; before creating a new one, list `doc/task/` and take `max + 1`.
+Read `doc/knowledge/task-handoff.md` first — it's a permanent workflow contract. **Every task that changes code or docs must end by producing a `doc/task/<NNN>-<slug>.md` execution log** with five fixed sections: 任务背景 / 执行摘要 / **手工测试** / 遗留 TODO / 下一阶段建议. Filename uses a 0-padded 3-digit serial starting from `001`; before creating a new one, list `doc/task/` and take `max + 1`.
+
+The **手工测试** section is mandatory (002+ convention). Record actual commands + outputs (curl for backend, browser steps for UI), include at least one negative case, redact secrets to `<TOKEN>` / `<API_KEY>`, and document any diagnostic findings (现象 → 诊断 → 根因 → 处置) even when the issue is external (network, config, third-party endpoint). **Commands must be directly copy-pasteable** — never prefix with `$ `, `> `, or `PS> ` shell prompts; put the command alone in one code block and the output in a separate block.
 
 The authoritative product spec is `doc/prd.md` (V1 MVP), the authoritative engineering convention is `doc/esd.md`, and the design tokens are in `DESIGN.md` (with a live HTML prototype under `doc/design/`).
 
@@ -57,7 +59,7 @@ The 8 stub skills in `server/skills/` are minimal templates: 1–2 `text-chunk` 
 
 ## Architecture: Provider Abstraction
 
-`AI_PROVIDER` env (`stub` | `anthropic`) selects the implementation via `server/ai/providers/index.ts`. **Stub is the default** so the system runs with zero config — it always routes to `general-chat`. `AnthropicProvider` is a skeleton; `route()` and `complete()` throw NotImplemented until V1.x. The only contract is the `AIProvider` interface in `server/ai/types.ts`.
+`AI_PROVIDER` env (`stub` | `anthropic`) selects the implementation via `server/ai/providers/index.ts`. **Stub is the default** for zero-config dev. `AnthropicProvider` is real (002): `route()` uses `tool_use` to force JSON, `chat()` streams via `messages.stream`. Configure with `ANTHROPIC_API_KEY` + optional `ANTHROPIC_BASE_URL` (default `https://api.anthropic.com`, supports third-party relays/proxies) + `ANTHROPIC_MODEL` (default `claude-sonnet-4-6`). When endpoint or token is misconfigured, the router falls back to `general-chat` silently — use `scripts/diag-anthropic.ts` to surface the underlying SDK error.
 
 ## Shared Code Boundaries (`shared/`)
 
@@ -66,17 +68,18 @@ Imported by both server and src. Strict rules:
 - **No backend deps** (`better-sqlite3`, `express`, `jsonwebtoken`) — these crash Vitest jsdom. Only `zod` and pure TS.
 - **`@shared/*` alias is frontend-only** (Vite resolves at bundle time). Backend uses relative imports `../../shared/skill.js` because NodeNext doesn't resolve tsconfig paths at runtime.
 - **`.js` extension required on every server-side relative import** even when the source is `.ts`. `import { connect } from './db/connect.js'` is correct; omitting `.js` fails at runtime with `ERR_MODULE_NOT_FOUND`.
+- **`ServerSkillContext`** (server/skills/types.ts) extends shared `SkillContext` with `provider` + `db`. Server-side skills accept this expanded ctx; the registry stores the base `Skill` interface and TS's method-signature bivariance allows the assignment.
 
 ## Frontend State
 
 5 Zustand stores in `src/stores/`:
-- `auth` — token + user, persists to `localStorage.echora_token`, registers itself as the token getter for `api/client.ts`
-- `chat` — conversations, messages, `streamingMessageId`, `streamBuffer` keyed by messageId, `activeWidgets` keyed by widgetId, current `inputMode`
+- `auth` — token + user, persists to `localStorage.echora_token`, `hydrated` flag for RouteGuard, registers itself as the token getter for `api/client.ts`. hydrate/login/register all chain `useProfileStore.load()`.
+- `chat` — conversations, messages, `streamingMessageId`, `streamBuffer` keyed by messageId, `activeWidgets` keyed by widgetId, current `inputMode`. Consumes `state-transition` events (→ setState + reload profile).
 - `learningState` — 7-state mirror; illegal transitions `console.warn` only (server is the truth)
-- `profile` — V1 frontend-only cache, no API yet
+- `profile` — backed by `/api/profile` (002). Exports `selectIsOnboardingComplete` for RouteGuard.
 - `theme` — writes `data-theme` to `<html>`, shares `localStorage.echora-theme` key with the design prototype
 
-`src/main.tsx` startup order: import styles → `theme.apply()` → register 401 callback → `auth.hydrate()` → render `<RouterProvider />`.
+`src/main.tsx` startup order: import styles → `theme.apply()` → register 401 callback → `auth.hydrate()` → render `<RouterProvider />`. `<RouteGuard>` wraps every route and gates on `(hydrated, user, profileLoaded, isOnboardingComplete, pathname)`.
 
 ## Database
 

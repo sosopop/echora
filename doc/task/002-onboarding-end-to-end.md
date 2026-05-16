@@ -52,6 +52,13 @@
 - `tests/smoke/run-smoke.ts` — 扩展 profile-empty / profile-update / me-onboarding-completed 三步
 - `doc/knowledge/{architecture,api-contract,skills,styling}.md` — 同步 state-transition 第 9 类、profile 路由、AI Provider env、CSS Module 约定
 
+### 补丁(commit 7 · 解锁手工验证)
+- `src/views/Login/index.tsx` — 替换占位为真实表单(email + password,wire useAuthStore.login,error 显示,登录中禁用)
+- `src/views/Register/index.tsx` — 替换占位为真实表单(email + password + confirm,密码长度校验,wire useAuthStore.register)
+- `scripts/diag-anthropic.ts` — 直接调 AnthropicProvider.route() 诊断 endpoint / token / 模型,绕开 createAIRouter 的 fallback 屏蔽
+- `scripts/diag-stub.ts` — 同上但用 stub provider,验证降级路径
+- `CLAUDE.md` + `doc/knowledge/task-handoff.md` — 任务文档结构从 4 段升 5 段,新增「手工测试」强约束
+
 ### 验证结果
 
 | 命令 | 结果 |
@@ -61,6 +68,241 @@
 | `npm run test:server` | ✓ 13 passed (4 suites) |
 | `npm run test:web` | ✓ 16 passed (3 suites) |
 | `npm run test:smoke` | ✓ 6/6 (register / profile-empty / profile-update / me / send / stream) |
+| 手工 curl(stub provider) | ✓ register → /me → profile CRUD → send → SSE 全链 |
+| 手工 curl(anthropic provider) | ⚠ 链路完整但 `provider.route` 在第三方中转 endpoint 上 401,降级 general-chat(详见「手工测试 · 诊断记录」) |
+
+## 手工测试
+
+> 命令块均为可直接复制粘贴的形式(不含 `$` `>` 等 shell 提示符)。
+> 凭据/动态变量用占位符:`<TOKEN>` `<EMAIL>` `<CONV_ID>` `<STREAM_ID>`,前文有获取方式。
+
+### 后端 API · stub provider(基线)
+
+`tests/smoke/run-smoke.ts` 已覆盖 stub 全链 6 步(register / profile-empty / profile-update / me / send / stream),直接跑 smoke 即可:
+
+命令:
+
+```bash
+npm run test:smoke
+```
+
+输出:
+
+```
+[smoke] 服务已启动 http://127.0.0.1:<random>
+[smoke] ✓ register (128ms)
+[smoke] ✓ profile-empty (6ms)
+[smoke] ✓ profile-update (3ms)
+[smoke] ✓ me-onboarding-completed (3ms)
+[smoke] ✓ send (5ms)
+[smoke] ✓ stream (124ms)
+[smoke] PASSED 6/6
+```
+
+### 后端 API · anthropic provider(真实接入)
+
+前置:`.env` 设 `AI_PROVIDER=anthropic` + `ANTHROPIC_API_KEY` + `ANTHROPIC_BASE_URL` + `ANTHROPIC_MODEL`,然后另开终端跑:
+
+```bash
+npm run dev
+```
+
+后端应 listen 在 `http://localhost:8787`。
+
+#### Step 1 · register
+
+命令(bash · POSIX shell):
+
+```bash
+curl -s -X POST http://127.0.0.1:8787/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"manualtest@echora.dev","password":"echora-manual-12345"}'
+```
+
+命令(PowerShell):
+
+```powershell
+$body = @{ email='manualtest@echora.dev'; password='echora-manual-12345' } | ConvertTo-Json
+Invoke-RestMethod -Uri http://127.0.0.1:8787/api/auth/register -Method Post -ContentType 'application/json' -Body $body
+```
+
+响应:
+
+```json
+{"data":{"token":"<TOKEN>","user":{"id":2,"email":"manualtest@echora.dev"}}}
+```
+
+✓ 返回 token + user;同事务 `ensureProfile` 已建空 profile 行。**把 `token` 的值记为 `<TOKEN>` 供后续步骤使用**。
+
+#### Step 2 · GET /api/profile(应为空)
+
+命令:
+
+```bash
+curl -s -H "Authorization: Bearer <TOKEN>" http://127.0.0.1:8787/api/profile
+```
+
+响应:
+
+```json
+{"data":{"userId":2,"name":null,"age":null,"grade":null,"level":null,"weaknessTags":[],"recentTopics":[],"createdAt":"2026-05-16 07:53:58","updatedAt":"2026-05-16 07:53:58"}}
+```
+
+✓ name/level 为 null,数组为 `[]`,符合 `ensureProfile` 默认值。
+
+#### Step 3 · GET /api/auth/me(onboardingCompleted=false)
+
+命令:
+
+```bash
+curl -s -H "Authorization: Bearer <TOKEN>" http://127.0.0.1:8787/api/auth/me
+```
+
+响应:
+
+```json
+{"data":{"id":2,"email":"manualtest@echora.dev","profile":{...},"onboardingCompleted":false}}
+```
+
+✓ MeResp 含 profile,`onboardingCompleted=false`,前端 RouteGuard 据此跳 /onboarding。
+
+#### Step 4 · 新建 onboarding 会话
+
+命令:
+
+```bash
+curl -s -X POST http://127.0.0.1:8787/api/chat/conversations \
+  -H "Authorization: Bearer <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"learningState":"onboarding"}'
+```
+
+响应:
+
+```json
+{"data":{"id":1,"title":null,"status":"active","learningState":"onboarding","activeSkill":null,"inputMode":"chat","lockPolicy":"open","createdAt":"2026-05-16 07:54:12","updatedAt":"2026-05-16 07:54:12","archivedAt":null}}
+```
+
+✓ `POST /api/chat/conversations` 接受 `learningState` body。**把 `id` 的值记为 `<CONV_ID>`**。
+
+#### Step 5 · POST /api/chat/send(触发 router → onboarding skill)
+
+命令:
+
+```bash
+curl -s -X POST http://127.0.0.1:8787/api/chat/send \
+  -H "Authorization: Bearer <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"conversationId":<CONV_ID>,"text":"hi"}'
+```
+
+响应(本次实测,中转 endpoint 401 触发降级):
+
+```json
+{"data":{"conversationId":1,"userMessageId":1,"assistantMessageId":2,"streamId":"<STREAM_ID>","decision":{"skillName":"general-chat","confidence":0.3,"rationale":"router fallback (provider_error)"}}}
+```
+
+⚠ **router 降级到 general-chat**(rationale=`provider_error`)。说明 `AnthropicProvider.route()` 抛错被 `createAIRouter` catch,自动 fallback。原因见下「诊断记录」。Provider 正常时 `skillName` 应为 `"onboarding"`,`confidence` ≥ 0.8。**把 `streamId` 的值记为 `<STREAM_ID>`**。
+
+#### Step 6 · GET /api/chat/stream(SSE)
+
+命令:
+
+```bash
+curl -N "http://127.0.0.1:8787/api/chat/stream?streamId=<STREAM_ID>&lastSeq=0&token=<TOKEN>"
+```
+
+输出(general-chat stub 流):
+
+```
+data: {"type":"text-chunk","payload":{"text":"我收到啦。你可以告诉我\"开始练习\"、\"换场景\",或者直接打字描述你想练什么。"},"seq":1,"streamId":"<STREAM_ID>","timestamp":1778918052751}
+
+data: {"type":"done","payload":{},"seq":2,"streamId":"<STREAM_ID>","timestamp":1778918052751}
+```
+
+✓ SSE 协议工作正常,事件按 seq 单调,`done` 后流关闭。general-chat skill 的 stub 流也按契约产出。Provider 通时应看到多个 `text-chunk` + 1 个 `state-transition` + `done`。
+
+### 诊断记录 · Anthropic 401
+
+- **现象**:Step 5 中 `decision.rationale = "router fallback (provider_error)"`,SSE 流回退到 general-chat
+- **诊断**:运行 `scripts/diag-anthropic.ts` 绕开 router 直接调 provider.route():
+
+  命令:
+
+  ```bash
+  npx tsx scripts/diag-anthropic.ts
+  ```
+
+  输出:
+
+  ```
+  [diag] AI_PROVIDER = anthropic
+  [diag] ANTHROPIC_BASE_URL = https://api.code-relay.com
+  [diag] ANTHROPIC_MODEL = claude-opus-4-7
+  [diag] ANTHROPIC_API_KEY = sk-01a02f4...
+  [diag] route() 测试...
+  [diag] ✗ route 失败:
+  AuthenticationError: 401 {"error":{"code":"","message":"无效的令牌 (request id: 20260516075453177060663lwDgAMAF)","type":"new_api_error"}}
+  ```
+
+- **根因**:用户配置的 `ANTHROPIC_BASE_URL` 是第三方中转 `https://api.code-relay.com`(one-api / oneapi 类网关),它返回 `401 无效的令牌`。中转网关通常要求自己签发的 token,而不是 Anthropic 原生 `sk-ant-*`;或 token 已过期 / 配额耗尽
+- **处置**:不属于本次代码缺陷。建议用户:
+  1. 确认 `ANTHROPIC_API_KEY` 是 code-relay.com 控制台签发的有效 token(不是 Anthropic 原生 key)
+  2. 或临时把 `ANTHROPIC_BASE_URL` 改回默认 `https://api.anthropic.com` + 用原生 sk-ant-* key 验证 SDK 接入本身没问题
+  3. 验证后 `route()` 应返回 `{skillName: 'onboarding', confidence: 0.85+, ...}`,SSE 流应是真实 LLM 文本 + tool_use 调用
+- **降级表现符合预期**:即使 provider 完全不通,系统不阻塞,而是降级到 general-chat,日志(stderr)留 warn(本次 tsx watch stdio 没捕获到 warn,可考虑后续把 dev-server.js 换成 stdio:'pipe' 再 pipe 出)
+
+### Stub Provider 诊断(参考)
+
+命令:
+
+```bash
+npx tsx scripts/diag-stub.ts
+```
+
+输出:
+
+```
+AI_PROVIDER override = stub
+provider.name = stub
+stub route decision: {"skillName":"general-chat","params":{},"confidence":0.6,"rationale":"stub provider 默认路由"}
+```
+
+✓ Stub provider 不依赖网络,任何环境均可跑通。
+
+### 前端 UI(浏览器)
+
+前置:同上后端 + 另开终端跑前端:
+
+```bash
+npm run dev:web
+```
+
+前端在 `http://localhost:5173`。
+
+1. 访问 `http://localhost:5173/` → RouteGuard 检测未登录 → 跳 `/login`
+2. 看到「欢迎回来」表单:邮箱 + 密码 + 登录按钮
+3. 点击底部「立即注册」链接 → 跳 `/register`
+4. 看到「创建账号」表单:邮箱 + 设置密码 + 确认密码 + 创建账号按钮
+5. 填写 email + password(≥ 8 位)+ 同样的 confirm,点「创建账号」
+6. ✓ register 调用成功 → token 写入 localStorage.echora_token → profile.load 拉到空 profile → RouteGuard 检测 `onboardingCompleted=false` → 自动跳 `/onboarding`
+7. ✓ Onboarding 视图渲染:顶部进度条(0/3 当前·姓名)+ 中间标题「先认识一下,我是 Echo」+ 空 pills + 底部输入框(disabled,因为 Echo 正在回复)
+8. ✓ mount useEffect 自动 create onboarding 会话 + sendMessage('hi') → SSE 流开始 → Echo 消息出现(stub 时为「我收到啦...」,真实 anthropic 时为 LLM 回应问候 + 询问姓名)
+9. (anthropic 通时)输入「我叫小李」回车 → AI 回应 + tool_use 落 name → ProfilePills 出现「姓名 小李」+ 进度条第一段变实
+10. (anthropic 通时)继续答年级、英语水平 → 全齐后 state-transition 触发 → chat store 自动 reload profile → RouteGuard 检测 `isOnboardingComplete=true` → 跳 `/chat`
+11. 刷新页面 → 仍在 `/chat`(token + profile 都已就位)
+
+**负样本**:
+- 密码不一致 → 表单本地 error「两次输入的密码不一致」,不发请求
+- 密码 < 8 位 → 本地 error「密码至少 8 位」+ 浏览器 `minLength` 阻断
+- 邮箱已存在 → store error「该邮箱已注册」(从 backend 409 透传)
+
+### 总结
+
+- **stub provider 全链跑通**:6/6 自动化 smoke + 6 步后端 curl 已验证
+- **anthropic provider 链路完整但被外部 401 阻断**:不属于本次代码缺陷;`scripts/diag-anthropic.ts` 已提供随时诊断入口
+- **路由守卫与表单符合预期**:RouteGuard 矩阵 8 测试全过,Login/Register 表单可正常提交
+- **UI 11 步流程**:框架就位可走通,真实 LLM 体验依赖用户修复 endpoint token 后复测
 
 ## 遗留 TODO
 
@@ -69,8 +311,8 @@
 - [后端] **其余 7 Skill 仍 stub**:onboarding 已真实接入;scene-select / practice / grade / explain / review / retry / general-chat 仍是 stub 文本流。
 - [后端] **AI Router 低置信度处理**:`route()` 返回 confidence 但当前未触发 intent-confirm widget。<0.5 应弹出选项确认,而不是直接执行 skill。
 - [后端] **Onboarding kickoff 消息隐藏**:用户当前可见自己说了「hi」,后续协议需要 `meta.kind='kickoff'` 让前端跳过渲染。
-- [后端] **OpenRouter / Bedrock 等替代 endpoint 验证**:`ANTHROPIC_BASE_URL` 配置已支持但仅默认 endpoint 跑过。
-- [后端] **AI Provider 错误日志细化**:模型 ID 错配时 SDK 返 404,现仅 catch 后降级,未给运维友好提示。
+- [后端] **OpenRouter / Bedrock 等替代 endpoint 验证**:`ANTHROPIC_BASE_URL` 配置已支持但仅 stub + 用户的 code-relay 中转(401)跑过,默认 endpoint + 原生 key 未实测。
+- [后端] **AI Provider 错误日志细化**:模型 ID 错配 / token 401 时仅 catch 后降级,未给运维友好提示。dev-server.js 的 stdio:'inherit' 模式下 console.warn 也不易抓到,可考虑改 pipe 模式。
 
 ### 前端
 - [前端] **account-gate Widget React 组件**:onboarding 完成自然语言提示,后续若需弹出保存进度提示卡需实现该组件。
