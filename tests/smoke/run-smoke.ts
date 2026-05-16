@@ -1,28 +1,20 @@
 /**
- * 端到端冒烟脚本
+ * 端到端冒烟脚本(stub provider)
  *
  * 流程:
- *   1. 临时 DB → migrate
- *   2. 装配 app,listen 随机端口
- *   3. fetch register → login
- *   4. fetch chat/send 拿 streamId
- *   5. fetch chat/stream 用 ReadableStream 解析 SSE,断言收到 text-chunk + done
- *   6. 清理 → exit 0
+ *   1. startTestApp(stub provider)→ 临时 DB + 随机端口
+ *   2. fetch register
+ *   3. fetch profile CRUD
+ *   4. fetch /me 验证 onboardingCompleted
+ *   5. fetch chat/send 拿 streamId
+ *   6. fetch chat/stream 用 ReadableStream 解析 SSE,断言收到 text-chunk + done
+ *   7. 清理 → exit 0
  *
  * 失败时 exit 1。
  */
 
 import { setTimeout as delay } from 'node:timers/promises';
-import path from 'node:path';
-import fs from 'node:fs';
-import os from 'node:os';
-import { connect, closeDb } from '../../server/db/connect.js';
-import { migrate } from '../../server/db/migrate.js';
-import { registerAllSkills } from '../../server/skills/registry.js';
-import { createProvider } from '../../server/ai/providers/index.js';
-import { createAIRouter } from '../../server/ai/router.js';
-import { createApp } from '../../server/createApp.js';
-import type { Server } from 'node:http';
+import { startTestApp } from './_helpers/testApp.js';
 
 interface SmokeStep {
   name: string;
@@ -30,39 +22,9 @@ interface SmokeStep {
 }
 
 async function main(): Promise<void> {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'echora-smoke-'));
-  const dbPath = path.join(tmpDir, 'smoke.db');
-  const db = connect(dbPath);
-  migrate(db);
-
-  const skillRegistry = await registerAllSkills();
-  const config = {
-    port: 0,
-    databasePath: dbPath,
-    jwtSecret: 'smoke-secret',
-    aiProvider: 'stub' as const,
-    anthropicApiKey: null,
-    anthropicBaseURL: 'https://api.anthropic.com',
-    anthropicModel: 'claude-sonnet-4-6',
-    openaiApiKey: null,
-    openaiBaseURL: 'https://api.openai.com/v1',
-    openaiModel: 'gpt-4o-mini',
-    corsOrigin: ['http://localhost'],
-    nodeEnv: 'test',
-  };
-  const provider = createProvider(config);
-  const aiRouter = createAIRouter(provider, skillRegistry);
-  const app = createApp({ config, db, skillRegistry, aiRouter, provider });
-
-  const server: Server = await new Promise((resolve) => {
-    const s = app.listen(0, () => resolve(s));
-  });
-  const addr = server.address();
-  if (!addr || typeof addr === 'string') {
-    throw new Error('无法获取测试端口');
-  }
-  const baseUrl = `http://127.0.0.1:${addr.port}`;
-  console.log(`[smoke] 服务已启动 ${baseUrl}`);
+  const app = await startTestApp({ tmpPrefix: 'echora-smoke-' });
+  console.log(`[smoke] 服务已启动 ${app.baseUrl}`);
+  const { baseUrl } = app;
 
   let token: string | null = null;
   let streamId: string | null = null;
@@ -239,13 +201,7 @@ async function main(): Promise<void> {
     }
   }
 
-  await new Promise<void>((resolve) => server.close(() => resolve()));
-  closeDb(db);
-  try {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  } catch {
-    /* Windows 锁 */
-  }
+  await app.cleanup();
 
   if (failed > 0) {
     console.error(`[smoke] FAILED ${failed}/${steps.length}`);

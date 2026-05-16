@@ -22,10 +22,11 @@ npm run migrate              # Apply migrations/*.sql (creates db/echora.db on f
 npm run dev                  # Backend tsx watch on :8787 (NODE_ENV=development)
 npm run dev:web              # Frontend Vite on :5173 (proxies /api → :8787)
 
-npm test                     # Full gate: server + web + smoke
+npm test                     # Full gate: server + web + smoke + smoke:onboarding
 npm run test:server          # Jest + supertest (backend)
 npm run test:web             # Vitest + jsdom (frontend)
 npm run test:smoke           # E2E with stub provider: register → send → consume SSE
+npm run test:smoke:onboarding # E2E with ScriptedProvider: 10 onboarding scenarios (deterministic)
 npm run test:smoke:ai        # Strict E2E against real Anthropic + OpenAI (needs both keys)
 
 npm run build                # tsc -p tsconfig.server.json && vite build

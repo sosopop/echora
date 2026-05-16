@@ -3,6 +3,11 @@
  *
  * 必填字段:name, level(CEFR A1-C2)。
  * 选填字段:age, grade(自然语言年级,如「高二」「大二」「在职」)。
+ *
+ * 字段缺失判定有两种维度,务必区分:
+ *   - decideMissingRequired:仅必填字段是否缺(决定 onboarding 是否可结束)
+ *   - decidePromptMissingFields:必填 + 用于追问 prompt 的可选字段(grade)
+ *     供系统提示中"还需采集"措辞用,不影响结束判定
  */
 
 import type { ProfileDTO } from '../../../shared/api.js';
@@ -13,12 +18,26 @@ export type OnboardingField = 'name' | 'age' | 'grade' | 'level';
 export const REQUIRED_FIELDS: OnboardingField[] = ['name', 'level'];
 export const OPTIONAL_FIELDS: OnboardingField[] = ['age', 'grade'];
 
-export function decideMissingFields(p: ProfileDTO): OnboardingField[] {
+/**
+ * 仅必填字段是否缺(name + level)。返回非空 → onboarding 未完成。
+ * 上层 skill 用此判断是否走 LLM 短路路径。
+ */
+export function decideMissingRequired(p: ProfileDTO): OnboardingField[] {
+  const missing: OnboardingField[] = [];
+  if (!p.name) missing.push('name');
+  if (!p.level) missing.push('level');
+  return missing;
+}
+
+/**
+ * 必填 + grade(可选但鼓励问)。仅供 buildSystemPrompt 措辞用,
+ * 不影响 isOnboardingComplete 判断。
+ */
+export function decidePromptMissingFields(p: ProfileDTO): OnboardingField[] {
   const missing: OnboardingField[] = [];
   if (!p.name) missing.push('name');
   if (!p.grade) missing.push('grade');
   if (!p.level) missing.push('level');
-  // age 不主动问;若用户主动给会被工具捕获
   return missing;
 }
 
@@ -41,9 +60,9 @@ export function buildSystemPrompt(
     '',
     '采集字段:',
     '- 姓名(必填,任意中英文称呼即可)',
-    '- 年级(必填,如「高二」「大三」「在职」「无」均可)',
     '- 英语水平(必填,映射到 CEFR A1/A2/B1/B2/C1/C2)',
-    '- 年龄(选填,用户主动说才记录)',
+    '- 年级(可选,如「高二」「大三」「在职」「无」均可;不强求)',
+    '- 年龄(可选,用户主动说才记录)',
     '',
     '英语水平判定指南(用户用自然语言时由你映射到 CEFR):',
     '- 「初学/零基础/小学」→ A1',

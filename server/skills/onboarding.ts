@@ -3,14 +3,15 @@
  *
  * 流程:
  *   1. 读 user_profiles(ensureProfile)
- *   2. decideMissingFields → 决定还需问哪些字段
- *   3. buildSystemPrompt → 拼装 system 提示
- *   4. provider.chat() 流式调用,monitor:
+ *   2. 必填齐(isOnboardingComplete)→ 短路转场,不调 LLM
+ *   3. decidePromptMissingFields → 给 prompt 用的「还需采集」措辞
+ *   4. buildSystemPrompt → 拼装 system 提示
+ *   5. provider.chat() 流式调用,monitor:
  *      - text-delta → yield text-chunk
  *      - tool-use(update_profile) → 累积到 collected
- *   5. 流结束后,若 collected 非空 → upsertProfile
- *   6. 若 onboarding 完成(name + level 齐全)→ yield state-transition('scene_selecting')
- *   7. yield done
+ *   6. 流结束后,若 collected 非空 → upsertProfile
+ *   7. 若 onboarding 完成(name + level 齐全)→ yield state-transition('scene_selecting')
+ *   8. yield done
  *
  * Provider 必须实现 chat();否则 yield error。
  */
@@ -27,7 +28,7 @@ import {
 } from '../services/profile.js';
 import { getMessages } from '../services/message.js';
 import {
-  decideMissingFields,
+  decidePromptMissingFields,
   buildSystemPrompt,
   updateProfileTool,
 } from './_helpers/onboardingFsm.js';
@@ -54,7 +55,7 @@ export const onboardingSkill: Skill = {
 
     // 1. 读画像与缺失字段
     const profile = ensureProfile(ctx.db, ctx.user.id);
-    const missing = decideMissingFields(profile);
+    const promptMissing = decidePromptMissingFields(profile);
 
     // 2. 必填项已齐 → 直接转场,不再调用 LLM
     if (isOnboardingComplete(profile)) {
@@ -71,7 +72,7 @@ export const onboardingSkill: Skill = {
     }
 
     // 3. 拼 system + 历史消息
-    const system = buildSystemPrompt(profile, missing);
+    const system = buildSystemPrompt(profile, promptMissing);
     const history = getMessages(ctx.db, ctx.conversationId)
       .filter((m) => m.role === 'user' || m.role === 'assistant')
       .map<ChatMessage>((m) => ({

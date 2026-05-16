@@ -79,18 +79,29 @@
 - `doc/task/002-test.py` — 新增**交互式手工测试脚本**(stdlib only,Windows + POSIX 兼容):自动跑 6 步 curl 等价请求,自动占位替换(TOKEN / conv_id / stream_id),每步打印完整输入/输出后按空格继续。`python doc/task/002-test.py` 即可一键复测
 - `doc/knowledge/task-handoff.md` + `CLAUDE.md` — 写入新约定:有 ≥ 3 步 curl 测试的 task 文档须配套 `<NNN>-test.py` 脚本,与文档同步
 
-### 验证结果
+### 补丁(commit 10 · onboarding 端到端确定性 smoke)
+- `tests/smoke/_helpers/testApp.ts` — 抽出公共 testApp 装配(独立 DB + 独立端口),被现有 run-smoke 与新脚本共享
+- `tests/smoke/_helpers/scriptedProvider.ts` — 可脚本化 mock AIProvider:routeFn 注入决策,chatScripts 按子串匹配 yield 预录事件,disableChat 模拟 PROVIDER_CHAT_UNAVAILABLE 路径
+- `tests/smoke/run-smoke-onboarding.ts` — 10 场景端到端:A 完整多轮 / B 短路 / C 不调工具 / D 非法 CEFR / E disableChat / F state_not_allowed / G route 抛错 / H lastSeq 续传 / I 学习态转移后 / J orphan 快照
+- `server/skills/_helpers/onboardingFsm.ts` — 字段拆分:`decideMissingRequired`(仅 name+level,决定是否短路)+ `decidePromptMissingFields`(必填+grade,prompt 措辞用),解决之前 `decideMissingFields` 把 grade 当必填问的不一致
+- `server/skills/onboarding.ts` — 调用 `decidePromptMissingFields`(prompt)与 `isOnboardingComplete`(短路),清晰区分两种判定
+- `package.json` — 新增 `npm run test:smoke:onboarding` 脚本;`npm test` 全量含此场景
+- `CLAUDE.md` + `doc/knowledge/skills.md` — 同步测试入口
+
+### 验证结果(commit 10 后)
 
 | 命令 | 结果 |
 |---|---|
 | `npx tsc -p tsconfig.server.json --noEmit` | ✓ 后端类型干净 |
 | `npx tsc -p tsconfig.json --noEmit` | ✓ 前端类型干净 |
-| `npm run test:server` | ✓ 21 passed (6 suites,含 ai-router + deepseek 兼容) |
+| `npm run test:server` | ✓ 21 passed (6 suites) |
 | `npm run test:web` | ✓ 16 passed (3 suites) |
 | `npm run test:smoke` | ✓ 6/6 (stub provider 全链) |
-| `npm run test:smoke:ai` | ✓ 4/4(双 Provider 实测,DeepSeek 中转,详见「手工测试 · test:smoke:ai」) |
+| `npm run test:smoke:onboarding` | ✓ **10/10**(确定性 mock,端到端) |
+| `npm run test:smoke:ai` | ✓ 4/4(双 Provider 实测,DeepSeek 中转) |
+| `npm test` | ✓ 全量(server + web + smoke + smoke:onboarding) |
 | 手工 curl(stub provider) | ✓ register → /me → profile CRUD → send → SSE 全链 |
-| 手工 curl(anthropic provider via DeepSeek) | ✓ Provider 接入打通,`/api/chat/send` 返回 202 + skillName=onboarding,SSE 流出真实 LLM 回应 + tool_use |
+| 手工 curl(anthropic provider via DeepSeek) | ✓ Provider 接入打通 |
 
 ## 手工测试
 
@@ -256,6 +267,42 @@ data: {"type":"done","payload":{},"seq":N+1,...}
 ```
 
 ✓ SSE 协议工作正常,事件按 seq 单调,`done` 后流关闭。state-transition 在所有必填字段齐全后触发。
+
+### test:smoke:onboarding · Onboarding 工作流确定性 E2E
+
+10 个场景串联跑,无外部依赖,完全可重复。脚本注入 ScriptedProvider(可脚本化的 mock AIProvider),走真实 HTTP + chat.ts 背景任务 + SSE 全链。
+
+命令:
+
+```bash
+npm run test:smoke:onboarding
+```
+
+输出(实测):
+
+```
+[smoke:onb] === 10 scenarios ===
+
+[smoke:onb] ✓ A 完整多轮(从空到完成) (359ms)
+[smoke:onb] ✓ B 短路(profile 已齐时不调 LLM 直接转场) (171ms)
+[smoke:onb] ✓ C AI 不调工具时不写库不转场 (161ms)
+[smoke:onb] ✓ D 工具入参非法 CEFR 被 mergeProfileFields 过滤 (171ms)
+[smoke:onb] ✓ E provider.chat 不实现时 yield error (163ms)
+[smoke:onb] ✓ F router 拒绝非法 state(无 fallback,直接 502) (78ms)
+[smoke:onb] ✓ G provider.route 抛错时直接 502(无 fallback) (78ms)
+[smoke:onb] ✓ H SSE 断线后用 lastSeq 续传 ring buffer 事件 (477ms)
+[smoke:onb] ✓ I state-transition 后下次 send 路由到 scene-select (241ms)
+[smoke:onb] ✓ J /send 502 时 user 消息已落库但无 assistant(行为快照) (78ms)
+
+[smoke:onb] PASSED 10 / 10
+```
+
+✓ 所有场景通过。覆盖正常多轮路径 + 短路 + 模糊输入 + 字段过滤 + provider 不实现 chat + 状态校验拒绝 + provider 抛错 + SSE 续传 + 学习态转移 + orphan 行为快照。
+
+**与 smoke:ai 的区分**:
+- `smoke:onboarding`:**HTTP + chat.ts 系统层** + 确定性 mock,场景覆盖完整,任何回归都会被门禁卡住,**纳入 `npm test` 全量门禁**
+- `smoke:ai`:**真实 Provider 接口契约**,验 SDK 调用对接,需 API key,**不**入门禁,按需手动跑
+- 两者互补,前者系统层守门,后者 endpoint 兼容性验证
 
 ### test:smoke:ai · 双 Provider 真实接入烟雾
 

@@ -69,7 +69,10 @@ provider.route()
 
 ## 测试入口
 
-- AI Router 校验链测试:后续在 `server/__tests__/ai-router.test.ts`(暂未写)
+- AI Router 校验链测试:`server/__tests__/ai-router.test.ts`(5 测试,正常路径 + 3 失败路径 + 任意 state)
+- onboarding skill 单测:`server/__tests__/skill-onboarding.test.ts`(5 测试,mock provider 直调 handler)
+- onboarding 端到端:`npm run test:smoke:onboarding`(10 场景:完整多轮 / 短路 / 不调工具 / 非法 CEFR / disableChat / state_not_allowed / route 抛错 / lastSeq 续传 / 学习态转移后 / orphan 快照)
+- 真实 Provider 接入:`npm run test:smoke:ai`(Anthropic + OpenAI 各跑 route + chat,需双 key)
 - Skill stub 输出契约:在 `server/__tests__/skill-<name>.test.ts` 中覆盖各事件类型出现顺序
 
 ## Pending
