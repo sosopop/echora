@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <title>Echora · 移动端</title>
+    <link rel="stylesheet" href="../styles/tokens.css" />
+    <link rel="stylesheet" href="../styles/components.css" />
+    <style>
+      html, body { height: 100%; overflow: hidden; }
+      body {
+        font-size: 15px;
+        background: var(--color-canvas);
+      }
+
+      /* —— 模拟手机外框 (在桌面浏览器里也好看) —— */
+      .phone {
+        max-width: 400px;
+        width: 100%;
+        height: 100vh;
+        margin: 0 auto;
+        background: var(--color-canvas);
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        overflow: hidden;
+        box-shadow: var(--shadow-lg);
+      }
+      @media (min-width: 480px) {
+        body {
+          background: #2c2826;
+          padding: 32px 0;
+        }
+        .phone {
+          height: calc(100vh - 64px);
+          max-height: 880px;
+          border-radius: 36px;
+          border: 8px solid #18171a;
+        }
+      }
+
+      /* —— 顶栏 —————————————————————————————————————— */
+      .m-top-nav {
+        height: 48px;
+        flex: none;
+        display: flex;
+        align-items: center;
+        padding: 0 12px;
+        gap: 8px;
+        background: var(--color-canvas);
+        border-bottom: 1px solid var(--color-hairline-soft);
+      }
+      .m-top-nav .icon-btn {
+        width: 36px;
+        height: 36px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        border: 0;
+        border-radius: var(--radius-pill);
+        color: var(--color-ink);
+        font-size: 18px;
+        cursor: pointer;
+      }
+      .m-top-nav .icon-btn:hover { background: var(--color-surface-soft); }
+      .m-top-nav .nav-title {
+        flex: 1;
+        text-align: center;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--color-ink);
+        line-height: 1.2;
+      }
+      .m-top-nav .nav-title .sub {
+        display: block;
+        font-size: 11px;
+        color: var(--color-muted);
+        font-weight: 400;
+        margin-top: 1px;
+      }
+
+      /* —— 主滚动区 —————————————————————————————————— */
+      .m-scroll {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px 12px 16px;
+      }
+      .m-scroll .msg-bubble {
+        font-size: 15px;
+      }
+
+      /* Widget mini */
+      .scene-list-m {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        padding: 8px 4px 12px;
+        scroll-snap-type: x mandatory;
+      }
+      .scene-list-m .scene-card {
+        flex: 0 0 220px;
+        scroll-snap-align: start;
+        background: var(--color-canvas);
+        border: 1px solid var(--color-hairline);
+        border-radius: var(--radius-lg);
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .scene-card .emoji { font-size: 24px; }
+      .scene-card .title { font-size: 14px; font-weight: 500; color: var(--color-ink); }
+      .scene-card .desc { font-size: 12px; color: var(--color-muted); }
+
+      /* —— 输入区 ——————————————————————————————————— */
+      .m-composer {
+        flex: none;
+        padding: 10px 10px calc(env(safe-area-inset-bottom, 8px) + 10px);
+        background: var(--color-canvas);
+        border-top: 1px solid var(--color-hairline-soft);
+      }
+      .m-composer-shell {
+        background: var(--color-canvas);
+        border: 1px solid var(--color-hairline);
+        border-radius: var(--radius-lg);
+        padding: 8px;
+        display: flex;
+        gap: 6px;
+        align-items: flex-end;
+      }
+      .m-composer-shell textarea {
+        flex: 1;
+        border: 0;
+        background: transparent;
+        outline: none;
+        font-family: var(--font-body);
+        font-size: 15px;
+        line-height: 1.5;
+        color: var(--color-ink);
+        resize: none;
+        min-height: 24px;
+        max-height: 100px;
+        padding: 4px;
+      }
+      .m-icon-btn {
+        width: 36px;
+        height: 36px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        border: 0;
+        border-radius: var(--radius-pill);
+        color: var(--color-ink);
+        font-size: 16px;
+        cursor: pointer;
+      }
+      .m-send {
+        width: 36px;
+        height: 36px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--color-primary);
+        color: var(--color-on-primary);
+        border: 0;
+        border-radius: var(--radius-pill);
+        font-size: 16px;
+        cursor: pointer;
+      }
+
+      /* —— 抽屉 ——————————————————————————————————————— */
+      .drawer {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 84%;
+        max-width: 320px;
+        background: var(--color-surface-soft);
+        z-index: 30;
+        transform: translateX(-100%);
+        transition: transform 0.25s ease;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 6px 0 24px rgba(0, 0, 0, 0.12);
+      }
+      .drawer-right {
+        left: auto;
+        right: 0;
+        transform: translateX(100%);
+        background: var(--color-surface-soft);
+        box-shadow: -6px 0 24px rgba(0, 0, 0, 0.12);
+      }
+      .drawer.open { transform: translateX(0); }
+      .drawer-mask {
+        position: absolute;
+        inset: 0;
+        background: rgba(20, 20, 19, 0.3);
+        z-index: 20;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+      }
+      .drawer-mask.open { opacity: 1; pointer-events: auto; }
+      .drawer-head {
+        padding: 14px 16px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: var(--color-canvas);
+        border-bottom: 1px solid var(--color-hairline-soft);
+      }
+      .drawer-head .title {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--color-ink);
+        flex: 1;
+      }
+      .drawer-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 8px;
+      }
+      .drawer .conv-item {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 12px;
+        border-radius: var(--radius-md);
+      }
+      .drawer .conv-item.active { background: var(--color-canvas); }
+      .drawer .conv-title { font-size: 14px; color: var(--color-ink); font-weight: 500; }
+      .drawer .conv-meta { font-size: 12px; color: var(--color-muted); }
+      .drawer-section {
+        padding: 14px 12px 6px;
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        color: var(--color-muted-soft);
+      }
+
+      /* Bottom action sheet (menu mode for mobile) */
+      .sheet {
+        position: absolute;
+        left: 0; right: 0; bottom: 0;
+        background: var(--color-canvas);
+        border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+        padding: 20px 16px calc(env(safe-area-inset-bottom, 8px) + 20px);
+        z-index: 40;
+        transform: translateY(100%);
+        transition: transform 0.25s ease;
+        box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.12);
+      }
+      .sheet.open { transform: translateY(0); }
+      .sheet-handle {
+        width: 36px;
+        height: 4px;
+        background: var(--color-hairline);
+        border-radius: var(--radius-pill);
+        margin: 0 auto 16px;
+      }
+      .sheet-item {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 14px 12px;
+        border-radius: var(--radius-md);
+        font-size: 15px;
+        color: var(--color-ink);
+        cursor: pointer;
+      }
+      .sheet-item:hover { background: var(--color-surface-soft); }
+      .sheet-item .emoji { font-size: 18px; width: 24px; text-align: center; }
+    </style>
+  </head>
+  <body>
+    <div class="phone">
+      <!-- 顶栏 -->
+      <header class="m-top-nav">
+        <button class="icon-btn" data-toggle="#m-drawer-history" title="历史">☰</button>
+        <div class="nav-title">
+          🍝 餐厅点餐
+          <span class="sub">awaiting_next · 第 3 轮</span>
+        </div>
+        <button class="icon-btn" data-toggle="#m-drawer-branch" title="辅助追问">⬌</button>
+      </header>
+
+      <!-- 主消息区 -->
+      <div class="m-scroll scroll">
+        <div class="msg msg-system">
+          <div class="msg-bubble">— 14:32 · 进入「餐厅点餐」—</div>
+        </div>
+
+        <div class="msg msg-ai">
+          <div class="msg-bubble">
+            练 5 题:菜单搭配、礼貌请求、价格表达。
+            先来第 1 题。
+          </div>
+        </div>
+
+        <div class="msg msg-ai">
+          <div class="msg-bubble">
+            <div class="caption muted-soft" style="margin-bottom: 4px;">第 1 题 · 半句翻译</div>
+            把这句翻译成英文:
+            <div style="margin-top: 8px; padding: 10px; background: var(--color-surface-soft); border-radius: var(--radius-md);">
+              我想要一份牛排,五分熟。
+            </div>
+          </div>
+        </div>
+
+        <div class="msg msg-user">
+          <div class="msg-bubble">I want a steak, medium.</div>
+        </div>
+
+        <!-- mini grading widget -->
+        <div class="msg msg-ai">
+          <div class="msg-bubble" style="padding: 0; max-width: 92%; background: transparent; border-left: 0;">
+            <div class="widget" style="border-left: 3px solid var(--color-primary);">
+              <div class="state-bar warn"></div>
+              <div class="widget-body" style="padding: 14px;">
+                <div class="row row-between" style="margin-bottom: 8px;">
+                  <span class="display-md" style="font-size: 24px;">75</span>
+                  <span class="badge badge-warn">轻微问题</span>
+                </div>
+                <div class="caption-upper muted">参考</div>
+                <div style="font-size: 14px; color: var(--color-success); margin-top: 2px;">
+                  I'd like a steak, medium-rare, please.
+                </div>
+                <div style="font-size: 13px; line-height: 1.6; color: var(--color-body); margin: 8px 0;">
+                  I'd like 比 I want 更礼貌; "五分熟" 接近 medium-rare。
+                </div>
+                <div class="row row-gap-xs" style="flex-wrap: wrap; margin-top: 6px;">
+                  <span class="tag-chip">politeness</span>
+                  <span class="tag-chip">collocation</span>
+                </div>
+              </div>
+              <div class="widget-foot" style="padding: 8px 12px;">
+                <button class="btn btn-secondary btn-sm">下一题</button>
+                <button class="btn btn-ghost btn-sm" style="color: var(--color-primary);">为什么?</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="msg msg-ai">
+          <div class="msg-bubble">
+            进入第 2 题<span class="cursor"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 输入区 -->
+      <div class="m-composer">
+        <div class="m-composer-shell">
+          <button class="m-icon-btn" data-toggle="#m-sheet" title="菜单">☰</button>
+          <textarea placeholder="说点什么..." rows="1"></textarea>
+          <button class="m-send" title="发送">→</button>
+        </div>
+      </div>
+
+      <!-- 抽屉遮罩 -->
+      <div class="drawer-mask" id="m-mask"></div>
+
+      <!-- 历史抽屉 -->
+      <aside class="drawer" id="m-drawer-history">
+        <div class="drawer-head">
+          <span class="title">历史会话</span>
+          <button class="icon-btn" data-close="#m-drawer-history">×</button>
+        </div>
+        <div class="drawer-body scroll">
+          <button class="btn btn-secondary btn-block" style="margin: 8px;">＋ 新建对话</button>
+          <div class="drawer-section">当前</div>
+          <div class="conv-item active">
+            <div class="conv-title">🍝 餐厅点餐</div>
+            <div class="conv-meta">第 3 轮 · 5 题</div>
+          </div>
+          <div class="drawer-section">本周</div>
+          <div class="conv-item">
+            <div class="conv-title">🏫 校园对话</div>
+            <div class="conv-meta">昨天 · 8 题 · 平均 82</div>
+          </div>
+          <div class="conv-item">
+            <div class="conv-title">✈️ 旅行问路</div>
+            <div class="conv-meta">2 天前 · 6 题 · 平均 75</div>
+          </div>
+          <div class="conv-item">
+            <div class="conv-title">📚 介词专项重练</div>
+            <div class="conv-meta">3 天前 · 已归档</div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 辅助追问抽屉 -->
+      <aside class="drawer drawer-right" id="m-drawer-branch">
+        <div class="drawer-head">
+          <span class="badge badge-coral" style="font-size: 10px;">支线</span>
+          <span class="title">深入追问</span>
+          <button class="icon-btn" data-close="#m-drawer-branch">×</button>
+        </div>
+        <div class="drawer-body scroll">
+          <div style="margin: 4px 8px 12px; padding: 10px 12px; background: var(--color-canvas); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary); font-size: 13px;">
+            <div style="font-size: 11px; color: var(--color-primary); letter-spacing: 1.2px; text-transform: uppercase;">↳ 来自:这次批改</div>
+            <div style="margin-top: 4px;">为什么 "I'd like" 比 "I want" 更礼貌?</div>
+          </div>
+          <div style="margin: 0 8px 10px; padding: 10px 12px; background: var(--color-canvas); border-radius: var(--radius-md); border-left: 2px solid var(--color-primary); font-size: 13px; line-height: 1.5;">
+            I'd like (= I would like) 用条件式包装请求,把"我要"变成"我会喜欢",在服务场合是默认表达。
+          </div>
+          <div style="margin: 0 8px 10px 24px; padding: 10px 12px; background: var(--color-msg-user-bg); border-radius: var(--radius-md); border: 1px solid var(--color-msg-user-border); font-size: 13px;">
+            那 in the morning 为什么用 in 不用 on?
+          </div>
+        </div>
+      </aside>
+
+      <!-- 底部菜单 sheet (menu 模式) -->
+      <div class="sheet" id="m-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-item"><span class="emoji">▶</span> 开始练习</div>
+        <div class="sheet-item"><span class="emoji">📊</span> 查看复盘</div>
+        <div class="sheet-item"><span class="emoji">🔁</span> 复习薄弱点</div>
+        <div class="sheet-item"><span class="emoji">🎬</span> 换场景</div>
+        <hr class="divider" style="margin: 8px 0;" />
+        <div class="sheet-item"><span class="emoji">💾</span> 保存进度</div>
+      </div>
+    </div>
+
+    <script src="../scripts/interactions.js"></script>
+    <script>
+      // 抽屉同步控制 mask
+      var mask = document.getElementById('m-mask');
+      var drawers = document.querySelectorAll('.drawer');
+      var sheet = document.getElementById('m-sheet');
+
+      function syncMask() {
+        var anyOpen = Array.from(drawers).some(function (d) {
+          return d.classList.contains('open');
+        }) || sheet.classList.contains('open');
+        mask.classList.toggle('open', anyOpen);
+      }
+      document.addEventListener('click', function (e) {
+        // 让 toggle 后再同步
+        setTimeout(syncMask, 0);
+      });
+      mask.addEventListener('click', function () {
+        drawers.forEach(function (d) { d.classList.remove('open'); });
+        sheet.classList.remove('open');
+        mask.classList.remove('open');
+      });
+    </script>
+  </body>
+</html>

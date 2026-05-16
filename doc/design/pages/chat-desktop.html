@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Echora · 桌面端对话</title>
+    <link rel="stylesheet" href="../styles/tokens.css" />
+    <link rel="stylesheet" href="../styles/components.css" />
+    <style>
+      html, body { height: 100%; }
+      body {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      /* —— Shell ——————————————————————————————————————— */
+      .chat-shell {
+        flex: 1;
+        display: grid;
+        grid-template-columns:
+          var(--layout-col-history)
+          minmax(0, 1fr)
+          0px;
+        min-height: 0;
+      }
+      .chat-shell.has-branch {
+        grid-template-columns:
+          var(--layout-col-history)
+          minmax(0, 1fr)
+          var(--layout-col-branch);
+      }
+
+      /* —— 顶栏 ————————————————————————————————————————— */
+      .top-nav .nav-tab {
+        font-size: 14px;
+        color: var(--color-muted);
+        padding: 4px 12px;
+        border-radius: var(--radius-md);
+        cursor: pointer;
+      }
+      .top-nav .nav-tab.active {
+        background: var(--color-surface-card);
+        color: var(--color-ink);
+      }
+      .top-nav .session-title {
+        font-size: 14px;
+        color: var(--color-body-strong);
+        font-weight: 500;
+        margin-left: 16px;
+      }
+      .top-nav .state-badge {
+        margin-left: 8px;
+      }
+
+      /* —— 左侧历史 ———————————————————————————————————— */
+      .col-history {
+        background: var(--color-surface-soft);
+        border-right: 1px solid var(--color-hairline-soft);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .history-head {
+        padding: 16px;
+        display: flex;
+        gap: 8px;
+      }
+      .history-head .input {
+        flex: 1;
+        height: 36px;
+        font-size: 13px;
+      }
+      .history-list {
+        flex: 1;
+        padding: 4px 8px 24px;
+        overflow-y: auto;
+      }
+      .history-section {
+        padding: 12px 12px 6px;
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        color: var(--color-muted-soft);
+      }
+      .conv-item {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 10px 12px;
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        position: relative;
+      }
+      .conv-item:hover {
+        background: var(--color-hover-veil);
+      }
+      .conv-item.active {
+        background: var(--color-canvas);
+        box-shadow: var(--shadow-sm);
+      }
+      .conv-item .conv-title {
+        font-size: 14px;
+        color: var(--color-ink);
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .conv-item .conv-meta {
+        font-size: 12px;
+        color: var(--color-muted);
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .conv-item .conv-locked {
+        color: var(--color-muted-soft);
+        font-size: 11px;
+      }
+      .new-chat-btn {
+        margin: 12px;
+      }
+
+      /* —— 主聊天区 ———————————————————————————————————— */
+      .col-main {
+        display: flex;
+        flex-direction: column;
+        background: var(--color-canvas);
+        min-width: 0;
+        position: relative;
+      }
+      .main-scroll {
+        flex: 1;
+        overflow-y: auto;
+        padding: 32px 0 24px;
+      }
+      .main-inner {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 0 24px;
+      }
+
+      /* —— Widget 嵌入消息 —————————————————————————————— */
+      .msg-ai .widget-block {
+        margin-top: 12px;
+        max-width: 100%;
+      }
+
+      /* Scene cards inline */
+      .scene-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+      }
+      .scene-card {
+        background: var(--color-canvas);
+        border: 1px solid var(--color-hairline);
+        border-radius: var(--radius-lg);
+        padding: 16px;
+        cursor: pointer;
+        transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .scene-card:hover {
+        transform: translateY(-2px);
+        border-color: var(--color-primary);
+        box-shadow: var(--shadow-sm);
+      }
+      .scene-card .emoji {
+        font-size: 28px;
+        line-height: 1;
+      }
+      .scene-card .title {
+        font-size: 15px;
+        font-weight: 500;
+        color: var(--color-ink);
+      }
+      .scene-card .desc {
+        font-size: 12px;
+        color: var(--color-muted);
+        line-height: 1.5;
+      }
+      .scene-card .meta {
+        margin-top: auto;
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        color: var(--color-muted-soft);
+      }
+
+      /* —— 底部输入区 —————————————————————————————————— */
+      .composer {
+        padding: 16px 24px 20px;
+        background: linear-gradient(to top, var(--color-canvas) 75%, var(--color-canvas-fade));
+      }
+      .composer-inner {
+        max-width: 720px;
+        margin: 0 auto;
+      }
+      .composer-shell {
+        background: var(--color-canvas);
+        border: 1px solid var(--color-hairline);
+        border-radius: var(--radius-lg);
+        padding: 12px;
+        box-shadow: var(--shadow-md);
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .composer-shell:focus-within {
+        border-color: var(--color-primary);
+        box-shadow: 0 0 0 3px rgba(204, 120, 92, 0.18), var(--shadow-md);
+      }
+      .composer-row {
+        display: flex;
+        gap: 8px;
+        align-items: flex-end;
+      }
+      .composer-row textarea {
+        flex: 1;
+        border: 0;
+        background: transparent;
+        outline: none;
+        font-family: var(--font-body);
+        font-size: 15px;
+        line-height: 1.55;
+        color: var(--color-ink);
+        resize: none;
+        min-height: 24px;
+        max-height: 160px;
+        padding: 6px 4px;
+      }
+      .composer-tip {
+        text-align: center;
+        margin-top: 8px;
+        font-size: 12px;
+        color: var(--color-muted-soft);
+      }
+
+      /* Quick actions row above composer */
+      .quick-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        max-width: 720px;
+        margin: 0 auto 8px;
+        padding: 0 24px;
+      }
+      .qa-chip {
+        padding: 6px 12px;
+        background: var(--color-canvas);
+        border: 1px solid var(--color-hairline);
+        border-radius: var(--radius-pill);
+        font-size: 13px;
+        color: var(--color-ink);
+        cursor: pointer;
+      }
+      .qa-chip:hover { border-color: var(--color-primary); }
+      .qa-chip .ic { color: var(--color-primary); margin-right: 4px; }
+
+      /* Streaming indicator chip */
+      .stream-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--color-muted);
+      }
+      .stream-chip .dot {
+        width: 6px; height: 6px; border-radius: 50%;
+        background: var(--color-primary);
+        animation: pulse 1.2s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 0.3; }
+        50% { opacity: 1; }
+      }
+
+      /* —— 右侧支线 (默认收起) ——————————————————————————— */
+      .col-branch {
+        display: none;
+        background: var(--color-surface-soft);
+        border-left: 1px solid var(--color-hairline-soft);
+      }
+      .has-branch .col-branch {
+        display: flex;
+      }
+
+      /* Popover for menu */
+      #learning-menu-pop {
+        bottom: 64px;
+        left: 24px;
+      }
+
+      /* Avatars */
+      .ai-mark {
+        position: absolute;
+        margin-left: -28px;
+        margin-top: 6px;
+        width: 20px;
+        height: 20px;
+        border-radius: var(--radius-pill);
+        background: var(--color-primary);
+        color: var(--color-on-primary);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+      }
+
+      .top-nav .branch-toggle {
+        margin-left: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- —— 顶栏 —————————————————————————————————————————— -->
+    <header class="top-nav">
+      <a class="brand" href="../index.html">
+        <span class="brand-mark">✱</span>
+        Echora
+      </a>
+      <div class="nav-tab active" style="margin-left: 24px;">学习</div>
+      <div class="nav-tab">设置</div>
+      <span class="session-title">餐厅点餐 · 第 3 轮</span>
+      <span class="badge badge-soft state-badge">awaiting_next</span>
+      <span class="spacer"></span>
+      <button class="btn btn-ghost btn-sm branch-toggle" data-toggle=".chat-shell">
+        <span class="iconish">⬌</span>
+        辅助追问
+      </button>
+      <span class="avatar" title="林同学" style="margin-left: 12px;">林</span>
+    </header>
+
+    <div class="chat-shell">
+      <!-- —— 左侧历史会话 —————————————————————————————— -->
+      <aside class="col-history">
+        <div class="history-head">
+          <input class="input" placeholder="搜索历史 (V1 不实现)" disabled />
+        </div>
+        <button class="btn btn-secondary new-chat-btn">
+          <span class="iconish">＋</span>
+          新建对话
+        </button>
+        <div class="history-list scroll">
+          <div class="history-section">当前</div>
+          <div class="conv-item active">
+            <div class="conv-title">
+              🍝 餐厅点餐
+              <span class="badge badge-coral" style="font-size: 10px; padding: 2px 8px;">练习中</span>
+            </div>
+            <div class="conv-meta">第 3 轮 · 5 题</div>
+          </div>
+
+          <div class="history-section">本周</div>
+          <div class="conv-item">
+            <div class="conv-title">🏫 校园对话</div>
+            <div class="conv-meta">昨天 · 8 题 · 平均 82</div>
+          </div>
+          <div class="conv-item">
+            <div class="conv-title">✈️ 旅行问路</div>
+            <div class="conv-meta">2 天前 · 6 题 · 平均 75</div>
+          </div>
+          <div class="conv-item">
+            <div class="conv-title">
+              📚 介词专项重练
+              <span class="conv-locked">· 已归档</span>
+            </div>
+            <div class="conv-meta">3 天前 · 完成</div>
+          </div>
+
+          <div class="history-section">更早</div>
+          <div class="conv-item">
+            <div class="conv-title">☕ 咖啡店日常</div>
+            <div class="conv-meta">上周 · 5 题</div>
+          </div>
+          <div class="conv-item">
+            <div class="conv-title">🎬 影评讨论</div>
+            <div class="conv-meta">上周 · 4 题</div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- —— 主聊天区 ——————————————————————————————————— -->
+      <main class="col-main">
+        <div class="main-scroll scroll">
+          <div class="main-inner">
+            <!-- 系统消息: 进入新场景 -->
+            <div class="msg msg-system">
+              <div class="msg-bubble">— 5 月 16 日 14:32 · 进入「餐厅点餐」场景 —</div>
+            </div>
+
+            <!-- AI 介绍场景 -->
+            <div class="msg msg-ai">
+              <div class="msg-bubble">
+                我们今天来个 <strong>餐厅点餐</strong> 场景吧。
+                你是顾客,Echo 是服务员。本轮重点练: 菜单上的固定搭配、礼貌请求、价格金额表达。
+                先来 5 题,做完会总结你的强弱项。
+              </div>
+            </div>
+
+            <!-- AI 出题 (Widget: exercise-card 简版) -->
+            <div class="msg msg-ai">
+              <div class="msg-bubble" style="max-width: 100%;">
+                <div class="caption muted-soft" style="margin-bottom: 6px;">第 1 题 · 半句翻译</div>
+                <div style="font-size: 16px; line-height: 1.6; color: var(--color-ink);">
+                  请把下面这句翻译成英文:
+                </div>
+                <div style="margin-top: 10px; padding: 12px 14px; background: var(--color-surface-soft); border-radius: var(--radius-md); font-size: 16px; color: var(--color-ink);">
+                  我想要一份牛排,五分熟。
+                </div>
+                <div class="caption muted" style="margin-top: 10px;">
+                  💡 提示: 注意"想要"的礼貌表达和"五分熟"的固定说法
+                </div>
+              </div>
+            </div>
+
+            <!-- 用户答题 -->
+            <div class="msg msg-user">
+              <div class="msg-bubble">I want a steak, medium.</div>
+            </div>
+
+            <!-- AI 批改结果 (grading-result widget) -->
+            <div class="msg msg-ai">
+              <div class="msg-bubble" style="padding: 0; max-width: 100%; overflow: hidden; border-left: 0; background: transparent;">
+                <div class="widget" style="border-left: 3px solid var(--color-primary);">
+                  <div class="state-bar warn"></div>
+                  <div class="widget-body">
+                    <div class="row row-between" style="margin-bottom: 10px;">
+                      <div class="row row-gap-xs">
+                        <span class="display-md" style="font-size: 28px;">75</span>
+                        <span class="muted" style="font-size: 13px;">/ 100 · 基本对,可以更礼貌</span>
+                      </div>
+                      <span class="badge badge-warn">轻微问题</span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0;">
+                      <div>
+                        <div class="caption-upper muted">你的答案</div>
+                        <div style="margin-top: 4px; font-size: 14px;">I want a steak, medium.</div>
+                      </div>
+                      <div>
+                        <div class="caption-upper muted">参考表达</div>
+                        <div style="margin-top: 4px; font-size: 14px; color: var(--color-success);">
+                          I'd like a steak, medium-rare, please.
+                        </div>
+                      </div>
+                    </div>
+                    <div style="font-size: 14px; line-height: 1.65; color: var(--color-body); margin: 8px 0;">
+                      在餐厅里 <strong>I'd like</strong> 比 I want 更礼貌;
+                      "五分熟"英文里其实接近 <strong>medium-rare</strong>,medium 偏向七分熟。
+                    </div>
+                    <div class="row row-gap-xs" style="flex-wrap: wrap; margin-top: 8px;">
+                      <span class="tag-chip">politeness</span>
+                      <span class="tag-chip">collocation</span>
+                    </div>
+                  </div>
+                  <div class="widget-foot">
+                    <button class="btn btn-secondary btn-sm">
+                      <span class="iconish">▶</span>
+                      下一题
+                    </button>
+                    <button class="btn btn-ghost btn-sm">再说一次</button>
+                    <button class="btn btn-ghost btn-sm" style="color: var(--color-primary);">
+                      为什么用 I'd like?
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- AI 流式提示 -->
+            <div class="msg msg-ai">
+              <div class="msg-bubble">
+                进入第 2 题,这次练一下"询问菜品做法"<span class="cursor"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 流式指示 -->
+        <div class="quick-actions">
+          <span class="stream-chip">
+            <span class="dot"></span>
+            Echo 正在生成
+          </span>
+        </div>
+
+        <!-- —— Composer ——————————————————————————————— -->
+        <div class="composer">
+          <div class="composer-inner">
+            <div class="composer-shell">
+              <div class="composer-row">
+                <button
+                  class="btn-icon no-border"
+                  title="学习菜单"
+                  data-menu-toggle="#learning-menu-pop"
+                  style="position: relative;"
+                >
+                  <span class="iconish">☰</span>
+                </button>
+                <textarea placeholder="说点什么... (Enter 发送, Shift+Enter 换行)" rows="1"></textarea>
+                <button class="btn btn-ghost btn-sm" title="停止生成">
+                  <span class="iconish">■</span>
+                </button>
+                <button class="btn btn-primary btn-sm" disabled>
+                  发送
+                  <span class="iconish">→</span>
+                </button>
+              </div>
+            </div>
+            <div class="composer-tip">
+              辅助追问可对任意消息开启 · 不打断主线
+            </div>
+          </div>
+        </div>
+
+        <!-- 学习菜单 popover -->
+        <div id="learning-menu-pop" class="popover">
+          <div class="menu-item">
+            <span class="iconish">▶</span>
+            <span>开始练习</span>
+          </div>
+          <div class="menu-item">
+            <span class="iconish">📊</span>
+            <span>查看复盘</span>
+          </div>
+          <div class="menu-item">
+            <span class="iconish">🔁</span>
+            <span>复习薄弱点</span>
+          </div>
+          <div class="menu-item">
+            <span class="iconish">🎬</span>
+            <span>换场景</span>
+          </div>
+          <hr class="divider" style="margin: 6px 0;" />
+          <div class="menu-item">
+            <span class="iconish">💾</span>
+            <span>保存进度</span>
+          </div>
+        </div>
+      </main>
+
+      <!-- —— 右侧支线 (默认隐藏) ————————————————————— -->
+      <aside class="col-branch"></aside>
+    </div>
+
+    <script src="../scripts/interactions.js"></script>
+  </body>
+</html>

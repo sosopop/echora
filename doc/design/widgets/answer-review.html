@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Widget · answer-review</title>
+    <link rel="stylesheet" href="../styles/tokens.css" />
+    <link rel="stylesheet" href="../styles/components.css" />
+    <link rel="stylesheet" href="../styles/widget-preview.css" />
+  </head>
+  <body>
+    <header class="top-nav">
+      <a class="brand" href="../index.html"><span class="brand-mark">✱</span> Echora</a>
+      <span class="breadcrumb"><a href="../index.html">原型索引</a> / Widget / answer-review</span>
+      <span class="spacer"></span>
+      <a class="btn btn-ghost btn-sm" href="../index.html">← 返回</a>
+    </header>
+
+    <div class="preview-shell" data-tab-group>
+      <div class="preview-head">
+        <div>
+          <div class="caption-upper muted">W · 07</div>
+          <h1 class="display-md">answer-review</h1>
+          <p class="lead">
+            单题回看卡片。复盘报告中点"查看每题详情"或在历史会话里展开。
+            比 grading-result 更紧凑,聚焦"题 + 答 + 参考"。
+          </p>
+        </div>
+        <div class="tabs">
+          <button data-tab="list" class="active">列表态</button>
+          <button data-tab="expanded">展开态</button>
+        </div>
+      </div>
+
+      <!-- list -->
+      <section data-tab-panel="list" class="active preview-stage">
+        <div class="msg msg-ai" style="max-width: 100%;">
+          <div class="msg-bubble" style="padding: 0; max-width: 100%; background: transparent; border-left: 0;">
+            <div class="widget" style="border-left: 3px solid var(--color-primary);">
+              <div class="widget-head">
+                <span class="title-sm">第 3 轮 · 5 道题回看</span>
+                <span class="spacer"></span>
+                <span class="caption muted">点击展开</span>
+              </div>
+              <div class="widget-body" style="padding: 0;">
+                <!-- Q1 ok -->
+                <div class="review-row">
+                  <span class="q-num">Q1</span>
+                  <div class="q-content">
+                    <div class="q-prompt">"我能看一下菜单吗?"</div>
+                    <div class="q-meta">
+                      <span class="badge badge-success">✓ 92</span>
+                      <span class="caption muted">半句翻译 · politeness</span>
+                    </div>
+                  </div>
+                  <button class="btn btn-ghost btn-sm">›</button>
+                </div>
+                <!-- Q2 warn -->
+                <div class="review-row">
+                  <span class="q-num">Q2</span>
+                  <div class="q-content">
+                    <div class="q-prompt">"我想要一份牛排,五分熟。"</div>
+                    <div class="q-meta">
+                      <span class="badge badge-warn">75</span>
+                      <span class="caption muted">半句翻译 · politeness · collocation</span>
+                    </div>
+                  </div>
+                  <button class="btn btn-ghost btn-sm">›</button>
+                </div>
+                <!-- Q3 ok -->
+                <div class="review-row">
+                  <span class="q-num">Q3</span>
+                  <div class="q-content">
+                    <div class="q-prompt">填空: "I'd ___ a steak, ___, ___."</div>
+                    <div class="q-meta">
+                      <span class="badge badge-success">✓ 96</span>
+                      <span class="caption muted">单词填空 · 3 空全对</span>
+                    </div>
+                  </div>
+                  <button class="btn btn-ghost btn-sm">›</button>
+                </div>
+                <!-- Q4 bad -->
+                <div class="review-row">
+                  <span class="q-num">Q4</span>
+                  <div class="q-content">
+                    <div class="q-prompt">"能给我看下菜单,我想点汤。"</div>
+                    <div class="q-meta">
+                      <span class="badge badge-error">52</span>
+                      <span class="caption muted">整句翻译 · missing_word · politeness</span>
+                    </div>
+                  </div>
+                  <button class="btn btn-ghost btn-sm">›</button>
+                </div>
+                <!-- Q5 ok -->
+                <div class="review-row">
+                  <span class="q-num">Q5</span>
+                  <div class="q-content">
+                    <div class="q-prompt">选择: "have the bill ___ the table"</div>
+                    <div class="q-meta">
+                      <span class="badge badge-success">✓ 100</span>
+                      <span class="caption muted">选择填空 · 一次对</span>
+                    </div>
+                  </div>
+                  <button class="btn btn-ghost btn-sm">›</button>
+                </div>
+              </div>
+              <div class="widget-foot">
+                <span class="caption muted">5 题中 3 题 ≥ 90 分 · 平均 82</span>
+                <span class="spacer"></span>
+                <button class="btn btn-secondary btn-sm">仅看错题</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- expanded -->
+      <section data-tab-panel="expanded" class="preview-stage">
+        <div class="msg msg-ai" style="max-width: 100%;">
+          <div class="msg-bubble" style="padding: 0; max-width: 100%; background: transparent; border-left: 0;">
+            <div class="widget" style="border-left: 3px solid var(--color-primary);">
+              <div class="widget-head">
+                <span class="badge badge-warn">Q2 · 75</span>
+                <span class="caption">半句翻译 · 中等</span>
+                <span class="spacer"></span>
+                <button class="btn btn-ghost btn-sm">‹ 上一题</button>
+                <button class="btn btn-ghost btn-sm">下一题 ›</button>
+              </div>
+              <div class="widget-body">
+                <div class="caption-upper muted">题目</div>
+                <div style="margin: 4px 0 14px; padding: 10px 14px; background: var(--color-surface-soft); border-radius: var(--radius-md); font-size: 15px;">
+                  我想要一份牛排,五分熟。
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                  <div>
+                    <div class="caption-upper muted">你的答案</div>
+                    <div style="margin-top: 4px; font-size: 14px;">I want a steak, medium.</div>
+                  </div>
+                  <div>
+                    <div class="caption-upper muted">参考表达</div>
+                    <div style="margin-top: 4px; font-size: 14px; color: var(--color-success);">
+                      I'd like a steak, medium-rare, please.
+                    </div>
+                  </div>
+                </div>
+                <div style="margin-top: 12px; padding: 10px 12px; background: var(--color-surface-soft); border-radius: var(--radius-md); font-size: 13px; color: var(--color-body); line-height: 1.6;">
+                  I'd like 比 I want 更礼貌; medium 偏向七分熟,五分熟接近 medium-rare。
+                </div>
+                <div class="row row-gap-xs" style="margin-top: 10px;">
+                  <span class="tag-chip">politeness</span>
+                  <span class="tag-chip">collocation</span>
+                </div>
+              </div>
+              <div class="widget-foot">
+                <button class="btn btn-secondary btn-sm">📌 加入复盘清单</button>
+                <button class="btn btn-ghost btn-sm" style="color: var(--color-primary);">在右侧追问</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <style>
+      .review-row {
+        display: flex; align-items: center; gap: 12px;
+        padding: 14px 18px;
+        border-bottom: 1px solid var(--color-hairline-soft);
+        cursor: pointer;
+      }
+      .review-row:last-child { border-bottom: 0; }
+      .review-row:hover { background: var(--color-surface-soft); }
+      .review-row .q-num {
+        width: 32px;
+        font-family: var(--font-display);
+        font-size: 16px;
+        color: var(--color-muted);
+      }
+      .review-row .q-content { flex: 1; min-width: 0; }
+      .review-row .q-prompt {
+        font-size: 14px;
+        color: var(--color-ink);
+        margin-bottom: 4px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .review-row .q-meta {
+        display: flex; align-items: center; gap: 8px;
+      }
+    </style>
+
+    <aside class="spec">
+      <h3>差异 vs grading-result</h3>
+      <ul>
+        <li>无大字得分,改用紧凑徽章</li>
+        <li>支持列表态:一次浏览整轮 5-10 题</li>
+        <li>支持上一题 / 下一题翻页</li>
+        <li>提供"加入复盘清单"动作,把题目挂到 mastery_records</li>
+      </ul>
+      <h3>使用位置</h3>
+      <ul>
+        <li>progress-summary 中"查看每题详情"</li>
+        <li>历史会话被 unlocked 后,展开旧轮次</li>
+        <li>retry Skill 启动前,作为题目筛选预览</li>
+      </ul>
+    </aside>
+
+    <script src="../scripts/interactions.js"></script>
+  </body>
+</html>

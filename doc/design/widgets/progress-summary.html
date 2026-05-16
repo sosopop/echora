@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Widget · progress-summary</title>
+    <link rel="stylesheet" href="../styles/tokens.css" />
+    <link rel="stylesheet" href="../styles/components.css" />
+    <link rel="stylesheet" href="../styles/widget-preview.css" />
+    <style>
+      .summary {
+        background: var(--color-canvas);
+        border: 1px solid var(--color-hairline);
+        border-left: 3px solid var(--color-primary);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+      }
+      .summary-head {
+        padding: 24px;
+        background: var(--color-surface-card);
+      }
+      .summary-head .session-meta { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--color-muted); }
+      .summary-head h2 { margin-top: 6px; font-size: 32px; line-height: 1.2; letter-spacing: -0.5px; }
+      .summary-head .lead { color: var(--color-body); margin-top: 8px; font-size: 15px; line-height: 1.65; }
+
+      .stat-row {
+        display: grid; grid-template-columns: repeat(4, 1fr);
+        border-top: 1px solid var(--color-hairline-soft);
+      }
+      .stat-cell { padding: 18px 16px; text-align: center; }
+      .stat-cell + .stat-cell { border-left: 1px solid var(--color-hairline-soft); }
+      .stat-cell .num {
+        font-family: var(--font-display);
+        font-size: 36px; line-height: 1; letter-spacing: -0.5px; color: var(--color-ink);
+      }
+      .stat-cell .num.ok { color: var(--color-success); }
+      .stat-cell .num.warn { color: var(--color-warning); }
+      .stat-cell .label { font-size: 12px; color: var(--color-muted); margin-top: 6px; }
+      .stat-cell .delta { font-size: 11px; margin-top: 2px; color: var(--color-muted); }
+      .stat-cell .delta.up { color: var(--color-success); }
+
+      .summary-section {
+        padding: 20px 24px;
+        border-top: 1px solid var(--color-hairline-soft);
+      }
+      .summary-section h3 {
+        font-size: 14px; font-weight: 500;
+        font-family: var(--font-body);
+        color: var(--color-ink);
+        margin-bottom: 12px;
+        text-transform: none;
+        letter-spacing: 0;
+      }
+
+      .mastery-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+      .mastery-cell {
+        padding: 14px;
+        border: 1px solid var(--color-hairline);
+        border-radius: var(--radius-md);
+        display: flex; align-items: center; gap: 12px;
+      }
+      .ring { position: relative; width: 44px; height: 44px; flex: none; }
+      .ring svg { transform: rotate(-90deg); }
+      .ring .ring-num {
+        position: absolute; top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 12px; font-weight: 500; color: var(--color-ink);
+      }
+      .mastery-cell .name { font-size: 14px; font-weight: 500; color: var(--color-ink); }
+      .mastery-cell .delta { font-size: 12px; color: var(--color-muted); margin-top: 2px; }
+    </style>
+  </head>
+  <body>
+    <header class="top-nav">
+      <a class="brand" href="../index.html"><span class="brand-mark">✱</span> Echora</a>
+      <span class="breadcrumb"><a href="../index.html">原型索引</a> / Widget / progress-summary</span>
+      <span class="spacer"></span>
+      <a class="btn btn-ghost btn-sm" href="../index.html">← 返回</a>
+    </header>
+
+    <div class="preview-shell" data-tab-group>
+      <div class="preview-head">
+        <div>
+          <div class="caption-upper muted">W · 06</div>
+          <h1 class="display-md">progress-summary</h1>
+          <p class="lead">
+            学习进度摘要 / 学习报告。一轮练习结束或用户主动复盘时由
+            <code style="font-family: var(--font-mono); color: var(--color-primary);">review</code>
+            Skill 输出。题数、平均分、掌握度变化、强弱项、下一步建议一站式呈现。
+          </p>
+        </div>
+        <div class="tabs">
+          <button data-tab="full" class="active">完整版</button>
+          <button data-tab="mini">紧凑版</button>
+        </div>
+      </div>
+
+      <!-- full -->
+      <section data-tab-panel="full" class="active preview-stage">
+        <div class="summary">
+          <div class="summary-head">
+            <div class="session-meta">学习报告 · 第 3 轮</div>
+            <h2 class="h-display">餐厅点餐 · 进步明显</h2>
+            <div class="lead">
+              你这一轮主要练了<strong>礼貌请求</strong>和<strong>固定搭配</strong>;
+              整体准确率比上次高 12 分。
+            </div>
+          </div>
+
+          <div class="stat-row">
+            <div class="stat-cell">
+              <div class="num">5</div>
+              <div class="label">题数</div>
+              <div class="delta">本轮</div>
+            </div>
+            <div class="stat-cell">
+              <div class="num ok">82</div>
+              <div class="label">平均分</div>
+              <div class="delta up">↑ 12</div>
+            </div>
+            <div class="stat-cell">
+              <div class="num warn">2</div>
+              <div class="label">薄弱点</div>
+              <div class="delta">需关注</div>
+            </div>
+            <div class="stat-cell">
+              <div class="num">3</div>
+              <div class="label">达标场景</div>
+              <div class="delta up">↑ 1</div>
+            </div>
+          </div>
+
+          <div class="summary-section">
+            <h3>掌握度变化</h3>
+            <div class="mastery-grid">
+              <div class="mastery-cell">
+                <div class="ring">
+                  <svg width="44" height="44" viewBox="0 0 44 44">
+                    <circle class="ring-track" cx="22" cy="22" r="18" fill="none" stroke-width="4"/>
+                    <circle cx="22" cy="22" r="18" fill="none" stroke="#5db872" stroke-width="4" stroke-dasharray="113" stroke-dashoffset="22" stroke-linecap="round"/>
+                  </svg>
+                  <span class="ring-num">80</span>
+                </div>
+                <div>
+                  <div class="name">politeness</div>
+                  <div class="delta" style="color: var(--color-success);">↑ 18 · 已掌握</div>
+                </div>
+              </div>
+              <div class="mastery-cell">
+                <div class="ring">
+                  <svg width="44" height="44" viewBox="0 0 44 44">
+                    <circle class="ring-track" cx="22" cy="22" r="18" fill="none" stroke-width="4"/>
+                    <circle cx="22" cy="22" r="18" fill="none" stroke="#cc785c" stroke-width="4" stroke-dasharray="113" stroke-dashoffset="46" stroke-linecap="round"/>
+                  </svg>
+                  <span class="ring-num">60</span>
+                </div>
+                <div>
+                  <div class="name">collocation</div>
+                  <div class="delta" style="color: var(--color-success);">↑ 12 · 进步中</div>
+                </div>
+              </div>
+              <div class="mastery-cell">
+                <div class="ring">
+                  <svg width="44" height="44" viewBox="0 0 44 44">
+                    <circle class="ring-track" cx="22" cy="22" r="18" fill="none" stroke-width="4"/>
+                    <circle cx="22" cy="22" r="18" fill="none" stroke="#d4a017" stroke-width="4" stroke-dasharray="113" stroke-dashoffset="79" stroke-linecap="round"/>
+                  </svg>
+                  <span class="ring-num">30</span>
+                </div>
+                <div>
+                  <div class="name">missing_word</div>
+                  <div class="delta">→ 0 · 仍薄弱</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="summary-section">
+            <h3>强项</h3>
+            <div class="row row-gap-xs" style="flex-wrap: wrap;">
+              <span class="tag-chip ok">✓ politeness · I'd like / Could I</span>
+              <span class="tag-chip ok">✓ collocation · medium-rare</span>
+            </div>
+            <h3 style="margin-top: 14px;">需加强</h3>
+            <div class="row row-gap-xs" style="flex-wrap: wrap;">
+              <span class="tag-chip bad">missing_word · 不定式 to</span>
+              <span class="tag-chip bad">preposition · in / on / at</span>
+            </div>
+          </div>
+
+          <div class="summary-section">
+            <h3>建议下一步</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+              <div style="padding: 14px 16px; background: var(--color-surface-soft); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary);">
+                <div style="font-weight: 500; color: var(--color-ink);">🎯 重练 missing_word</div>
+                <div class="caption muted" style="margin: 4px 0 10px;">基于 2 道错题,生成 3 题专项,5 分钟。</div>
+                <button class="btn btn-primary btn-sm">开始重练</button>
+              </div>
+              <div style="padding: 14px 16px; background: var(--color-surface-soft); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary);">
+                <div style="font-weight: 500; color: var(--color-ink);">🎬 换场景 · 咖啡店</div>
+                <div class="caption muted" style="margin: 4px 0 10px;">同样是服务场景,巩固 I'd like 句式。</div>
+                <button class="btn btn-secondary btn-sm">进入场景</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="widget-foot">
+            <button class="btn btn-secondary btn-sm">📋 复制总结</button>
+            <button class="btn btn-ghost btn-sm">查看每题详情</button>
+            <span class="spacer"></span>
+            <button class="btn btn-ghost btn-sm" style="color: var(--color-primary);">💾 保存到学习记录</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- mini -->
+      <section data-tab-panel="mini" class="preview-stage">
+        <div class="msg msg-ai" style="max-width: 100%;">
+          <div class="msg-bubble" style="padding: 0; max-width: 100%; background: transparent; border-left: 0;">
+            <div class="widget" style="border-left: 3px solid var(--color-primary);">
+              <div class="widget-body" style="padding: 16px 20px;">
+                <div class="row row-between" style="margin-bottom: 8px;">
+                  <span class="caption-upper muted">本轮速览 · 餐厅点餐</span>
+                  <span class="badge badge-success">✓ 进步</span>
+                </div>
+                <div class="row row-gap-md" style="margin-bottom: 10px;">
+                  <span><span class="display-md" style="font-size: 28px; color: var(--color-success);">82</span> <span class="muted">平均</span></span>
+                  <span><span class="title-md" style="color: var(--color-ink);">5 / 5</span> <span class="muted">完成</span></span>
+                  <span><span class="title-md" style="color: var(--color-warning);">2</span> <span class="muted">薄弱点</span></span>
+                </div>
+                <div class="caption muted">主要进步: politeness ↑ 18 · collocation ↑ 12</div>
+              </div>
+              <div class="widget-foot">
+                <button class="btn btn-primary btn-sm">看完整报告</button>
+                <button class="btn btn-secondary btn-sm">直接重练错题</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <aside class="spec">
+      <h3>数据来源</h3>
+      <p>从 <code>exercise_attempts</code>、<code>grading_results</code>、<code>error_tag_events</code>、<code>mastery_records</code> 结构化表读取,不从消息正文解析。</p>
+      <h3>关联 Skill</h3>
+      <p>review。点击"开始重练"触发 retry Skill;点击"进入场景"触发 scene-select。</p>
+      <h3>呈现原则</h3>
+      <ul>
+        <li>文字摘要 + 进度环,不引入 ECharts (V1 不做)</li>
+        <li><code>difficultyScore</code> (0-1000) 不向用户展示</li>
+        <li>掌握度变化用 ↑↓ 显示,数字保持稳定不晃</li>
+      </ul>
+    </aside>
+
+    <script src="../scripts/interactions.js"></script>
+  </body>
+</html>

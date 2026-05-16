@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Widget · grading-result</title>
+    <link rel="stylesheet" href="../styles/tokens.css" />
+    <link rel="stylesheet" href="../styles/components.css" />
+    <link rel="stylesheet" href="../styles/widget-preview.css" />
+    <style>
+      .grade {
+        background: var(--color-canvas);
+        border: 1px solid var(--color-hairline);
+        border-left: 3px solid var(--color-primary);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+      }
+      .grade-bar { height: 4px; }
+      .grade-bar.ok { background: var(--color-success); }
+      .grade-bar.bad { background: var(--color-error); }
+      .grade-bar.warn { background: var(--color-warning); }
+      .grade-head {
+        padding: 20px 24px 16px;
+        display: flex; align-items: flex-start; justify-content: space-between;
+        gap: 16px;
+      }
+      .grade-score { display: flex; align-items: baseline; gap: 6px; }
+      .grade-score .num {
+        font-family: var(--font-display);
+        font-size: 56px; line-height: 1; font-weight: 400;
+        letter-spacing: -1.5px;
+      }
+      .grade-score .num.ok { color: var(--color-success); }
+      .grade-score .num.bad { color: var(--color-error); }
+      .grade-score .num.warn { color: var(--color-warning); }
+      .grade-score .denom { color: var(--color-muted); font-size: 16px; }
+      .grade-score .label { font-size: 13px; color: var(--color-muted); margin-left: 8px; align-self: center; }
+
+      .compare {
+        display: grid; grid-template-columns: 1fr 1fr;
+        border-top: 1px solid var(--color-hairline-soft);
+      }
+      .compare-cell { padding: 16px 24px; }
+      .compare-cell + .compare-cell { border-left: 1px solid var(--color-hairline-soft); }
+      .compare-cell .label {
+        font-size: 11px; font-weight: 500; letter-spacing: 1.5px;
+        text-transform: uppercase; color: var(--color-muted); margin-bottom: 8px;
+      }
+      .compare-cell .text { font-size: 15px; line-height: 1.55; color: var(--color-ink); }
+      .compare-cell .text.ok { color: var(--color-success); font-weight: 500; }
+      .compare-cell .text.diff strong { background: rgba(198, 69, 69, 0.12); color: var(--color-error); padding: 1px 4px; border-radius: 3px; }
+      .compare-cell .text.diff em { background: rgba(93, 184, 114, 0.12); color: var(--color-success); padding: 1px 4px; border-radius: 3px; font-style: normal; }
+
+      .explain {
+        padding: 16px 24px; font-size: 14px; line-height: 1.65;
+        color: var(--color-body);
+        border-top: 1px solid var(--color-hairline-soft);
+      }
+      .tags-row {
+        padding: 0 24px 16px;
+        display: flex; flex-wrap: wrap; gap: 6px;
+      }
+      .grade-foot {
+        padding: 14px 18px;
+        background: var(--color-surface-soft);
+        display: flex; flex-wrap: wrap; gap: 8px;
+        align-items: center;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top-nav">
+      <a class="brand" href="../index.html"><span class="brand-mark">✱</span> Echora</a>
+      <span class="breadcrumb"><a href="../index.html">原型索引</a> / Widget / grading-result</span>
+      <span class="spacer"></span>
+      <a class="btn btn-ghost btn-sm" href="../index.html">← 返回</a>
+    </header>
+
+    <div class="preview-shell" data-tab-group>
+      <div class="preview-head">
+        <div>
+          <div class="caption-upper muted">W · 05</div>
+          <h1 class="display-md">grading-result</h1>
+          <p class="lead">
+            批改结果卡片。顶部 4px 状态条颜色区分对错,大字得分,
+            用户答案 vs 参考表达对比,中文解析,12 类错误标签 chip,
+            底部快捷动作。
+          </p>
+        </div>
+        <div class="tabs">
+          <button data-tab="correct" class="active">答对 / 接近完美</button>
+          <button data-tab="warn">轻微问题</button>
+          <button data-tab="wrong">明显错误</button>
+        </div>
+      </div>
+
+      <!-- correct -->
+      <section data-tab-panel="correct" class="active preview-stage">
+        <div class="grade">
+          <div class="grade-bar ok"></div>
+          <div class="grade-head">
+            <div>
+              <div class="grade-score">
+                <span class="num ok">96</span>
+                <span class="denom">/ 100</span>
+                <span class="label">表达自然 · 语气得体</span>
+              </div>
+              <div class="caption muted" style="margin-top: 4px;">第 3 题 · 单词填空 · 难度 中</div>
+            </div>
+            <span class="badge badge-success">✓ 答对</span>
+          </div>
+          <div class="compare">
+            <div class="compare-cell">
+              <div class="label">你的答案</div>
+              <div class="text">I'd like a steak, medium-rare, please.</div>
+            </div>
+            <div class="compare-cell">
+              <div class="label">参考表达</div>
+              <div class="text ok">I'd like a steak, medium-rare, please.</div>
+            </div>
+          </div>
+          <div class="explain">
+            完美 ✨ 同时用对了<strong>礼貌请求 (I'd like + please)</strong> 和
+            <strong>熟度搭配 (medium-rare)</strong>。下一题我们试试"询问菜品做法"。
+          </div>
+          <div class="tags-row">
+            <span class="tag-chip ok">✓ politeness</span>
+            <span class="tag-chip ok">✓ collocation</span>
+          </div>
+          <div class="grade-foot">
+            <button class="btn btn-primary btn-sm">下一题 →</button>
+            <button class="btn btn-ghost btn-sm">查看上一题</button>
+            <span class="spacer"></span>
+            <button class="btn btn-ghost btn-sm" style="color: var(--color-primary);">🔍 这个搭配还能用在哪?</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- warn -->
+      <section data-tab-panel="warn" class="preview-stage">
+        <div class="grade">
+          <div class="grade-bar warn"></div>
+          <div class="grade-head">
+            <div>
+              <div class="grade-score">
+                <span class="num warn">75</span>
+                <span class="denom">/ 100</span>
+                <span class="label">基本对 · 可以更礼貌</span>
+              </div>
+              <div class="caption muted" style="margin-top: 4px;">第 2 题 · 半句翻译 · 难度 中</div>
+            </div>
+            <span class="badge badge-warn">轻微问题</span>
+          </div>
+          <div class="compare">
+            <div class="compare-cell">
+              <div class="label">你的答案</div>
+              <div class="text">I want a steak, medium.</div>
+            </div>
+            <div class="compare-cell">
+              <div class="label">参考表达</div>
+              <div class="text ok">I'd like a steak, medium-rare, please.</div>
+            </div>
+          </div>
+          <div class="explain">
+            在餐厅里 <strong>I'd like</strong> 比 <strong>I want</strong> 更礼貌;
+            "五分熟"接近 <strong>medium-rare</strong>,medium 偏向七分熟。
+          </div>
+          <div class="tags-row">
+            <span class="tag-chip">politeness</span>
+            <span class="tag-chip">collocation</span>
+          </div>
+          <div class="grade-foot">
+            <button class="btn btn-primary btn-sm">下一题 →</button>
+            <button class="btn btn-ghost btn-sm">再说一次</button>
+            <span class="spacer"></span>
+            <button class="btn btn-ghost btn-sm" style="color: var(--color-primary);">为什么用 I'd like?</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- wrong -->
+      <section data-tab-panel="wrong" class="preview-stage">
+        <div class="grade">
+          <div class="grade-bar bad"></div>
+          <div class="grade-head">
+            <div>
+              <div class="grade-score">
+                <span class="num bad">52</span>
+                <span class="denom">/ 100</span>
+                <span class="label">意思能懂 · 语法有几个小坑</span>
+              </div>
+              <div class="caption muted" style="margin-top: 4px;">第 4 题 · 整句翻译 · 难度 中</div>
+            </div>
+            <span class="badge badge-error">✗ 待加强</span>
+          </div>
+          <div class="compare">
+            <div class="compare-cell">
+              <div class="label">你的答案</div>
+              <div class="text diff">
+                Can you bring me the menu? I <strong>want order</strong> soup.
+              </div>
+            </div>
+            <div class="compare-cell">
+              <div class="label">参考表达</div>
+              <div class="text diff">
+                Could I see the menu? I'd like <em>to order</em> soup.
+              </div>
+            </div>
+          </div>
+          <div class="explain">
+            两个小问题:
+            <ol style="margin: 8px 0; padding-left: 20px;">
+              <li><strong>I want order</strong> 缺了 <em>to</em>,正确是 <em>I want to order</em>;
+                餐厅里用 <em>I'd like to order</em> 更礼貌。</li>
+              <li>"拿菜单"用 <em>Could I see the menu?</em> 比 <em>Can you bring me</em> 自然得多。</li>
+            </ol>
+          </div>
+          <div class="tags-row">
+            <span class="tag-chip bad">missing_word (to)</span>
+            <span class="tag-chip bad">politeness</span>
+            <span class="tag-chip bad">collocation</span>
+          </div>
+          <div class="grade-foot">
+            <button class="btn btn-primary btn-sm">再说一次 ↻</button>
+            <button class="btn btn-secondary btn-sm">下一题</button>
+            <span class="spacer"></span>
+            <button class="btn btn-ghost btn-sm" style="color: var(--color-primary);">want / would like 区别?</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <aside class="spec">
+      <h3>结构</h3>
+      <ul>
+        <li><code>state-bar</code>: 顶部 4px 颜色条 (绿/黄/红)</li>
+        <li><code>grade-head</code>: 大字得分 + 状态徽章</li>
+        <li><code>compare</code>: 你的答案 vs 参考表达</li>
+        <li><code>explain</code>: 中文解析 (先肯定,再纠正,聚焦 1-2 点)</li>
+        <li><code>tags-row</code>: 12 类错误标签 chip</li>
+        <li><code>grade-foot</code>: 下一题 / 再说一次 / 追问入口</li>
+      </ul>
+      <h3>得分梯度</h3>
+      <ul>
+        <li>≥ 90 ok 绿 + ✓ 答对</li>
+        <li>60-89 warn 黄 + 轻微问题</li>
+        <li>&lt; 60 bad 红 + 待加强</li>
+      </ul>
+      <h3>关联 Skill</h3>
+      <p>grade。点"为什么"打开右侧支线,触发 explain Skill。点"再说一次"重置题目状态,不计入新题数。</p>
+    </aside>
+
+    <script src="../scripts/interactions.js"></script>
+  </body>
+</html>

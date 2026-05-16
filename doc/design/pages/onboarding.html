@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Echora · Onboarding</title>
+    <link rel="stylesheet" href="../styles/tokens.css" />
+    <link rel="stylesheet" href="../styles/components.css" />
+    <style>
+      .ob-shell {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      .ob-progress {
+        position: sticky;
+        top: 0;
+        background: var(--color-canvas);
+        border-bottom: 1px solid var(--color-hairline-soft);
+        padding: 12px 24px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+      .ob-progress .brand {
+        font-family: var(--font-display);
+        font-size: 18px;
+        letter-spacing: -0.2px;
+      }
+      .ob-steps {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        max-width: 480px;
+      }
+      .ob-step {
+        flex: 1;
+        height: 4px;
+        background: var(--color-hairline);
+        border-radius: var(--radius-pill);
+      }
+      .ob-step.done { background: var(--color-primary); }
+      .ob-step.active {
+        background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-primary) 60%, var(--color-hairline) 60%);
+      }
+      .ob-counter {
+        font-size: 13px;
+        color: var(--color-muted);
+        white-space: nowrap;
+      }
+      .ob-main {
+        flex: 1;
+        max-width: 720px;
+        width: 100%;
+        margin: 0 auto;
+        padding: 32px 24px 200px;
+      }
+      .ob-intro {
+        text-align: center;
+        margin-bottom: 40px;
+      }
+      .ob-intro h1 {
+        font-size: 32px;
+        line-height: 1.2;
+        letter-spacing: -0.4px;
+        margin-bottom: 8px;
+      }
+      .ob-intro p {
+        color: var(--color-muted);
+        font-size: 14px;
+      }
+
+      /* Profile collected pills */
+      .profile-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 24px;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        background: var(--color-surface-card);
+        border-radius: var(--radius-pill);
+        font-size: 13px;
+        color: var(--color-ink);
+      }
+      .pill .key { color: var(--color-muted); }
+
+      /* Input area */
+      .ob-input {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: linear-gradient(to top, var(--color-canvas) 60%, var(--color-canvas-fade));
+        padding: 24px 24px 32px;
+      }
+      .ob-input-inner {
+        max-width: 720px;
+        margin: 0 auto;
+      }
+      .input-shell {
+        background: var(--color-canvas);
+        border: 1px solid var(--color-hairline);
+        border-radius: var(--radius-lg);
+        padding: 12px;
+        display: flex;
+        gap: 8px;
+        align-items: flex-end;
+        box-shadow: var(--shadow-md);
+      }
+      .input-shell:focus-within {
+        border-color: var(--color-primary);
+        box-shadow: 0 0 0 3px rgba(204, 120, 92, 0.18), var(--shadow-md);
+      }
+      .input-shell textarea {
+        flex: 1;
+        border: 0;
+        background: transparent;
+        outline: none;
+        font-family: var(--font-body);
+        font-size: 15px;
+        line-height: 1.55;
+        color: var(--color-ink);
+        resize: none;
+        min-height: 24px;
+        max-height: 120px;
+        padding: 6px 4px;
+      }
+      .input-tip {
+        text-align: center;
+        margin-top: 10px;
+        font-size: 12px;
+        color: var(--color-muted-soft);
+      }
+
+      /* Quick reply chips */
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 16px 0 4px;
+      }
+      .chip {
+        padding: 8px 14px;
+        background: var(--color-canvas);
+        border: 1px solid var(--color-hairline);
+        border-radius: var(--radius-pill);
+        font-size: 14px;
+        color: var(--color-ink);
+        cursor: pointer;
+        transition: border-color 0.15s, background 0.15s;
+      }
+      .chip:hover {
+        border-color: var(--color-primary);
+      }
+      .chip.selected {
+        background: var(--color-primary);
+        color: var(--color-on-primary);
+        border-color: var(--color-primary);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="ob-shell">
+      <header class="ob-progress">
+        <span class="brand"><span class="brand-mark">✱</span> Echora</span>
+        <div class="ob-steps">
+          <span class="ob-step done"></span>
+          <span class="ob-step done"></span>
+          <span class="ob-step active"></span>
+          <span class="ob-step"></span>
+        </div>
+        <span class="ob-counter">3 / 4 · 了解你</span>
+      </header>
+
+      <main class="ob-main">
+        <div class="ob-intro">
+          <h1 class="h-display">先认识一下,我是 Echo</h1>
+          <p>这几个问题帮我推荐最合适的场景,大约 60 秒</p>
+        </div>
+
+        <!-- 已收集画像 -->
+        <div class="profile-pills">
+          <span class="pill"><span class="key">姓名</span> 林同学</span>
+          <span class="pill"><span class="key">年龄</span> 17</span>
+          <span class="pill"><span class="key">年级</span> 高二</span>
+        </div>
+
+        <!-- 对话历史 -->
+        <div class="msg msg-ai">
+          <div class="msg-bubble">
+            你好!我是 Echo,你的英语对话教练 👋<br />
+            我先问几个问题,等下就能给你挑场景。先告诉我,你叫什么呀?
+          </div>
+        </div>
+
+        <div class="msg msg-user">
+          <div class="msg-bubble">叫我 林同学 就行</div>
+        </div>
+
+        <div class="msg msg-ai">
+          <div class="msg-bubble">
+            好的,林同学。今年读哪个年级?
+          </div>
+        </div>
+
+        <div class="msg msg-user">
+          <div class="msg-bubble">高二</div>
+        </div>
+
+        <div class="msg msg-ai">
+          <div class="msg-bubble">
+            收到。最后一个问题: 你觉得自己当前的英语水平大概是什么样?
+            可以选下面这些,也可以直接告诉我。
+          </div>
+        </div>
+
+        <!-- 当前选择题 -->
+        <div class="chips">
+          <button class="chip">刚入门,简单对话还卡</button>
+          <button class="chip selected">能日常聊,语法常出错</button>
+          <button class="chip">能流畅交流,想更地道</button>
+          <button class="chip">准备考雅思 / 托福</button>
+        </div>
+
+        <div class="msg msg-system" style="margin-top: 24px;">
+          <div class="msg-bubble">
+            画像完成后,Echo 将自动推荐 3-5 个场景给你
+          </div>
+        </div>
+      </main>
+
+      <footer class="ob-input">
+        <div class="ob-input-inner">
+          <div class="input-shell">
+            <button class="btn-icon no-border" title="学习菜单">
+              <span class="iconish">☰</span>
+            </button>
+            <textarea placeholder="也可以直接打字告诉我..." rows="1"></textarea>
+            <button class="btn btn-primary btn-sm" disabled>
+              发送
+              <span class="iconish">→</span>
+            </button>
+          </div>
+          <div class="input-tip">Enter 发送 · Shift + Enter 换行</div>
+        </div>
+      </footer>
+    </div>
+    <script src="../scripts/interactions.js"></script>
+  </body>
+</html>

@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Echora · 输入区 4 种模式</title>
+    <link rel="stylesheet" href="../styles/tokens.css" />
+    <link rel="stylesheet" href="../styles/components.css" />
+    <link rel="stylesheet" href="../styles/widget-preview.css" />
+    <style>
+      .input-shell-mock {
+        background: var(--color-canvas);
+        border: 1px solid var(--color-hairline);
+        border-radius: var(--radius-lg);
+        padding: 14px;
+        box-shadow: var(--shadow-md);
+      }
+      .input-shell-mock.focused {
+        border-color: var(--color-primary);
+        box-shadow: 0 0 0 3px rgba(204, 120, 92, 0.15), var(--shadow-md);
+      }
+      .input-shell-mock textarea {
+        width: 100%;
+        min-height: 24px;
+        max-height: 160px;
+        border: 0;
+        background: transparent;
+        outline: none;
+        font-family: var(--font-body);
+        font-size: 15px;
+        line-height: 1.55;
+        color: var(--color-ink);
+        resize: none;
+        padding: 6px 4px;
+      }
+      .composer-row {
+        display: flex; gap: 8px; align-items: flex-end;
+      }
+      .mode-pill {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 4px 10px;
+        background: var(--color-surface-card);
+        border-radius: var(--radius-pill);
+        font-size: 12px;
+        color: var(--color-ink);
+      }
+      .mode-pill .ic { color: var(--color-primary); }
+      .mode-strip {
+        display: flex; align-items: center; gap: 8px;
+        margin-bottom: 8px;
+      }
+
+      /* fill mode */
+      .fill-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+      .fill-tab {
+        padding: 4px 10px;
+        background: var(--color-surface-soft);
+        border-radius: var(--radius-pill);
+        font-size: 12px;
+        color: var(--color-muted);
+        cursor: pointer;
+      }
+      .fill-tab.active {
+        background: var(--color-primary);
+        color: var(--color-on-primary);
+      }
+      .fill-input {
+        width: 100%;
+        height: 44px;
+        padding: 10px 14px;
+        background: var(--color-surface-soft);
+        border: 1px solid transparent;
+        border-radius: var(--radius-md);
+        font-family: var(--font-body);
+        font-size: 16px;
+        color: var(--color-ink);
+        outline: none;
+      }
+      .fill-input:focus {
+        border-color: var(--color-primary);
+        background: var(--color-canvas);
+      }
+      .fill-foot {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-top: 12px;
+      }
+
+      /* select mode */
+      .select-prompt {
+        font-size: 14px; color: var(--color-muted);
+        margin-bottom: 10px;
+      }
+      .select-options {
+        display: flex; flex-wrap: wrap; gap: 8px;
+      }
+      .select-options .opt {
+        padding: 10px 18px;
+        background: var(--color-canvas);
+        border: 1px solid var(--color-hairline);
+        border-radius: var(--radius-pill);
+        font-size: 14px;
+        color: var(--color-ink);
+        cursor: pointer;
+        transition: border-color 0.15s, transform 0.15s;
+        font-family: var(--font-body);
+      }
+      .select-options .opt:hover {
+        border-color: var(--color-primary);
+        transform: translateY(-1px);
+      }
+      .select-options .opt-custom {
+        background: transparent;
+        color: var(--color-muted);
+        border-style: dashed;
+      }
+
+      /* menu mode (popover) */
+      .menu-stage {
+        position: relative;
+        height: 220px;
+      }
+      .menu-pop {
+        position: absolute;
+        bottom: 64px;
+        left: 16px;
+        background: var(--color-canvas);
+        border: 1px solid var(--color-hairline);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-popover);
+        min-width: 240px;
+        padding: 8px;
+        z-index: 5;
+      }
+      .menu-pop .menu-row {
+        display: flex; align-items: center; gap: 12px;
+        padding: 9px 12px;
+        border-radius: var(--radius-sm);
+        font-size: 14px;
+        color: var(--color-body);
+        cursor: pointer;
+      }
+      .menu-pop .menu-row:hover { background: var(--color-surface-soft); color: var(--color-ink); }
+      .menu-pop .menu-row .ic {
+        color: var(--color-primary);
+        width: 18px; text-align: center;
+      }
+      .menu-section-title {
+        padding: 6px 10px;
+        font-size: 11px; font-weight: 500; letter-spacing: 1.5px;
+        text-transform: uppercase; color: var(--color-muted-soft);
+      }
+      .menu-anchor {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top-nav">
+      <a class="brand" href="../index.html"><span class="brand-mark">✱</span> Echora</a>
+      <span class="breadcrumb"><a href="../index.html">原型索引</a> / 控件 / 输入区模式</span>
+      <span class="spacer"></span>
+      <a class="btn btn-ghost btn-sm" href="../index.html">← 返回</a>
+    </header>
+
+    <div class="preview-shell" data-tab-group>
+      <div class="preview-head">
+        <div>
+          <div class="caption-upper muted">CTRL · 01</div>
+          <h1 class="display-md">输入区 · 4 种模式</h1>
+          <p class="lead">
+            输入区根据当前题型 / Skill 自动切换 4 种模式。
+            模式切换由系统 (SkillEvent · mode-switch) 驱动,用户不直接操控模式名。
+          </p>
+        </div>
+        <div class="tabs">
+          <button data-tab="chat" class="active">chat</button>
+          <button data-tab="fill">fill</button>
+          <button data-tab="select">select</button>
+          <button data-tab="menu">menu</button>
+        </div>
+      </div>
+
+      <!-- chat -->
+      <section data-tab-panel="chat" class="active preview-stage">
+        <div class="mode-strip">
+          <span class="mode-pill"><span class="ic">💬</span> CHAT 模式 (默认)</span>
+          <span class="caption muted">自由文本 · Enter 发送</span>
+        </div>
+        <div class="input-shell-mock focused">
+          <div class="composer-row">
+            <button class="btn-icon no-border"><span class="iconish">☰</span></button>
+            <textarea placeholder="说点什么... (Enter 发送, Shift+Enter 换行)" rows="1">I'd like a steak, medium-rare, please.</textarea>
+            <button class="btn btn-ghost btn-sm" title="停止生成">■</button>
+            <button class="btn btn-primary btn-sm">发送 →</button>
+          </div>
+        </div>
+        <div class="caption muted-soft" style="text-align: center; margin-top: 10px;">
+          AI 生成时,发送按钮 → 停止按钮
+        </div>
+
+        <hr class="divider" style="margin: 32px 0 24px;" />
+        <div class="caption-upper muted" style="margin-bottom: 12px;">空状态 · 等待输入</div>
+        <div class="input-shell-mock">
+          <div class="composer-row">
+            <button class="btn-icon no-border"><span class="iconish">☰</span></button>
+            <textarea placeholder="说点什么..." rows="1"></textarea>
+            <button class="btn btn-primary btn-sm" disabled>发送 →</button>
+          </div>
+        </div>
+
+        <hr class="divider" style="margin: 32px 0 24px;" />
+        <div class="caption-upper muted" style="margin-bottom: 12px;">AI 生成中</div>
+        <div class="input-shell-mock">
+          <div class="composer-row">
+            <button class="btn-icon no-border"><span class="iconish">☰</span></button>
+            <textarea placeholder="Echo 正在生成..." rows="1" disabled></textarea>
+            <button class="btn btn-secondary btn-sm">■ 停止</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- fill -->
+      <section data-tab-panel="fill" class="preview-stage">
+        <div class="mode-strip">
+          <span class="mode-pill"><span class="ic">▣</span> FILL 模式</span>
+          <span class="caption muted">填空题触发 · Tab 切空</span>
+        </div>
+        <div class="input-shell-mock focused">
+          <div class="fill-tabs">
+            <span class="fill-tab active">空 1 · 熟度</span>
+            <span class="fill-tab">空 2 · 礼貌词</span>
+          </div>
+          <input class="fill-input" placeholder="输入第 1 空,例: medium-rare" value="medium-rare" />
+          <div class="fill-foot">
+            <span class="caption muted">已填 1 / 2 · Tab 切到下一空</span>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-ghost btn-sm">提示</button>
+              <button class="btn btn-secondary btn-sm">跳过</button>
+              <button class="btn btn-primary btn-sm">提交答案</button>
+            </div>
+          </div>
+        </div>
+
+        <hr class="divider" style="margin: 32px 0 24px;" />
+        <div class="caption-upper muted" style="margin-bottom: 12px;">所有空填完 · 可提交</div>
+        <div class="input-shell-mock focused">
+          <div class="fill-tabs">
+            <span class="fill-tab active" style="background: var(--color-success); color: white;">空 1 · ✓</span>
+            <span class="fill-tab" style="background: var(--color-success); color: white;">空 2 · ✓</span>
+          </div>
+          <div class="fill-foot" style="margin-top: 0;">
+            <span class="caption" style="color: var(--color-success);">✓ 全部填完,可提交</span>
+            <button class="btn btn-primary btn-sm">提交 (回车)</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- select -->
+      <section data-tab-panel="select" class="preview-stage">
+        <div class="mode-strip">
+          <span class="mode-pill"><span class="ic">●</span> SELECT 模式</span>
+          <span class="caption muted">场景选择 / 选择题 · 点击即触发</span>
+        </div>
+        <div class="input-shell-mock">
+          <div class="select-prompt">为你推荐这几个场景,点一下进入:</div>
+          <div class="select-options">
+            <button class="opt">🏫 校园对话</button>
+            <button class="opt">🍝 餐厅点餐</button>
+            <button class="opt">✈️ 旅行问路</button>
+            <button class="opt">🎬 影评讨论</button>
+            <button class="opt opt-custom">✏️ 自定义</button>
+          </div>
+        </div>
+        <div class="caption muted-soft" style="text-align: center; margin-top: 10px;">
+          点 "自定义" 切回 chat 模式自由输入
+        </div>
+
+        <hr class="divider" style="margin: 32px 0 24px;" />
+        <div class="caption-upper muted" style="margin-bottom: 12px;">选择题 · A/B/C/D</div>
+        <div class="input-shell-mock">
+          <div class="select-prompt">选出最合适的搭配:</div>
+          <div class="select-options">
+            <button class="opt"><strong>A</strong> &nbsp;in the table</button>
+            <button class="opt"><strong>B</strong> &nbsp;on the table</button>
+            <button class="opt"><strong>C</strong> &nbsp;at the table</button>
+            <button class="opt"><strong>D</strong> &nbsp;for the table</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- menu -->
+      <section data-tab-panel="menu" class="preview-stage">
+        <div class="mode-strip">
+          <span class="mode-pill"><span class="ic">☰</span> MENU 模式</span>
+          <span class="caption muted">点击 ☰ 触发 · Esc 关闭</span>
+        </div>
+        <div class="menu-stage">
+          <div class="menu-pop">
+            <div class="menu-section-title">学习</div>
+            <div class="menu-row"><span class="ic">▶</span> 开始练习</div>
+            <div class="menu-row"><span class="ic">📊</span> 查看复盘</div>
+            <div class="menu-row"><span class="ic">🔁</span> 复习薄弱点</div>
+            <div class="menu-row"><span class="ic">🎬</span> 换场景</div>
+            <hr class="divider" style="margin: 6px 0;" />
+            <div class="menu-row"><span class="ic">💾</span> 保存进度</div>
+          </div>
+          <div class="menu-anchor">
+            <div class="input-shell-mock">
+              <div class="composer-row">
+                <button class="btn-icon" style="color: var(--color-primary); border-color: var(--color-primary);"><span class="iconish">☰</span></button>
+                <textarea placeholder="选择菜单项,或继续打字..." rows="1"></textarea>
+                <button class="btn btn-primary btn-sm" disabled>发送 →</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <aside class="spec">
+      <h3>模式切换</h3>
+      <p>由 SkillEvent · <code>mode-switch</code> 触发,前端从 onSkillEvent 中接收新模式名,切换 InputArea 子组件。</p>
+      <h3>映射关系</h3>
+      <ul>
+        <li>onboarding / general-chat / explain / 翻译类题型 → <code>chat</code></li>
+        <li>fill / 短语填空 → <code>fill</code></li>
+        <li>scene-select / 选择填空 / intent-confirm → <code>select</code></li>
+        <li>用户点击 ☰ 按钮 → <code>menu</code> (临时叠加层,关闭后回到原模式)</li>
+      </ul>
+      <h3>键盘约定</h3>
+      <ul>
+        <li>chat: Enter 发送 · Shift+Enter 换行</li>
+        <li>fill: Tab / Shift+Tab 切空 · Enter (在最后一空) 提交</li>
+        <li>select: A/B/C/D 或 1/2/3/4 直选</li>
+        <li>menu: ↑↓ 选项 · Enter 触发 · Esc 关闭</li>
+      </ul>
+    </aside>
+
+    <script src="../scripts/interactions.js"></script>
+  </body>
+</html>

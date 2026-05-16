@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Echora · 复盘 / 学习报告</title>
+    <link rel="stylesheet" href="../styles/tokens.css" />
+    <link rel="stylesheet" href="../styles/components.css" />
+    <style>
+      html, body { height: 100%; }
+      body { display: flex; flex-direction: column; overflow: hidden; }
+      .chat-shell {
+        flex: 1;
+        display: grid;
+        grid-template-columns: var(--layout-col-history) minmax(0, 1fr) 0;
+        min-height: 0;
+      }
+      .top-nav .nav-tab { font-size: 14px; color: var(--color-muted); padding: 4px 12px; border-radius: var(--radius-md); }
+      .top-nav .nav-tab.active { background: var(--color-surface-card); color: var(--color-ink); }
+      .top-nav .session-title { font-size: 14px; color: var(--color-body-strong); font-weight: 500; margin-left: 16px; }
+
+      .col-history {
+        background: var(--color-surface-soft);
+        border-right: 1px solid var(--color-hairline-soft);
+        display: flex; flex-direction: column; min-height: 0;
+      }
+      .history-list { flex: 1; padding: 4px 8px 24px; overflow-y: auto; }
+      .history-section {
+        padding: 12px 12px 6px;
+        font-size: 11px; font-weight: 500; letter-spacing: 1.5px;
+        text-transform: uppercase; color: var(--color-muted-soft);
+      }
+      .conv-item {
+        display: flex; flex-direction: column; gap: 4px;
+        padding: 10px 12px; border-radius: var(--radius-md);
+      }
+      .conv-item.active { background: var(--color-canvas); box-shadow: var(--shadow-sm); }
+      .conv-item .conv-title { font-size: 14px; color: var(--color-ink); font-weight: 500; }
+      .conv-item .conv-meta { font-size: 12px; color: var(--color-muted); }
+      .new-chat-btn { margin: 12px; }
+
+      .col-main { display: flex; flex-direction: column; background: var(--color-canvas); min-width: 0; }
+      .main-scroll { flex: 1; overflow-y: auto; padding: 32px 0 16px; }
+      .main-inner { max-width: 720px; margin: 0 auto; padding: 0 24px; }
+
+      /* Progress summary */
+      .summary {
+        background: var(--color-canvas);
+        border: 1px solid var(--color-hairline);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+      }
+      .summary-head {
+        padding: 24px;
+        background: var(--color-surface-card);
+      }
+      .summary-head .session-meta { font-size: 12px; color: var(--color-muted); letter-spacing: 1.5px; text-transform: uppercase; }
+      .summary-head h2 {
+        margin-top: 6px;
+        font-size: 32px; line-height: 1.2; letter-spacing: -0.5px;
+      }
+      .summary-head .lead { color: var(--color-body); margin-top: 8px; font-size: 15px; line-height: 1.65; }
+
+      .stat-row {
+        display: grid; grid-template-columns: repeat(4, 1fr);
+        gap: 0;
+        border-top: 1px solid var(--color-hairline-soft);
+      }
+      .stat-cell {
+        padding: 18px 16px;
+        text-align: center;
+      }
+      .stat-cell + .stat-cell { border-left: 1px solid var(--color-hairline-soft); }
+      .stat-cell .num {
+        font-family: var(--font-display);
+        font-size: 36px; line-height: 1;
+        color: var(--color-ink);
+        letter-spacing: -0.5px;
+      }
+      .stat-cell .num.ok { color: var(--color-success); }
+      .stat-cell .num.warn { color: var(--color-warning); }
+      .stat-cell .num.bad { color: var(--color-error); }
+      .stat-cell .label {
+        font-size: 12px; color: var(--color-muted);
+        margin-top: 6px;
+      }
+      .stat-cell .delta {
+        font-size: 11px; margin-top: 2px;
+      }
+      .stat-cell .delta.up { color: var(--color-success); }
+      .stat-cell .delta.down { color: var(--color-error); }
+
+      .summary-section {
+        padding: 20px 24px;
+        border-top: 1px solid var(--color-hairline-soft);
+      }
+      .summary-section h3 {
+        font-size: 16px; line-height: 1.4; font-weight: 500;
+        font-family: var(--font-body);
+        color: var(--color-ink);
+        margin-bottom: 12px;
+      }
+
+      /* Mastery rings */
+      .mastery-grid {
+        display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+      }
+      .mastery-cell {
+        padding: 16px;
+        border: 1px solid var(--color-hairline);
+        border-radius: var(--radius-md);
+        background: var(--color-canvas);
+        display: flex; align-items: center; gap: 12px;
+      }
+      .ring {
+        position: relative;
+        width: 44px; height: 44px;
+        flex: none;
+      }
+      .ring svg { transform: rotate(-90deg); }
+      .ring .ring-num {
+        position: absolute;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--color-ink);
+      }
+      .mastery-cell .info .name { font-size: 14px; font-weight: 500; color: var(--color-ink); }
+      .mastery-cell .info .delta { font-size: 12px; color: var(--color-muted); margin-top: 2px; }
+
+      /* Strong / weak chips list */
+      .pts-list { display: flex; flex-wrap: wrap; gap: 8px; }
+      .pts-list .tag-chip { font-size: 13px; padding: 5px 12px; }
+
+      /* Suggested next */
+      .suggest-grid {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+      }
+      .suggest-card {
+        padding: 16px 18px;
+        background: var(--color-surface-soft);
+        border-radius: var(--radius-md);
+        border-left: 3px solid var(--color-primary);
+      }
+      .suggest-card .title { font-size: 14px; font-weight: 500; color: var(--color-ink); margin-bottom: 4px; }
+      .suggest-card .desc { font-size: 13px; color: var(--color-muted); line-height: 1.55; margin-bottom: 12px; }
+
+      .summary-foot {
+        padding: 16px 18px;
+        background: var(--color-surface-soft);
+        display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top-nav">
+      <a class="brand" href="../index.html"><span class="brand-mark">✱</span> Echora</a>
+      <div class="nav-tab active" style="margin-left: 24px;">学习</div>
+      <div class="nav-tab">设置</div>
+      <span class="session-title">餐厅点餐 · 第 3 轮</span>
+      <span class="badge badge-soft" style="margin-left: 8px;">reviewing</span>
+      <span class="spacer"></span>
+      <span class="badge badge-success">本轮已完成</span>
+      <span class="avatar" style="margin-left: 12px;">林</span>
+    </header>
+
+    <div class="chat-shell">
+      <aside class="col-history">
+        <button class="btn btn-secondary new-chat-btn">＋ 新建对话</button>
+        <div class="history-list scroll">
+          <div class="history-section">当前</div>
+          <div class="conv-item active">
+            <div class="conv-title">🍝 餐厅点餐</div>
+            <div class="conv-meta">第 3 轮 · 复盘中</div>
+          </div>
+          <div class="history-section">本周</div>
+          <div class="conv-item">
+            <div class="conv-title">🏫 校园对话</div>
+            <div class="conv-meta">昨天 · 平均 82</div>
+          </div>
+          <div class="conv-item">
+            <div class="conv-title">✈️ 旅行问路</div>
+            <div class="conv-meta">2 天前 · 平均 75</div>
+          </div>
+        </div>
+      </aside>
+
+      <main class="col-main">
+        <div class="main-scroll scroll">
+          <div class="main-inner">
+            <div class="msg msg-ai">
+              <div class="msg-bubble">本轮 5 题做完啦 ✨ 来看看这次的总结。</div>
+            </div>
+
+            <!-- progress-summary widget (full version) -->
+            <div class="msg msg-ai">
+              <div class="msg-bubble" style="padding: 0; max-width: 100%; background: transparent; border-left: 0;">
+                <div class="summary" style="border-left: 3px solid var(--color-primary);">
+                  <div class="summary-head">
+                    <div class="session-meta">学习报告 · 第 3 轮</div>
+                    <h2 class="h-display">餐厅点餐 · 进步明显</h2>
+                    <div class="lead">
+                      你这一轮主要练了<strong>礼貌请求</strong>和<strong>固定搭配</strong>;
+                      整体准确率比上次高 12 分,主要进步在 collocation 这一类。
+                    </div>
+                  </div>
+
+                  <div class="stat-row">
+                    <div class="stat-cell">
+                      <div class="num">5</div>
+                      <div class="label">题数</div>
+                      <div class="delta">本轮</div>
+                    </div>
+                    <div class="stat-cell">
+                      <div class="num ok">82</div>
+                      <div class="label">平均分</div>
+                      <div class="delta up">↑ 12</div>
+                    </div>
+                    <div class="stat-cell">
+                      <div class="num warn">2</div>
+                      <div class="label">薄弱点</div>
+                      <div class="delta">需关注</div>
+                    </div>
+                    <div class="stat-cell">
+                      <div class="num">3</div>
+                      <div class="label">达标场景</div>
+                      <div class="delta up">↑ 1</div>
+                    </div>
+                  </div>
+
+                  <!-- 掌握度 -->
+                  <div class="summary-section">
+                    <h3>掌握度变化</h3>
+                    <div class="mastery-grid">
+                      <div class="mastery-cell">
+                        <div class="ring">
+                          <svg width="44" height="44" viewBox="0 0 44 44">
+                            <circle class="ring-track" cx="22" cy="22" r="18" fill="none" stroke-width="4"/>
+                            <circle cx="22" cy="22" r="18" fill="none" stroke="#5db872" stroke-width="4" stroke-dasharray="113" stroke-dashoffset="22" stroke-linecap="round"/>
+                          </svg>
+                          <span class="ring-num">80</span>
+                        </div>
+                        <div class="info">
+                          <div class="name">politeness</div>
+                          <div class="delta" style="color: var(--color-success);">↑ 18 · 已掌握</div>
+                        </div>
+                      </div>
+                      <div class="mastery-cell">
+                        <div class="ring">
+                          <svg width="44" height="44" viewBox="0 0 44 44">
+                            <circle class="ring-track" cx="22" cy="22" r="18" fill="none" stroke-width="4"/>
+                            <circle cx="22" cy="22" r="18" fill="none" stroke="#cc785c" stroke-width="4" stroke-dasharray="113" stroke-dashoffset="46" stroke-linecap="round"/>
+                          </svg>
+                          <span class="ring-num">60</span>
+                        </div>
+                        <div class="info">
+                          <div class="name">collocation</div>
+                          <div class="delta" style="color: var(--color-success);">↑ 12 · 进步中</div>
+                        </div>
+                      </div>
+                      <div class="mastery-cell">
+                        <div class="ring">
+                          <svg width="44" height="44" viewBox="0 0 44 44">
+                            <circle class="ring-track" cx="22" cy="22" r="18" fill="none" stroke-width="4"/>
+                            <circle cx="22" cy="22" r="18" fill="none" stroke="#d4a017" stroke-width="4" stroke-dasharray="113" stroke-dashoffset="79" stroke-linecap="round"/>
+                          </svg>
+                          <span class="ring-num">30</span>
+                        </div>
+                        <div class="info">
+                          <div class="name">missing_word</div>
+                          <div class="delta">→ 0 · 仍薄弱</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 强弱项 -->
+                  <div class="summary-section">
+                    <h3>强项</h3>
+                    <div class="pts-list">
+                      <span class="tag-chip ok">✓ politeness · I'd like / Could I</span>
+                      <span class="tag-chip ok">✓ collocation · medium-rare / well-done</span>
+                    </div>
+                    <h3 style="margin-top: 16px;">需加强</h3>
+                    <div class="pts-list">
+                      <span class="tag-chip bad">missing_word · 不定式 to</span>
+                      <span class="tag-chip bad">preposition · in / on / at</span>
+                    </div>
+                  </div>
+
+                  <!-- 建议 -->
+                  <div class="summary-section">
+                    <h3>建议下一步</h3>
+                    <div class="suggest-grid">
+                      <div class="suggest-card">
+                        <div class="title">🎯 重练 missing_word</div>
+                        <div class="desc">基于本轮 2 道错题,生成 3 题专项练习,5 分钟搞定。</div>
+                        <button class="btn btn-primary btn-sm">开始重练</button>
+                      </div>
+                      <div class="suggest-card">
+                        <div class="title">🎬 换场景:咖啡店</div>
+                        <div class="desc">同样是服务场景,继续巩固 I'd like + please 的句式。</div>
+                        <button class="btn btn-secondary btn-sm">进入场景</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="summary-foot">
+                    <button class="btn btn-secondary btn-sm">📋 复制本轮总结</button>
+                    <button class="btn btn-ghost btn-sm">查看每道题详情</button>
+                    <span class="spacer"></span>
+                    <button class="btn btn-ghost btn-sm" style="color: var(--color-primary);">
+                      💾 保存到学习记录
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="msg msg-ai" style="margin-top: 16px;">
+              <div class="msg-bubble">
+                继续学习还是先休息?也可以直接告诉我"换个场景"或"重练错题"。
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 输入区 (chat 模式) -->
+        <div style="padding: 16px 24px 20px;">
+          <div style="max-width: 720px; margin: 0 auto;">
+            <!-- quick actions -->
+            <div style="display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
+              <button style="padding: 6px 12px; background: var(--color-canvas); border: 1px solid var(--color-hairline); border-radius: var(--radius-pill); font-size: 13px; color: var(--color-ink); cursor: pointer;">🎯 重练错题</button>
+              <button style="padding: 6px 12px; background: var(--color-canvas); border: 1px solid var(--color-hairline); border-radius: var(--radius-pill); font-size: 13px; color: var(--color-ink); cursor: pointer;">🎬 换个场景</button>
+              <button style="padding: 6px 12px; background: var(--color-canvas); border: 1px solid var(--color-hairline); border-radius: var(--radius-pill); font-size: 13px; color: var(--color-ink); cursor: pointer;">📊 查看本周总览</button>
+              <button style="padding: 6px 12px; background: var(--color-canvas); border: 1px solid var(--color-hairline); border-radius: var(--radius-pill); font-size: 13px; color: var(--color-ink); cursor: pointer;">💾 保存进度</button>
+            </div>
+            <div style="background: var(--color-canvas); border: 1px solid var(--color-hairline); border-radius: var(--radius-lg); padding: 12px; box-shadow: var(--shadow-md); display: flex; gap: 8px; align-items: flex-end;">
+              <button class="btn-icon no-border"><span class="iconish">☰</span></button>
+              <textarea style="flex: 1; border: 0; background: transparent; outline: none; font-family: var(--font-body); font-size: 15px; line-height: 1.55; color: var(--color-ink); resize: none; min-height: 24px; max-height: 100px; padding: 6px 4px;" placeholder="告诉 Echo 你想做什么..." rows="1"></textarea>
+              <button class="btn btn-primary btn-sm">发送 →</button>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+    <script src="../scripts/interactions.js"></script>
+  </body>
+</html>

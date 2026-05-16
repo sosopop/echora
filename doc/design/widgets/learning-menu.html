@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Widget · learning-menu</title>
+    <link rel="stylesheet" href="../styles/tokens.css" />
+    <link rel="stylesheet" href="../styles/components.css" />
+    <link rel="stylesheet" href="../styles/widget-preview.css" />
+  </head>
+  <body>
+    <header class="top-nav">
+      <a class="brand" href="../index.html"><span class="brand-mark">✱</span> Echora</a>
+      <span class="breadcrumb"><a href="../index.html">原型索引</a> / Widget / learning-menu</span>
+      <span class="spacer"></span>
+      <a class="btn btn-ghost btn-sm" href="../index.html">← 返回</a>
+    </header>
+
+    <div class="preview-shell" data-tab-group>
+      <div class="preview-head">
+        <div>
+          <div class="caption-upper muted">W · 09</div>
+          <h1 class="display-md">learning-menu</h1>
+          <p class="lead">
+            输入框左侧学习菜单。点击 ☰ 展开,显示当前
+            learningState 下可用的结构化动作。点击直接触发 Skill,
+            等价于走确定性路由 (无置信度判断)。
+          </p>
+        </div>
+        <div class="tabs">
+          <button data-tab="default" class="active">默认 (chat)</button>
+          <button data-tab="practicing">练习中</button>
+          <button data-tab="reviewing">复盘后</button>
+        </div>
+      </div>
+
+      <!-- default state -->
+      <section data-tab-panel="default" class="active preview-stage">
+        <div class="menu-stage">
+          <div class="menu-shell">
+            <div class="menu-handle">
+              <span class="badge badge-coral">悬浮于输入区左上方</span>
+            </div>
+            <div class="learning-menu">
+              <div class="menu-section-title">学习</div>
+              <div class="menu-row primary"><span class="ic">▶</span> 开始练习</div>
+              <div class="menu-row"><span class="ic">🎬</span> 换场景</div>
+              <div class="menu-row"><span class="ic">🔁</span> 复习薄弱点</div>
+              <hr class="divider" style="margin: 8px 0;" />
+              <div class="menu-section-title">复盘</div>
+              <div class="menu-row"><span class="ic">📊</span> 查看复盘</div>
+              <div class="menu-row"><span class="ic">📚</span> 历史会话</div>
+              <hr class="divider" style="margin: 8px 0;" />
+              <div class="menu-section-title">系统</div>
+              <div class="menu-row"><span class="ic">💾</span> 保存进度</div>
+              <div class="menu-row"><span class="ic">⚙</span> 设置</div>
+            </div>
+          </div>
+          <div class="menu-anchor">
+            <div class="composer-mock">
+              <span style="color: var(--color-primary); font-size: 16px;">☰</span>
+              <span class="caption muted">点击展开学习菜单</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- practicing -->
+      <section data-tab-panel="practicing" class="preview-stage">
+        <div class="menu-stage">
+          <div class="menu-shell">
+            <div class="menu-handle">
+              <span class="badge badge-coral">练习中 · 限制项</span>
+            </div>
+            <div class="learning-menu">
+              <div class="menu-section-title">本轮</div>
+              <div class="menu-row primary"><span class="ic">▶</span> 跳过这题</div>
+              <div class="menu-row"><span class="ic">💡</span> 需要更多提示</div>
+              <div class="menu-row"><span class="ic">😣</span> 太难了 (调低)</div>
+              <div class="menu-row"><span class="ic">😎</span> 太简单 (调高)</div>
+              <hr class="divider" style="margin: 8px 0;" />
+              <div class="menu-section-title">不可用</div>
+              <div class="menu-row disabled">
+                <span class="ic">🎬</span> 换场景
+                <span class="caption muted" style="margin-left: auto;">本轮结束后</span>
+              </div>
+              <div class="menu-row disabled">
+                <span class="ic">📚</span> 历史会话
+                <span class="caption muted" style="margin-left: auto;">完成本题后</span>
+              </div>
+            </div>
+          </div>
+          <div class="menu-anchor">
+            <div class="composer-mock">
+              <span style="color: var(--color-primary); font-size: 16px;">☰</span>
+              <span class="caption muted">练习中 · 仅显示安全动作</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- reviewing / awaiting_next -->
+      <section data-tab-panel="reviewing" class="preview-stage">
+        <div class="menu-stage">
+          <div class="menu-shell">
+            <div class="menu-handle">
+              <span class="badge badge-coral">复盘中</span>
+            </div>
+            <div class="learning-menu">
+              <div class="menu-section-title">下一步</div>
+              <div class="menu-row primary"><span class="ic">🎯</span> 重练错题</div>
+              <div class="menu-row"><span class="ic">▶</span> 继续这个场景</div>
+              <div class="menu-row"><span class="ic">🎬</span> 换个场景</div>
+              <hr class="divider" style="margin: 8px 0;" />
+              <div class="menu-section-title">复盘</div>
+              <div class="menu-row"><span class="ic">📊</span> 看完整报告</div>
+              <div class="menu-row"><span class="ic">🔍</span> 查看每题详情</div>
+              <div class="menu-row"><span class="ic">📋</span> 复制本轮总结</div>
+              <hr class="divider" style="margin: 8px 0;" />
+              <div class="menu-row"><span class="ic">💾</span> 保存到学习记录</div>
+            </div>
+          </div>
+          <div class="menu-anchor">
+            <div class="composer-mock">
+              <span style="color: var(--color-primary); font-size: 16px;">☰</span>
+              <span class="caption muted">awaiting_next · 提供下一步引导</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <style>
+      .menu-stage {
+        position: relative;
+        min-height: 460px;
+      }
+      .menu-shell {
+        position: absolute;
+        bottom: 70px;
+        left: 16px;
+        background: var(--color-canvas);
+        border: 1px solid var(--color-hairline);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-popover);
+        min-width: 260px;
+        z-index: 5;
+        overflow: hidden;
+      }
+      .menu-handle {
+        padding: 8px 10px;
+        background: var(--color-surface-soft);
+        border-bottom: 1px solid var(--color-hairline-soft);
+      }
+      .learning-menu { padding: 8px; }
+      .menu-section-title {
+        padding: 6px 10px;
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        color: var(--color-muted-soft);
+      }
+      .menu-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 9px 12px;
+        border-radius: var(--radius-sm);
+        font-size: 14px;
+        color: var(--color-body);
+        cursor: pointer;
+      }
+      .menu-row:hover { background: var(--color-surface-soft); color: var(--color-ink); }
+      .menu-row.primary { color: var(--color-ink); font-weight: 500; }
+      .menu-row.disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .menu-row.disabled:hover { background: transparent; }
+      .menu-row .ic {
+        width: 18px;
+        font-size: 14px;
+        text-align: center;
+        color: var(--color-primary);
+      }
+      .menu-anchor {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+      }
+      .composer-mock {
+        background: var(--color-canvas);
+        border: 1px solid var(--color-hairline);
+        border-radius: var(--radius-lg);
+        padding: 14px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+    </style>
+
+    <aside class="spec">
+      <h3>位置</h3>
+      <p>悬浮于输入框左上方,距离输入区下边缘 8px。点击外部或 Esc 关闭。</p>
+      <h3>状态适配</h3>
+      <ul>
+        <li><code>onboarding</code>: 仅显示"了解你"流程相关项</li>
+        <li><code>scene_selecting</code>: 推荐场景 / 自定义</li>
+        <li><code>practicing</code>: 跳题 / 提示 / 难度调整</li>
+        <li><code>grading</code>: 完全锁定,不显示菜单</li>
+        <li><code>awaiting_next</code> / <code>reviewing</code>: 下一步引导 + 复盘动作</li>
+      </ul>
+      <h3>语义</h3>
+      <p>菜单点击 = 结构化 action,不经过 AI Router 的 confidence 判断,直接走确定性路由。</p>
+    </aside>
+
+    <script src="../scripts/interactions.js"></script>
+  </body>
+</html>

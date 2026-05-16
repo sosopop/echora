@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Echora · 原型索引</title>
+    <link rel="stylesheet" href="styles/tokens.css" />
+    <link rel="stylesheet" href="styles/components.css" />
+    <style>
+      .index-shell {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 56px 32px 96px;
+      }
+      .index-hero {
+        margin-bottom: 56px;
+      }
+      .index-hero .eyebrow {
+        display: inline-block;
+        margin-bottom: 16px;
+      }
+      .index-hero h1 {
+        font-size: 56px;
+        line-height: 1.05;
+        letter-spacing: -1.4px;
+        margin-bottom: 20px;
+      }
+      .index-hero p {
+        max-width: 560px;
+        font-size: 17px;
+        line-height: 1.65;
+        color: var(--color-body);
+        margin: 0;
+      }
+      .section {
+        margin-top: 48px;
+      }
+      .section-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        margin-bottom: 20px;
+      }
+      .section-head h2 {
+        font-size: 24px;
+        letter-spacing: -0.3px;
+      }
+      .grid {
+        display: grid;
+        gap: 16px;
+      }
+      .grid-pages {
+        grid-template-columns: repeat(3, 1fr);
+      }
+      .grid-widgets {
+        grid-template-columns: repeat(4, 1fr);
+      }
+      @media (max-width: 900px) {
+        .grid-pages { grid-template-columns: repeat(2, 1fr); }
+        .grid-widgets { grid-template-columns: repeat(2, 1fr); }
+      }
+      @media (max-width: 560px) {
+        .grid-pages, .grid-widgets { grid-template-columns: 1fr; }
+        .index-hero h1 { font-size: 40px; }
+      }
+      .nav-card {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 18px 20px;
+        background: var(--color-canvas);
+        border: 1px solid var(--color-hairline);
+        border-radius: var(--radius-lg);
+        color: var(--color-ink);
+        text-decoration: none;
+        transition: border-color 0.15s, transform 0.15s;
+      }
+      .nav-card:hover {
+        text-decoration: none;
+        border-color: var(--color-primary);
+        transform: translateY(-1px);
+      }
+      .nav-card .nav-title {
+        font-size: 15px;
+        font-weight: 500;
+      }
+      .nav-card .nav-desc {
+        font-size: 13px;
+        color: var(--color-muted);
+        line-height: 1.5;
+      }
+      .nav-card .nav-id {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--color-muted-soft);
+        letter-spacing: 0.4px;
+      }
+      .nav-card-dark {
+        background: var(--color-surface-dark);
+        color: var(--color-on-dark);
+        border-color: transparent;
+      }
+      .nav-card-dark .nav-desc { color: var(--color-on-dark-soft); }
+      .nav-card-dark .nav-id { color: var(--color-on-dark-soft); }
+      .footer-note {
+        margin-top: 64px;
+        padding-top: 24px;
+        border-top: 1px solid var(--color-hairline-soft);
+        font-size: 13px;
+        color: var(--color-muted);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="index-shell">
+      <header class="index-hero">
+        <span class="badge badge-coral eyebrow">Echora · V1 MVP 原型</span>
+        <h1>对话即界面，<br />一位英语教练在等你练习。</h1>
+        <p>
+          本目录是 Echora 前端原型的导航入口。包含主要页面、12 种 Widget
+          组件、4 种输入区模式以及设计 Token 与基础控件库。所有原型遵循
+          <code style="font-family: var(--font-mono); color: var(--color-primary);">DESIGN.md</code>
+          的暖陶土色 + 纸张感视觉语言，
+          <strong>支持明 / 暗双主题</strong>
+          （右上角 🌙 / ☀ 切换或跟随系统），仅含必要的轻交互。
+        </p>
+      </header>
+
+      <!-- —— 主要页面 ———————————————————————————————————— -->
+      <section class="section">
+        <div class="section-head">
+          <h2>主要页面</h2>
+          <span class="caption">page</span>
+        </div>
+        <div class="grid grid-pages">
+          <a class="nav-card" href="pages/login.html">
+            <span class="nav-id">PAGE · 01</span>
+            <span class="nav-title">登录</span>
+            <span class="nav-desc">邮箱密码登录,呼应 account-gate Widget</span>
+          </a>
+          <a class="nav-card" href="pages/register.html">
+            <span class="nav-id">PAGE · 02</span>
+            <span class="nav-title">注册</span>
+            <span class="nav-desc">新账号创建,引导到 Onboarding</span>
+          </a>
+          <a class="nav-card" href="pages/onboarding.html">
+            <span class="nav-id">PAGE · 03</span>
+            <span class="nav-title">Onboarding · 画像收集</span>
+            <span class="nav-desc">AI 对话式收集姓名/年级/英语水平</span>
+          </a>
+          <a class="nav-card nav-card-dark" href="pages/chat-desktop.html">
+            <span class="nav-id">PAGE · 04</span>
+            <span class="nav-title">桌面端 · 对话主流</span>
+            <span class="nav-desc">三栏布局: 历史 240 + 主流 720 + 辅助 360</span>
+          </a>
+          <a class="nav-card" href="pages/chat-with-branch.html">
+            <span class="nav-id">PAGE · 05</span>
+            <span class="nav-title">桌面端 · 辅助追问展开</span>
+            <span class="nav-desc">右侧支线打开,主线不受干扰</span>
+          </a>
+          <a class="nav-card" href="pages/chat-mobile.html">
+            <span class="nav-id">PAGE · 06</span>
+            <span class="nav-title">移动端 · 单栏 + 抽屉</span>
+            <span class="nav-desc">历史与辅助追问收纳为抽屉</span>
+          </a>
+          <a class="nav-card" href="pages/practice.html">
+            <span class="nav-id">PAGE · 07</span>
+            <span class="nav-title">练习中</span>
+            <span class="nav-desc">出题 + fill 模式输入区 + 流式生成态</span>
+          </a>
+          <a class="nav-card" href="pages/grading.html">
+            <span class="nav-id">PAGE · 08</span>
+            <span class="nav-title">批改完成</span>
+            <span class="nav-desc">批改卡片 + 错误标签 + 快捷动作</span>
+          </a>
+          <a class="nav-card" href="pages/review.html">
+            <span class="nav-id">PAGE · 09</span>
+            <span class="nav-title">复盘 / 学习报告</span>
+            <span class="nav-desc">progress-summary + 重练入口</span>
+          </a>
+        </div>
+      </section>
+
+      <!-- —— 12 种 Widget ——————————————————————————————— -->
+      <section class="section">
+        <div class="section-head">
+          <h2>Widget 组件</h2>
+          <span class="caption">12 widgets · 含状态变体</span>
+        </div>
+        <div class="grid grid-widgets">
+          <a class="nav-card" href="widgets/scene-cards.html">
+            <span class="nav-id">W · 01</span>
+            <span class="nav-title">scene-cards</span>
+            <span class="nav-desc">场景推荐卡片组</span>
+          </a>
+          <a class="nav-card" href="widgets/exercise-card.html">
+            <span class="nav-id">W · 02</span>
+            <span class="nav-title">exercise-card</span>
+            <span class="nav-desc">练习题主卡片</span>
+          </a>
+          <a class="nav-card" href="widgets/fill-blank.html">
+            <span class="nav-id">W · 03</span>
+            <span class="nav-title">fill-blank</span>
+            <span class="nav-desc">填空输入区域</span>
+          </a>
+          <a class="nav-card" href="widgets/choice-question.html">
+            <span class="nav-id">W · 04</span>
+            <span class="nav-title">choice-question</span>
+            <span class="nav-desc">选择题按钮组</span>
+          </a>
+          <a class="nav-card" href="widgets/grading-result.html">
+            <span class="nav-id">W · 05</span>
+            <span class="nav-title">grading-result</span>
+            <span class="nav-desc">批改结果(对/错变体)</span>
+          </a>
+          <a class="nav-card" href="widgets/progress-summary.html">
+            <span class="nav-id">W · 06</span>
+            <span class="nav-title">progress-summary</span>
+            <span class="nav-desc">学习进度摘要</span>
+          </a>
+          <a class="nav-card" href="widgets/answer-review.html">
+            <span class="nav-id">W · 07</span>
+            <span class="nav-title">answer-review</span>
+            <span class="nav-desc">单题回看卡片</span>
+          </a>
+          <a class="nav-card" href="widgets/intent-confirm.html">
+            <span class="nav-id">W · 08</span>
+            <span class="nav-title">intent-confirm</span>
+            <span class="nav-desc">低置信度意图确认</span>
+          </a>
+          <a class="nav-card" href="widgets/learning-menu.html">
+            <span class="nav-id">W · 09</span>
+            <span class="nav-title">learning-menu</span>
+            <span class="nav-desc">输入框左侧学习菜单</span>
+          </a>
+          <a class="nav-card" href="widgets/account-gate.html">
+            <span class="nav-id">W · 10</span>
+            <span class="nav-title">account-gate</span>
+            <span class="nav-desc">登录/保存进度提示</span>
+          </a>
+          <a class="nav-card" href="widgets/follow-up-source.html">
+            <span class="nav-id">W · 11</span>
+            <span class="nav-title">follow-up-source</span>
+            <span class="nav-desc">辅助追问来源提示</span>
+          </a>
+          <a class="nav-card" href="widgets/conversation-lock.html">
+            <span class="nav-id">W · 12</span>
+            <span class="nav-title">conversation-lock</span>
+            <span class="nav-desc">历史答案锁定提示</span>
+          </a>
+        </div>
+      </section>
+
+      <!-- —— 输入区模式 ————————————————————————————————— -->
+      <section class="section">
+        <div class="section-head">
+          <h2>输入区模式</h2>
+          <span class="caption">chat · fill · select · menu</span>
+        </div>
+        <div class="grid grid-pages">
+          <a class="nav-card" href="controls/input-modes.html">
+            <span class="nav-id">CTRL · 01</span>
+            <span class="nav-title">4 种输入模式集合</span>
+            <span class="nav-desc">同页 tab 切换四种状态对照</span>
+          </a>
+        </div>
+      </section>
+
+      <!-- —— Token & 基础控件 —————————————————————————————— -->
+      <section class="section">
+        <div class="section-head">
+          <h2>设计 Token 与基础控件</h2>
+          <span class="caption">color / type / button / badge / input</span>
+        </div>
+        <div class="grid grid-pages">
+          <a class="nav-card" href="controls/tokens.html">
+            <span class="nav-id">CTRL · 02</span>
+            <span class="nav-title">Token & 控件库</span>
+            <span class="nav-desc">色卡、字体、按钮、徽章、输入示例</span>
+          </a>
+        </div>
+      </section>
+
+      <p class="footer-note">
+        所有原型为静态 HTML + CSS,辅以最小 JS 实现 tab 切换、抽屉、popover
+        与<strong>主题切换</strong>。主题默认跟随
+        <code style="font-family: var(--font-mono);">prefers-color-scheme</code>,
+        手动选择写入 <code style="font-family: var(--font-mono);">localStorage.echora-theme</code>。
+        原型不承载真实业务逻辑,内容为占位文案,实现以
+        <code style="font-family: var(--font-mono);">doc/prd.md</code>
+        与
+        <code style="font-family: var(--font-mono);">DESIGN.md</code>
+        为准。
+      </p>
+    </div>
+    <script src="scripts/interactions.js"></script>
+  </body>
+</html>

@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Echora · 练习中</title>
+    <link rel="stylesheet" href="../styles/tokens.css" />
+    <link rel="stylesheet" href="../styles/components.css" />
+    <style>
+      html, body { height: 100%; }
+      body { display: flex; flex-direction: column; overflow: hidden; }
+
+      .chat-shell {
+        flex: 1;
+        display: grid;
+        grid-template-columns: var(--layout-col-history) minmax(0, 1fr) 0;
+        min-height: 0;
+      }
+      .top-nav .nav-tab { font-size: 14px; color: var(--color-muted); padding: 4px 12px; border-radius: var(--radius-md); }
+      .top-nav .nav-tab.active { background: var(--color-surface-card); color: var(--color-ink); }
+      .top-nav .session-title { font-size: 14px; color: var(--color-body-strong); font-weight: 500; margin-left: 16px; }
+
+      .col-history {
+        background: var(--color-surface-soft);
+        border-right: 1px solid var(--color-hairline-soft);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .history-list { flex: 1; padding: 4px 8px 24px; overflow-y: auto; }
+      .history-section {
+        padding: 12px 12px 6px;
+        font-size: 11px; font-weight: 500; letter-spacing: 1.5px;
+        text-transform: uppercase; color: var(--color-muted-soft);
+      }
+      .conv-item {
+        display: flex; flex-direction: column; gap: 4px;
+        padding: 10px 12px; border-radius: var(--radius-md);
+      }
+      .conv-item.active { background: var(--color-canvas); box-shadow: var(--shadow-sm); }
+      .conv-item .conv-title { font-size: 14px; color: var(--color-ink); font-weight: 500; }
+      .conv-item .conv-meta { font-size: 12px; color: var(--color-muted); }
+      .new-chat-btn { margin: 12px; }
+
+      .col-main { display: flex; flex-direction: column; background: var(--color-canvas); min-width: 0; }
+      .main-scroll { flex: 1; overflow-y: auto; padding: 32px 0 16px; }
+      .main-inner { max-width: 720px; margin: 0 auto; padding: 0 24px; }
+
+      /* Round counter */
+      .round-strip {
+        display: flex; align-items: center; gap: 8px;
+        padding: 8px 12px;
+        background: var(--color-surface-soft);
+        border-radius: var(--radius-pill);
+        font-size: 12px; color: var(--color-muted);
+        width: fit-content;
+        margin: 0 auto 24px;
+      }
+      .round-dots { display: flex; gap: 4px; }
+      .round-dot {
+        width: 6px; height: 6px; border-radius: 50%;
+        background: var(--color-hairline);
+      }
+      .round-dot.done { background: var(--color-success); }
+      .round-dot.cur { background: var(--color-primary); width: 24px; border-radius: var(--radius-pill); }
+
+      /* Locked history (conversation-lock widget) */
+      .lock-banner {
+        display: flex; align-items: center; gap: 10px;
+        margin: 0 24px 16px;
+        padding: 10px 14px;
+        background: var(--color-surface-soft);
+        border-radius: var(--radius-md);
+        border-left: 3px solid var(--color-accent-amber);
+        font-size: 13px;
+        color: var(--color-body);
+      }
+      .lock-banner .ic { color: var(--color-accent-amber); font-size: 14px; }
+
+      /* Fill mode template */
+      .fill-template {
+        font-size: 22px;
+        line-height: 1.7;
+        color: var(--color-ink);
+        background: var(--color-surface-soft);
+        padding: 20px 24px;
+        border-radius: var(--radius-lg);
+        margin-bottom: 12px;
+      }
+      .blank {
+        display: inline-block;
+        min-width: 120px;
+        padding: 4px 10px;
+        margin: 0 2px;
+        background: var(--color-canvas);
+        border-bottom: 2px solid var(--color-primary);
+        border-radius: 4px 4px 0 0;
+        font-family: var(--font-body);
+        font-size: 18px;
+        font-weight: 500;
+        color: var(--color-ink);
+        text-align: center;
+        outline: none;
+      }
+      .blank.empty { color: var(--color-muted-soft); }
+      .blank.active {
+        background: rgba(204, 120, 92, 0.12);
+        box-shadow: 0 0 0 3px rgba(204, 120, 92, 0.18);
+      }
+
+      /* Composer for FILL mode */
+      .composer { padding: 16px 24px 20px; }
+      .composer-inner { max-width: 720px; margin: 0 auto; }
+      .composer-shell {
+        background: var(--color-canvas);
+        border: 1px solid var(--color-hairline);
+        border-radius: var(--radius-lg);
+        padding: 14px;
+        box-shadow: var(--shadow-md);
+      }
+      .composer-shell.fill-mode { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(204, 120, 92, 0.12), var(--shadow-md); }
+      .fill-tabs {
+        display: flex; gap: 6px;
+        margin-bottom: 10px;
+      }
+      .fill-tab {
+        padding: 4px 10px;
+        background: var(--color-surface-soft);
+        border-radius: var(--radius-pill);
+        font-size: 12px;
+        color: var(--color-muted);
+        cursor: pointer;
+      }
+      .fill-tab.active {
+        background: var(--color-primary);
+        color: var(--color-on-primary);
+      }
+      .fill-input {
+        width: 100%;
+        height: 44px;
+        padding: 10px 14px;
+        background: var(--color-surface-soft);
+        border: 1px solid transparent;
+        border-radius: var(--radius-md);
+        font-family: var(--font-body);
+        font-size: 16px;
+        color: var(--color-ink);
+        outline: none;
+      }
+      .fill-input:focus {
+        border-color: var(--color-primary);
+        background: var(--color-canvas);
+      }
+      .fill-foot {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-top: 12px;
+      }
+      .fill-foot .meta { font-size: 12px; color: var(--color-muted); }
+
+      /* Mode indicator */
+      .mode-strip {
+        max-width: 720px;
+        margin: 0 auto 8px;
+        padding: 0 24px;
+        display: flex; align-items: center; gap: 8px;
+      }
+      .mode-pill {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 4px 10px;
+        background: var(--color-surface-card);
+        border-radius: var(--radius-pill);
+        font-size: 12px;
+        color: var(--color-ink);
+      }
+      .mode-pill .ic { color: var(--color-primary); }
+    </style>
+  </head>
+  <body>
+    <header class="top-nav">
+      <a class="brand" href="../index.html"><span class="brand-mark">✱</span> Echora</a>
+      <div class="nav-tab active" style="margin-left: 24px;">学习</div>
+      <div class="nav-tab">设置</div>
+      <span class="session-title">餐厅点餐 · 第 3 轮</span>
+      <span class="badge badge-coral" style="margin-left: 8px;">practicing</span>
+      <span class="spacer"></span>
+      <span class="badge badge-soft">第 3 / 5 题</span>
+      <span class="avatar" style="margin-left: 12px;">林</span>
+    </header>
+
+    <div class="chat-shell">
+      <aside class="col-history">
+        <button class="btn btn-secondary new-chat-btn" disabled>＋ 新建对话</button>
+        <div class="history-list scroll">
+          <div class="history-section">当前</div>
+          <div class="conv-item active">
+            <div class="conv-title">🍝 餐厅点餐</div>
+            <div class="conv-meta">第 3 轮 · 进行中</div>
+          </div>
+          <div class="history-section">本周 (练习中锁定)</div>
+          <div class="conv-item" style="opacity: 0.6;">
+            <div class="conv-title">🏫 校园对话 🔒</div>
+            <div class="conv-meta">完成本题后查看详情</div>
+          </div>
+          <div class="conv-item" style="opacity: 0.6;">
+            <div class="conv-title">✈️ 旅行问路 🔒</div>
+            <div class="conv-meta">完成本题后查看详情</div>
+          </div>
+        </div>
+      </aside>
+
+      <main class="col-main">
+        <div class="main-scroll scroll">
+          <div class="round-strip">
+            <span>第 3 轮 · 餐厅点餐</span>
+            <span style="margin: 0 4px;">·</span>
+            <span class="round-dots">
+              <span class="round-dot done"></span>
+              <span class="round-dot done"></span>
+              <span class="round-dot cur"></span>
+              <span class="round-dot"></span>
+              <span class="round-dot"></span>
+            </span>
+            <span>3 / 5</span>
+          </div>
+
+          <!-- 锁定提示 -->
+          <div class="lock-banner">
+            <span class="ic">🔒</span>
+            练习中:历史会话的答案、参考与批改详情已暂时隐藏,完成本轮后自动恢复。
+          </div>
+
+          <div class="main-inner">
+            <div class="msg msg-ai">
+              <div class="msg-bubble">前两题表现不错 ✨ 接下来第 3 题加点难度。</div>
+            </div>
+
+            <!-- exercise-card widget (fill 题型) -->
+            <div class="msg msg-ai">
+              <div class="msg-bubble" style="padding: 0; max-width: 100%; background: transparent; border-left: 0;">
+                <div class="widget" style="border-left: 3px solid var(--color-primary);">
+                  <div class="widget-head">
+                    <span class="badge badge-coral">第 3 题</span>
+                    <span class="caption">单词填空 · 中等难度</span>
+                    <span class="spacer"></span>
+                    <span class="badge badge-soft">collocation</span>
+                  </div>
+                  <div class="widget-body">
+                    <div class="caption muted" style="margin-bottom: 10px;">
+                      场景:你在牛排馆,告诉服务员你的偏好。把缺失的词补全。
+                    </div>
+                    <div class="fill-template">
+                      I'd
+                      <span class="blank">like</span>
+                      a steak,
+                      <span class="blank empty active">_____</span>,
+                      <span class="blank empty">_____</span>
+                      .
+                    </div>
+                    <div class="caption muted">
+                      💡 提示: 第 1 空填熟度 (五分熟),第 2 空填礼貌结尾词
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- AI 流式提示 -->
+            <div class="msg msg-ai">
+              <div class="msg-bubble">
+                把每个空填上后点击提交,我会逐空给反馈<span class="cursor"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 模式指示 -->
+        <div class="mode-strip">
+          <span class="mode-pill">
+            <span class="ic">▣</span>
+            FILL 模式 · 当前空 1 / 2
+          </span>
+          <span class="caption muted">Tab 切换空位</span>
+        </div>
+
+        <!-- 输入区 (fill mode) -->
+        <div class="composer">
+          <div class="composer-inner">
+            <div class="composer-shell fill-mode">
+              <div class="fill-tabs">
+                <span class="fill-tab active">空 1 · 熟度</span>
+                <span class="fill-tab">空 2 · 礼貌词</span>
+              </div>
+              <input class="fill-input" placeholder="输入第 1 空的内容,例: medium-rare" value="medium-rare" />
+              <div class="fill-foot">
+                <span class="meta">已填 1 / 2 · 按 Tab 切到下一空</span>
+                <div style="display: flex; gap: 8px;">
+                  <button class="btn btn-ghost btn-sm">提示</button>
+                  <button class="btn btn-secondary btn-sm">跳过</button>
+                  <button class="btn btn-primary btn-sm">
+                    提交答案
+                    <span class="iconish">→</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script src="../scripts/interactions.js"></script>
+  </body>
+</html>

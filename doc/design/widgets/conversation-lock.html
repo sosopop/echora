@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Widget · conversation-lock</title>
+    <link rel="stylesheet" href="../styles/tokens.css" />
+    <link rel="stylesheet" href="../styles/components.css" />
+    <link rel="stylesheet" href="../styles/widget-preview.css" />
+  </head>
+  <body>
+    <header class="top-nav">
+      <a class="brand" href="../index.html"><span class="brand-mark">✱</span> Echora</a>
+      <span class="breadcrumb"><a href="../index.html">原型索引</a> / Widget / conversation-lock</span>
+      <span class="spacer"></span>
+      <a class="btn btn-ghost btn-sm" href="../index.html">← 返回</a>
+    </header>
+
+    <div class="preview-shell" data-tab-group>
+      <div class="preview-head">
+        <div>
+          <div class="caption-upper muted">W · 12</div>
+          <h1 class="display-md">conversation-lock</h1>
+          <p class="lead">
+            历史答案锁定提示。
+            <code style="font-family: var(--font-mono); color: var(--color-primary);">practicing</code> /
+            <code style="font-family: var(--font-mono); color: var(--color-primary);">grading</code>
+            期间隐藏旧答案,防止抄袭。
+            <code style="font-family: var(--font-mono); color: var(--color-primary);">archived</code>
+            会话只读复盘。
+          </p>
+        </div>
+        <div class="tabs">
+          <button data-tab="banner" class="active">顶部横幅</button>
+          <button data-tab="bubble">气泡内</button>
+          <button data-tab="archived">已归档</button>
+          <button data-tab="list">列表项</button>
+        </div>
+      </div>
+
+      <!-- 顶部横幅 -->
+      <section data-tab-panel="banner" class="active preview-stage">
+        <div style="margin-bottom: 16px;">
+          <span class="caption-upper muted">练习中固定在主聊天区顶部</span>
+        </div>
+        <div class="lock-banner">
+          <span class="ic">🔒</span>
+          <div>
+            <div class="title">练习中 · 历史答案暂时隐藏</div>
+            <div class="desc">完成本轮后自动恢复,防止翻看旧答案抄袭</div>
+          </div>
+          <span class="spacer"></span>
+          <button class="btn btn-ghost btn-sm">了解更多</button>
+        </div>
+
+        <div style="margin: 32px 0 16px;">
+          <span class="caption-upper muted">不同状态变体</span>
+        </div>
+        <div class="lock-banner amber">
+          <span class="ic">⏳</span>
+          <div>
+            <div class="title">批改中 · 状态切换被暂停</div>
+            <div class="desc">grading 状态不可中途切到其他场景</div>
+          </div>
+        </div>
+
+        <div class="lock-banner soft" style="margin-top: 12px;">
+          <span class="ic">🔓</span>
+          <div>
+            <div class="title">已解锁 · 历史详情可查看</div>
+            <div class="desc">本轮已结束 (awaiting_next),完整答案恢复</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 气泡内 (在历史会话被打开时,把 user 答案换成锁定提示) -->
+      <section data-tab-panel="bubble" class="preview-stage">
+        <div style="max-width: 640px; margin: 0 auto;">
+          <div class="caption-upper muted" style="margin-bottom: 12px;">
+            练习中查看 < 校园对话 > 历史:
+          </div>
+
+          <div class="msg msg-ai">
+            <div class="msg-bubble">第 4 题 · 翻译: "我可以借一下你的笔吗?"</div>
+          </div>
+
+          <div class="msg msg-user">
+            <div class="msg-bubble locked-bubble">
+              <span class="ic">🔒</span>
+              <span class="muted">完成当前题后查看完整答案</span>
+            </div>
+          </div>
+
+          <div class="msg msg-ai">
+            <div class="msg-bubble locked-bubble">
+              <span class="ic">🔒</span>
+              <span class="muted">参考表达与批改详情已暂时隐藏</span>
+            </div>
+          </div>
+
+          <div class="msg msg-system">
+            <div class="msg-bubble">— 当前会话: 餐厅点餐 · 第 3 题进行中 —</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 已归档 -->
+      <section data-tab-panel="archived" class="preview-stage">
+        <div style="max-width: 640px; margin: 0 auto;">
+          <div class="lock-banner archived">
+            <span class="ic">📚</span>
+            <div>
+              <div class="title">已归档会话 · 只读模式</div>
+              <div class="desc">无法继续答题,但可作为新学习流的上下文引用</div>
+            </div>
+            <span class="spacer"></span>
+            <button class="btn btn-secondary btn-sm">📋 复制总结</button>
+            <button class="btn btn-primary btn-sm">基于此场景重练</button>
+          </div>
+
+          <div class="msg msg-ai" style="margin-top: 16px;">
+            <div class="msg-bubble">📌 这是已归档会话「校园对话 · 第 2 轮」的复盘视图。</div>
+          </div>
+
+          <div class="msg msg-system">
+            <div class="msg-bubble">— 完成时间: 5 月 15 日 19:47 · 平均 82 · 5 题 —</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 列表项变体 -->
+      <section data-tab-panel="list" class="preview-stage">
+        <div style="max-width: 320px;">
+          <div class="caption-upper muted" style="margin-bottom: 12px;">
+            左侧历史抽屉中的锁定状态:
+          </div>
+          <div class="conv-mini">
+            <div class="title">🍝 餐厅点餐</div>
+            <div class="meta">第 3 轮 · 进行中</div>
+          </div>
+          <div class="conv-mini locked">
+            <div class="title">🏫 校园对话 <span class="lock-ic">🔒</span></div>
+            <div class="meta">完成本题后查看详情</div>
+          </div>
+          <div class="conv-mini locked">
+            <div class="title">✈️ 旅行问路 <span class="lock-ic">🔒</span></div>
+            <div class="meta">完成本题后查看详情</div>
+          </div>
+          <div class="conv-mini archived">
+            <div class="title">📚 介词专项重练 <span class="caption muted-soft">归档</span></div>
+            <div class="meta">3 天前 · 完成</div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <style>
+      .lock-banner {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 14px 18px;
+        background: var(--color-surface-soft);
+        border-radius: var(--radius-md);
+        border-left: 3px solid var(--color-accent-amber);
+      }
+      .lock-banner .ic {
+        font-size: 20px;
+        color: var(--color-accent-amber);
+        flex: none;
+      }
+      .lock-banner .title {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--color-ink);
+      }
+      .lock-banner .desc {
+        font-size: 12px;
+        color: var(--color-muted);
+        margin-top: 2px;
+      }
+      .lock-banner.amber .ic { color: var(--color-warning); }
+      .lock-banner.amber { border-left-color: var(--color-warning); }
+      .lock-banner.soft { border-left-color: var(--color-success); }
+      .lock-banner.soft .ic { color: var(--color-success); }
+      .lock-banner.archived { border-left-color: var(--color-muted-soft); background: var(--color-surface-card); }
+      .lock-banner.archived .ic { color: var(--color-muted); }
+
+      .locked-bubble {
+        display: inline-flex !important;
+        align-items: center;
+        gap: 8px;
+        background: repeating-linear-gradient(
+          135deg,
+          var(--color-surface-soft),
+          var(--color-surface-soft) 8px,
+          var(--color-surface-card) 8px,
+          var(--color-surface-card) 16px
+        ) !important;
+        color: var(--color-muted) !important;
+        font-style: italic;
+        border: 1px dashed var(--color-hairline) !important;
+      }
+      .locked-bubble .ic { font-style: normal; }
+
+      .conv-mini {
+        padding: 12px 14px;
+        border-radius: var(--radius-md);
+        margin-bottom: 4px;
+        background: var(--color-canvas);
+      }
+      .conv-mini .title {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--color-ink);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .conv-mini .meta {
+        font-size: 12px;
+        color: var(--color-muted);
+        margin-top: 4px;
+      }
+      .conv-mini.locked {
+        opacity: 0.6;
+        background: transparent;
+      }
+      .conv-mini.locked .lock-ic {
+        font-size: 11px;
+        margin-left: auto;
+      }
+      .conv-mini.archived {
+        background: transparent;
+      }
+    </style>
+
+    <aside class="spec">
+      <h3>触发逻辑 (PRD §3.1)</h3>
+      <ul>
+        <li>当前 learningState 为 <code>practicing</code> 或 <code>grading</code>:历史答案隐藏</li>
+        <li>切到 <code>awaiting_next</code> 或 <code>reviewing</code>:历史详情恢复</li>
+        <li><code>archived</code> 会话永久只读,只能复盘或被引用</li>
+      </ul>
+      <h3>设计要点</h3>
+      <ul>
+        <li>锁定是<strong>系统规则</strong>,不由 AI 决定</li>
+        <li>AI 只能用文字解释为什么暂时不可查看</li>
+        <li>气泡内用斜纹底纹 + 虚线边框区分锁定态</li>
+        <li>不显示倒计时,避免给抄袭者计时</li>
+      </ul>
+    </aside>
+
+    <script src="../scripts/interactions.js"></script>
+  </body>
+</html>

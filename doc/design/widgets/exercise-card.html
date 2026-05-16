@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Widget · exercise-card</title>
+    <link rel="stylesheet" href="../styles/tokens.css" />
+    <link rel="stylesheet" href="../styles/components.css" />
+    <link rel="stylesheet" href="../styles/widget-preview.css" />
+  </head>
+  <body>
+    <header class="top-nav">
+      <a class="brand" href="../index.html"><span class="brand-mark">✱</span> Echora</a>
+      <span class="breadcrumb"><a href="../index.html">原型索引</a> / Widget / exercise-card</span>
+      <span class="spacer"></span>
+      <a class="btn btn-ghost btn-sm" href="../index.html">← 返回</a>
+    </header>
+
+    <div class="preview-shell" data-tab-group>
+      <div class="preview-head">
+        <div>
+          <div class="caption-upper muted">W · 02</div>
+          <h1 class="display-md">exercise-card</h1>
+          <p class="lead">
+            练习题主卡片。承载题干、上下文、提示与答题入口。根据题型嵌入
+            <code style="font-family: var(--font-mono); color: var(--color-primary);">fill-blank</code>
+            或 <code style="font-family: var(--font-mono); color: var(--color-primary);">choice-question</code>。
+          </p>
+        </div>
+        <div class="tabs">
+          <button data-tab="translate" class="active">半句翻译</button>
+          <button data-tab="fill">单词填空</button>
+          <button data-tab="dialog">对话接龙</button>
+        </div>
+      </div>
+
+      <!-- 半句翻译 (chat 模式) -->
+      <section data-tab-panel="translate" class="active preview-stage">
+        <div class="msg msg-ai" style="max-width: 100%;">
+          <div class="msg-bubble" style="padding: 0; max-width: 100%; background: transparent; border-left: 0;">
+            <div class="widget" style="border-left: 3px solid var(--color-primary);">
+              <div class="widget-head">
+                <span class="badge badge-coral">第 2 题</span>
+                <span class="caption">半句翻译 · 中等难度</span>
+                <span class="spacer"></span>
+                <span class="badge badge-soft">politeness</span>
+              </div>
+              <div class="widget-body">
+                <div class="caption muted" style="margin-bottom: 8px;">
+                  场景:你坐在餐厅,服务员刚把菜单递过来。
+                </div>
+                <div style="font-size: 17px; line-height: 1.65; color: var(--color-ink); margin-bottom: 12px;">
+                  把这一句礼貌地翻译成英文:
+                </div>
+                <div style="padding: 14px 18px; background: var(--color-surface-soft); border-radius: var(--radius-md); font-size: 17px; color: var(--color-ink);">
+                  能给我看一下今日特餐吗?
+                </div>
+                <div class="caption muted" style="margin-top: 12px;">
+                  💡 提示: 用 Could / Would 开头,语气更得体
+                </div>
+              </div>
+              <div class="widget-foot">
+                <span class="caption muted">在下方输入区作答 · 输入模式 · CHAT</span>
+                <span class="spacer"></span>
+                <button class="btn btn-ghost btn-sm">⏭ 跳过这题</button>
+                <button class="btn btn-ghost btn-sm">需要更多提示</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 填空 (fill 模式) -->
+      <section data-tab-panel="fill" class="preview-stage">
+        <div class="msg msg-ai" style="max-width: 100%;">
+          <div class="msg-bubble" style="padding: 0; max-width: 100%; background: transparent; border-left: 0;">
+            <div class="widget" style="border-left: 3px solid var(--color-primary);">
+              <div class="widget-head">
+                <span class="badge badge-coral">第 3 题</span>
+                <span class="caption">单词填空 · 2 个空</span>
+                <span class="spacer"></span>
+                <span class="badge badge-soft">collocation</span>
+              </div>
+              <div class="widget-body">
+                <div class="caption muted" style="margin-bottom: 12px;">
+                  把缺失的词补全:
+                </div>
+                <div class="fill-line">
+                  I'd
+                  <span class="fill-blank">like</span>
+                  a steak,
+                  <span class="fill-blank empty active">_____</span>,
+                  <span class="fill-blank empty">_____</span>
+                  .
+                </div>
+                <div class="caption muted" style="margin-top: 12px;">
+                  💡 第 1 空: 熟度 (五分熟) · 第 2 空: 礼貌结尾词
+                </div>
+              </div>
+              <div class="widget-foot">
+                <span class="caption muted">输入模式 · FILL · Tab 切换空位</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 对话接龙 -->
+      <section data-tab-panel="dialog" class="preview-stage">
+        <div class="msg msg-ai" style="max-width: 100%;">
+          <div class="msg-bubble" style="padding: 0; max-width: 100%; background: transparent; border-left: 0;">
+            <div class="widget" style="border-left: 3px solid var(--color-primary);">
+              <div class="widget-head">
+                <span class="badge badge-coral">第 4 题</span>
+                <span class="caption">对话接龙 · 角色扮演</span>
+              </div>
+              <div class="widget-body">
+                <div class="caption muted" style="margin-bottom: 12px;">
+                  服务员对你说:
+                </div>
+                <div style="padding: 14px 18px; background: var(--color-surface-card); border-radius: var(--radius-md) var(--radius-md) var(--radius-md) 4px; font-size: 16px; color: var(--color-ink); margin-bottom: 12px;">
+                  <strong style="color: var(--color-primary);">服务员:</strong>
+                  Would you like anything to drink with that?
+                </div>
+                <div style="font-size: 16px; color: var(--color-ink); margin-bottom: 8px;">
+                  你的回答 (用英文):
+                </div>
+                <div class="caption muted">
+                  💡 任务: 点一杯饮料 + 询问是否有特价
+                </div>
+              </div>
+              <div class="widget-foot">
+                <span class="caption muted">输入模式 · CHAT · 自由作答</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <aside class="spec">
+      <h3>结构</h3>
+      <ul>
+        <li><code>widget-head</code>: 题号 + 题型 + 核心知识标签</li>
+        <li><code>widget-body</code>: 场景描述 + 题干 + 提示</li>
+        <li><code>widget-foot</code>: 模式提示 + 跳过/更多提示按钮</li>
+      </ul>
+      <h3>题型映射输入模式</h3>
+      <ul>
+        <li>fill / 短语填空 → FILL 模式</li>
+        <li>选择填空 → SELECT 模式</li>
+        <li>翻译类 / 对话接龙 → CHAT 模式</li>
+      </ul>
+      <h3>关联 Skill</h3>
+      <p>practice。提交后由系统切换 learningState 到 <code>grading</code>,触发 grade Skill 输出 grading-result。</p>
+    </aside>
+
+    <script src="../scripts/interactions.js"></script>
+  </body>
+</html>

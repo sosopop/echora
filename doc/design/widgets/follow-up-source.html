@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Widget · follow-up-source</title>
+    <link rel="stylesheet" href="../styles/tokens.css" />
+    <link rel="stylesheet" href="../styles/components.css" />
+    <link rel="stylesheet" href="../styles/widget-preview.css" />
+  </head>
+  <body>
+    <header class="top-nav">
+      <a class="brand" href="../index.html"><span class="brand-mark">✱</span> Echora</a>
+      <span class="breadcrumb"><a href="../index.html">原型索引</a> / Widget / follow-up-source</span>
+      <span class="spacer"></span>
+      <a class="btn btn-ghost btn-sm" href="../index.html">← 返回</a>
+    </header>
+
+    <div class="preview-shell" data-tab-group>
+      <div class="preview-head">
+        <div>
+          <div class="caption-upper muted">W · 11</div>
+          <h1 class="display-md">follow-up-source</h1>
+          <p class="lead">
+            辅助追问来源提示。出现在右侧支线顶部,告诉用户当前追问继承自主线哪条消息 / 题目 / 批改。
+            支持快速回到主线对应位置。
+          </p>
+        </div>
+        <div class="tabs">
+          <button data-tab="grade" class="active">来自批改</button>
+          <button data-tab="exercise">来自题目</button>
+          <button data-tab="msg">来自消息</button>
+          <button data-tab="chain">解释链</button>
+        </div>
+      </div>
+
+      <!-- 来自批改 -->
+      <section data-tab-panel="grade" class="active preview-stage">
+        <div class="branch-mock">
+          <div class="branch-mock-head">
+            <span class="badge badge-coral" style="font-size: 10px;">支线</span>
+            <span class="title-sm">深入追问</span>
+            <button class="btn btn-icon no-border" style="margin-left: auto;">×</button>
+          </div>
+
+          <div class="follow-source">
+            <div class="src-label">↳ 来自:这次批改</div>
+            <div class="src-snippet">
+              <span class="muted">Q2 · 半句翻译</span>
+              <div style="margin-top: 4px;">
+                <span class="badge badge-warn" style="font-size: 11px;">75</span>
+                <span style="margin-left: 6px;">"我想要一份牛排,五分熟。"</span>
+              </div>
+            </div>
+            <div class="src-actions">
+              <button class="btn btn-ghost btn-sm">⬅ 回到主线</button>
+              <span class="spacer"></span>
+              <span class="caption muted">不计入薄弱点统计</span>
+            </div>
+          </div>
+
+          <div class="branch-msg-area">
+            <div style="padding: 10px 12px; background: var(--color-canvas); border-radius: var(--radius-md); border-left: 2px solid var(--color-primary); font-size: 14px;">
+              针对你想问的"为什么用 I'd like 而不是 I want?"...
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 来自题目 -->
+      <section data-tab-panel="exercise" class="preview-stage">
+        <div class="branch-mock">
+          <div class="branch-mock-head">
+            <span class="badge badge-coral" style="font-size: 10px;">支线</span>
+            <span class="title-sm">深入追问</span>
+            <button class="btn btn-icon no-border" style="margin-left: auto;">×</button>
+          </div>
+
+          <div class="follow-source">
+            <div class="src-label">↳ 来自:题目</div>
+            <div class="src-snippet">
+              <span class="muted">Q3 · 单词填空 · 进行中</span>
+              <div style="margin-top: 4px;">"I'd ___ a steak, ___, ___ ."</div>
+            </div>
+            <div class="src-actions">
+              <button class="btn btn-ghost btn-sm">⬅ 回到主线</button>
+              <span class="spacer"></span>
+              <span class="badge badge-warn" style="font-size: 11px;">⚠ 答题前不显示标准答案</span>
+            </div>
+          </div>
+
+          <div class="branch-msg-area">
+            <div style="padding: 10px 12px; background: var(--color-canvas); border-radius: var(--radius-md); border-left: 2px solid var(--color-primary); font-size: 14px; line-height: 1.6;">
+              我可以给你提示思路:第 1 空是动词原形,看场景里你"想要",
+              想想日常餐厅请求最常用哪个礼貌动词?
+              <em style="color: var(--color-muted); display: block; margin-top: 8px; font-size: 12px;">
+                (题目未提交前我不会给完整答案)
+              </em>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 来自任意消息 -->
+      <section data-tab-panel="msg" class="preview-stage">
+        <div class="branch-mock">
+          <div class="branch-mock-head">
+            <span class="badge badge-coral" style="font-size: 10px;">支线</span>
+            <span class="title-sm">深入追问</span>
+            <button class="btn btn-icon no-border" style="margin-left: auto;">×</button>
+          </div>
+
+          <div class="follow-source">
+            <div class="src-label">↳ 来自:Echo 的消息 · 14:42</div>
+            <div class="src-snippet">
+              "在餐厅里 I'd like 比 I want 更礼貌; 五分熟接近 medium-rare。"
+            </div>
+            <div class="src-actions">
+              <button class="btn btn-ghost btn-sm">⬅ 回到主线</button>
+              <span class="spacer"></span>
+              <button class="btn btn-ghost btn-sm">📌 加入复盘</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 解释链 -->
+      <section data-tab-panel="chain" class="preview-stage">
+        <div class="branch-mock">
+          <div class="branch-mock-head">
+            <span class="badge badge-coral" style="font-size: 10px;">支线</span>
+            <span class="title-sm">解释链</span>
+            <span class="badge badge-soft" style="margin-left: 8px;">3 层</span>
+            <button class="btn btn-icon no-border" style="margin-left: auto;">×</button>
+          </div>
+
+          <div class="follow-source">
+            <div class="src-label">↳ 来自:这次批改</div>
+            <div class="src-snippet">"为什么 I'd like 比 I want 更礼貌?"</div>
+          </div>
+
+          <div class="chain">
+            <div class="chain-step">
+              <span class="dot">1</span>
+              <div>"为什么 I'd like 比 I want 更礼貌?"</div>
+            </div>
+            <div class="chain-step">
+              <span class="dot">2</span>
+              <div>"那 in the morning 为什么用 in 不用 on?"</div>
+            </div>
+            <div class="chain-step current">
+              <span class="dot">3</span>
+              <div>"on Monday morning 又为什么用 on?"</div>
+            </div>
+          </div>
+
+          <div class="branch-msg-area">
+            <div style="padding: 10px 12px; background: var(--color-canvas); border-radius: var(--radius-md); border-left: 2px solid var(--color-primary); font-size: 14px;">
+              当 morning 跟 Monday 这种"具体某一天"绑定时,介词跟"具体那天"走,所以是 on。
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <style>
+      .branch-mock {
+        max-width: 420px;
+        background: var(--color-surface-soft);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        border: 1px solid var(--color-hairline-soft);
+      }
+      .branch-mock-head {
+        padding: 10px 14px;
+        background: var(--color-canvas);
+        border-bottom: 1px solid var(--color-hairline-soft);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .follow-source {
+        margin: 12px;
+        padding: 12px 14px;
+        background: var(--color-canvas);
+        border-radius: var(--radius-md);
+        border-left: 3px solid var(--color-primary);
+      }
+      .follow-source .src-label {
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 1.2px;
+        text-transform: uppercase;
+        color: var(--color-primary);
+        margin-bottom: 6px;
+      }
+      .follow-source .src-snippet {
+        font-size: 13px;
+        color: var(--color-body);
+        line-height: 1.5;
+      }
+      .follow-source .src-actions {
+        display: flex;
+        align-items: center;
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid var(--color-hairline-soft);
+      }
+      .branch-msg-area {
+        padding: 0 12px 16px;
+      }
+      .chain {
+        margin: 12px;
+        background: var(--color-canvas);
+        border-radius: var(--radius-md);
+        padding: 8px 0;
+        border: 1px solid var(--color-hairline-soft);
+      }
+      .chain-step {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 8px 14px;
+        font-size: 13px;
+        color: var(--color-muted);
+      }
+      .chain-step.current { color: var(--color-ink); font-weight: 500; }
+      .chain-step .dot {
+        width: 18px; height: 18px; border-radius: 50%;
+        background: var(--color-hairline);
+        color: var(--color-muted);
+        font-size: 11px; font-weight: 500;
+        display: inline-flex; align-items: center; justify-content: center;
+        flex: none;
+      }
+      .chain-step.current .dot {
+        background: var(--color-primary);
+        color: var(--color-on-primary);
+      }
+    </style>
+
+    <aside class="spec">
+      <h3>位置</h3>
+      <p>固定显示在右侧 branch panel 顶部,与 branch-head 之间。可滚动后折叠或固定。</p>
+      <h3>来源类型</h3>
+      <ul>
+        <li>批改 (grading_results)</li>
+        <li>题目 (exercise_attempts) — 未提交时屏蔽答案</li>
+        <li>任意消息 (messages)</li>
+        <li>语法标签 / Widget 字段</li>
+      </ul>
+      <h3>关联约束 (PRD §3.2)</h3>
+      <ul>
+        <li>不能改变主学习流状态</li>
+        <li>不能替用户提交答案</li>
+        <li>题未提交前,不展示标准答案 / 等价答案</li>
+        <li>默认不计入薄弱点统计,需用户明确"加入复盘"</li>
+      </ul>
+    </aside>
+
+    <script src="../scripts/interactions.js"></script>
+  </body>
+</html>

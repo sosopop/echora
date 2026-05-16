@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Widget · account-gate</title>
+    <link rel="stylesheet" href="../styles/tokens.css" />
+    <link rel="stylesheet" href="../styles/components.css" />
+    <link rel="stylesheet" href="../styles/widget-preview.css" />
+  </head>
+  <body>
+    <header class="top-nav">
+      <a class="brand" href="../index.html"><span class="brand-mark">✱</span> Echora</a>
+      <span class="breadcrumb"><a href="../index.html">原型索引</a> / Widget / account-gate</span>
+      <span class="spacer"></span>
+      <a class="btn btn-ghost btn-sm" href="../index.html">← 返回</a>
+    </header>
+
+    <div class="preview-shell" data-tab-group>
+      <div class="preview-head">
+        <div>
+          <div class="caption-upper muted">W · 10</div>
+          <h1 class="display-md">account-gate</h1>
+          <p class="lead">
+            登录 / 注册 / 保存进度 / 隐私授权 / 数据删除等敏感动作的对话内入口。
+            遵守 PRD §1.3:敏感字段不进入普通消息上下文,由系统级 Widget 承载。
+          </p>
+        </div>
+        <div class="tabs">
+          <button data-tab="save" class="active">保存进度</button>
+          <button data-tab="login">未登录提示</button>
+          <button data-tab="privacy">隐私授权</button>
+          <button data-tab="delete">数据删除</button>
+        </div>
+      </div>
+
+      <!-- save -->
+      <section data-tab-panel="save" class="active preview-stage">
+        <div class="msg msg-ai" style="max-width: 100%;">
+          <div class="msg-bubble" style="padding: 0; max-width: 100%; background: transparent; border-left: 0;">
+            <div class="widget" style="border-left: 3px solid var(--color-primary);">
+              <div class="widget-body" style="padding: 20px; display: flex; align-items: center; gap: 16px;">
+                <div style="width: 44px; height: 44px; flex: none; background: rgba(204, 120, 92, 0.12); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px;">
+                  💾
+                </div>
+                <div style="flex: 1;">
+                  <div class="title-md">保存本轮进度?</div>
+                  <div class="caption muted" style="margin-top: 4px;">
+                    5 题已完成 · 平均 82 · 掌握度更新可同步到你的账号
+                  </div>
+                </div>
+                <button class="btn btn-primary btn-sm">保存</button>
+                <button class="btn btn-ghost btn-sm">稍后</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- login (匿名练习满 N 题) -->
+      <section data-tab-panel="login" class="preview-stage">
+        <div class="msg msg-ai" style="max-width: 100%;">
+          <div class="msg-bubble" style="padding: 0; max-width: 100%; background: transparent; border-left: 0;">
+            <div class="widget" style="border-left: 3px solid var(--color-primary);">
+              <div class="widget-body" style="padding: 24px; text-align: center;">
+                <div style="font-size: 28px; margin-bottom: 8px;">🔐</div>
+                <div class="display-sm" style="font-size: 22px; margin-bottom: 6px;">登录后才能保存进度</div>
+                <p style="font-size: 14px; color: var(--color-muted); line-height: 1.6; margin: 0 0 18px; max-width: 380px; margin-left: auto; margin-right: auto;">
+                  现在退出会丢失今天的练习记录和掌握度更新。
+                  注册只要邮箱 + 密码,30 秒。
+                </p>
+                <div class="row row-gap-xs" style="justify-content: center;">
+                  <button class="btn btn-primary">📧 注册账号</button>
+                  <button class="btn btn-secondary">已有账号 · 登录</button>
+                </div>
+                <div class="caption muted-soft" style="margin-top: 14px;">
+                  V1 不提供游客模式 (PRD §4.10)
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- privacy -->
+      <section data-tab-panel="privacy" class="preview-stage">
+        <div class="msg msg-ai" style="max-width: 100%;">
+          <div class="msg-bubble" style="padding: 0; max-width: 100%; background: transparent; border-left: 0;">
+            <div class="widget" style="border-left: 3px solid var(--color-accent-amber);">
+              <div class="widget-head" style="background: rgba(232, 165, 90, 0.06);">
+                <span class="iconish" style="color: var(--color-accent-amber);">ⓘ</span>
+                <span class="title-sm">同意以下用途以继续</span>
+                <span class="spacer"></span>
+                <span class="badge badge-warn">需授权</span>
+              </div>
+              <div class="widget-body">
+                <p style="font-size: 14px; color: var(--color-body); line-height: 1.65; margin: 0 0 16px;">
+                  Echora 想用你最近的练习记录帮你生成更精准的重练题。详情如下:
+                </p>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                  <label class="privacy-row">
+                    <input type="checkbox" checked />
+                    <div>
+                      <div class="title">练习记录用于个性化重练 (建议)</div>
+                      <div class="desc">仅在你的账号内使用,不与第三方共享</div>
+                    </div>
+                  </label>
+                  <label class="privacy-row">
+                    <input type="checkbox" />
+                    <div>
+                      <div class="title">匿名错题样本用于改进模型</div>
+                      <div class="desc">不含姓名、邮箱或可识别身份的字段</div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+              <div class="widget-foot">
+                <button class="btn btn-ghost btn-sm">仅本次</button>
+                <span class="spacer"></span>
+                <button class="btn btn-secondary btn-sm">不同意</button>
+                <button class="btn btn-primary btn-sm">同意继续</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- delete -->
+      <section data-tab-panel="delete" class="preview-stage">
+        <div class="msg msg-ai" style="max-width: 100%;">
+          <div class="msg-bubble" style="padding: 0; max-width: 100%; background: transparent; border-left: 0;">
+            <div class="widget" style="border-left: 3px solid var(--color-error);">
+              <div class="widget-head" style="background: rgba(198, 69, 69, 0.06);">
+                <span class="iconish" style="color: var(--color-error);">⚠</span>
+                <span class="title-sm">永久删除账号</span>
+                <span class="spacer"></span>
+                <span class="badge badge-error">不可逆</span>
+              </div>
+              <div class="widget-body">
+                <p style="font-size: 14px; line-height: 1.65; color: var(--color-body); margin: 0 0 12px;">
+                  你即将删除账号 <strong>lin@example.com</strong>,以下数据会被同步清除:
+                </p>
+                <ul style="margin: 0 0 14px; padding-left: 22px; font-size: 13px; color: var(--color-muted); line-height: 1.7;">
+                  <li>所有会话与消息</li>
+                  <li>用户画像、掌握度、错题记录</li>
+                  <li>已保存的进度与重练计划</li>
+                </ul>
+                <label class="field-label">为确认,请输入你的邮箱</label>
+                <input class="input" placeholder="lin@example.com" style="margin-bottom: 8px;" />
+                <label class="checkbox" style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+                  <input type="checkbox" style="accent-color: var(--color-error);" />
+                  <span>我已知道此操作不可恢复</span>
+                </label>
+              </div>
+              <div class="widget-foot">
+                <button class="btn btn-ghost btn-sm">取消</button>
+                <span class="spacer"></span>
+                <button class="btn btn-sm" style="background: var(--color-error); color: white;" disabled>
+                  确认永久删除
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <style>
+      .privacy-row {
+        display: flex; align-items: flex-start; gap: 10px;
+        padding: 12px 14px;
+        background: var(--color-surface-soft);
+        border-radius: var(--radius-md);
+        cursor: pointer;
+      }
+      .privacy-row input { margin-top: 2px; accent-color: var(--color-primary); }
+      .privacy-row .title { font-size: 14px; font-weight: 500; color: var(--color-ink); }
+      .privacy-row .desc { font-size: 12px; color: var(--color-muted); margin-top: 4px; line-height: 1.5; }
+    </style>
+
+    <aside class="spec">
+      <h3>边界</h3>
+      <ul>
+        <li>密码、令牌、邮箱不进入消息正文,只在 Widget 表单内</li>
+        <li>AI 不能读取这些字段 (PRD §2.3 AI 与系统的边界)</li>
+        <li>关键动作必须 explicit confirm</li>
+      </ul>
+      <h3>触发条件</h3>
+      <ul>
+        <li>未登录用户尝试保存进度</li>
+        <li>每完成 N 轮自动提示一次保存</li>
+        <li>用户主动说"删除我的数据"</li>
+        <li>新功能首次使用需要新授权范围</li>
+      </ul>
+    </aside>
+
+    <script src="../scripts/interactions.js"></script>
+  </body>
+</html>

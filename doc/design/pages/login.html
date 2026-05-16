@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Echora · 登录</title>
+    <link rel="stylesheet" href="../styles/tokens.css" />
+    <link rel="stylesheet" href="../styles/components.css" />
+    <style>
+      .auth-shell {
+        min-height: 100vh;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+      }
+      .auth-side {
+        background: var(--color-surface-card);
+        padding: 56px 48px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+      .auth-side .brand {
+        font-family: var(--font-display);
+        font-size: 22px;
+        color: var(--color-ink);
+        letter-spacing: -0.2px;
+      }
+      .auth-side h1 {
+        font-size: 48px;
+        line-height: 1.1;
+        letter-spacing: -1px;
+        margin: 64px 0 16px;
+      }
+      .auth-side p {
+        font-size: 17px;
+        line-height: 1.65;
+        color: var(--color-body);
+        max-width: 380px;
+      }
+      .auth-side .quote {
+        margin-top: 48px;
+        padding: 20px;
+        background: var(--color-canvas);
+        border-radius: var(--radius-lg);
+        border-left: 3px solid var(--color-primary);
+        font-size: 14px;
+        color: var(--color-body);
+        line-height: 1.65;
+      }
+      .auth-side .quote .who {
+        margin-top: 10px;
+        font-size: 12px;
+        color: var(--color-muted);
+      }
+      .auth-form {
+        padding: 56px 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .auth-form-inner {
+        width: 100%;
+        max-width: 380px;
+      }
+      .auth-form h2 {
+        font-size: 32px;
+        letter-spacing: -0.5px;
+        margin-bottom: 8px;
+      }
+      .auth-form .subtitle {
+        color: var(--color-muted);
+        font-size: 14px;
+        margin-bottom: 32px;
+      }
+      .form-row {
+        margin-bottom: 16px;
+      }
+      .password-row {
+        position: relative;
+      }
+      .password-row .input {
+        padding-right: 44px;
+      }
+      .password-row .reveal {
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: transparent;
+        border: 0;
+        color: var(--color-muted);
+        font-size: 13px;
+        padding: 4px 8px;
+        cursor: pointer;
+        border-radius: var(--radius-sm);
+      }
+      .password-row .reveal:hover { background: var(--color-surface-soft); }
+      .options-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin: 8px 0 24px;
+        font-size: 13px;
+      }
+      .checkbox {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        color: var(--color-body);
+      }
+      .checkbox input {
+        width: 16px;
+        height: 16px;
+        accent-color: var(--color-primary);
+      }
+      .divider-text {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 24px 0;
+        font-size: 12px;
+        color: var(--color-muted-soft);
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+      }
+      .divider-text::before,
+      .divider-text::after {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: var(--color-hairline-soft);
+      }
+      .footer-link {
+        margin-top: 24px;
+        font-size: 14px;
+        color: var(--color-muted);
+        text-align: center;
+      }
+      .footer-link a {
+        color: var(--color-primary);
+        font-weight: 500;
+      }
+      .terms {
+        margin-top: 24px;
+        font-size: 12px;
+        color: var(--color-muted-soft);
+        text-align: center;
+        line-height: 1.5;
+      }
+      @media (max-width: 900px) {
+        .auth-shell { grid-template-columns: 1fr; }
+        .auth-side { padding: 32px 24px; }
+        .auth-side h1 { font-size: 36px; margin-top: 32px; }
+        .auth-side .quote { display: none; }
+        .auth-form { padding: 32px 24px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="auth-shell">
+      <aside class="auth-side">
+        <div class="brand">
+          <span class="brand-mark">✱</span>
+          Echora
+        </div>
+        <div>
+          <h1>真实场景里<br />一对一练英语</h1>
+          <p>
+            AI 教练根据你的水平和兴趣推荐场景,陪你完成从练习到批改、复盘到重练的完整闭环。
+          </p>
+          <div class="quote">
+            "和 Echo 练完餐厅点餐和校园日常,我能在留学生活里一开口就用得上。"
+            <div class="who">— 林同学,雅思 6.0</div>
+          </div>
+        </div>
+        <div class="caption muted-soft">© 2026 Echora · 用对话学英语</div>
+      </aside>
+
+      <main class="auth-form">
+        <div class="auth-form-inner">
+          <h2 class="h-display">欢迎回来</h2>
+          <div class="subtitle">登录后继续你的学习节奏</div>
+
+          <div class="form-row">
+            <label class="field-label" for="email">邮箱</label>
+            <input
+              id="email"
+              class="input"
+              type="email"
+              placeholder="you@example.com"
+              value="lin@example.com"
+            />
+          </div>
+
+          <div class="form-row password-row">
+            <label class="field-label" for="pwd">密码</label>
+            <input
+              id="pwd"
+              class="input"
+              type="password"
+              placeholder="至少 8 位"
+              value="••••••••"
+            />
+            <button class="reveal" type="button">显示</button>
+          </div>
+
+          <div class="options-row">
+            <label class="checkbox">
+              <input type="checkbox" checked />
+              <span>记住我</span>
+            </label>
+            <a href="#" class="muted">忘记密码?</a>
+          </div>
+
+          <button class="btn btn-primary btn-block btn-lg">登录</button>
+
+          <div class="divider-text">或</div>
+
+          <button class="btn btn-secondary btn-block">
+            <span class="iconish">🔑</span>
+            使用一次性验证码登录
+          </button>
+
+          <div class="footer-link">
+            还没有账号? <a href="register.html">立即注册</a>
+          </div>
+
+          <div class="terms">
+            登录即同意 <a href="#">服务条款</a> 与 <a href="#">隐私政策</a>。<br />
+            敏感操作由系统级 Widget 承载,不进入对话上下文。
+          </div>
+        </div>
+      </main>
+    </div>
+    <script src="../scripts/interactions.js"></script>
+  </body>
+</html>

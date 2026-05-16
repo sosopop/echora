@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Echora · 辅助追问展开</title>
+    <link rel="stylesheet" href="../styles/tokens.css" />
+    <link rel="stylesheet" href="../styles/components.css" />
+    <style>
+      html, body { height: 100%; }
+      body { display: flex; flex-direction: column; overflow: hidden; }
+
+      .chat-shell {
+        flex: 1;
+        display: grid;
+        grid-template-columns:
+          var(--layout-col-history)
+          minmax(0, 1fr)
+          var(--layout-col-branch);
+        min-height: 0;
+      }
+
+      .top-nav .nav-tab {
+        font-size: 14px;
+        color: var(--color-muted);
+        padding: 4px 12px;
+        border-radius: var(--radius-md);
+      }
+      .top-nav .nav-tab.active {
+        background: var(--color-surface-card);
+        color: var(--color-ink);
+      }
+      .top-nav .session-title {
+        font-size: 14px;
+        color: var(--color-body-strong);
+        font-weight: 500;
+        margin-left: 16px;
+      }
+
+      .col-history {
+        background: var(--color-surface-soft);
+        border-right: 1px solid var(--color-hairline-soft);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .history-head {
+        padding: 16px;
+        display: flex;
+        gap: 8px;
+      }
+      .history-list {
+        flex: 1;
+        padding: 4px 8px 24px;
+        overflow-y: auto;
+      }
+      .history-section {
+        padding: 12px 12px 6px;
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        color: var(--color-muted-soft);
+      }
+      .conv-item {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 10px 12px;
+        border-radius: var(--radius-md);
+        cursor: pointer;
+      }
+      .conv-item:hover { background: var(--color-hover-veil); }
+      .conv-item.active {
+        background: var(--color-canvas);
+        box-shadow: var(--shadow-sm);
+      }
+      .conv-item .conv-title { font-size: 14px; color: var(--color-ink); font-weight: 500; }
+      .conv-item .conv-meta { font-size: 12px; color: var(--color-muted); }
+      .new-chat-btn { margin: 12px; }
+
+      .col-main {
+        display: flex;
+        flex-direction: column;
+        background: var(--color-canvas);
+        min-width: 0;
+      }
+      .main-scroll {
+        flex: 1;
+        overflow-y: auto;
+        padding: 32px 0 24px;
+      }
+      .main-inner {
+        max-width: 680px;
+        margin: 0 auto;
+        padding: 0 24px;
+      }
+
+      /* highlight bubble (referenced source for branch) */
+      .msg-bubble.referenced {
+        outline: 2px solid var(--color-primary);
+        outline-offset: 4px;
+        position: relative;
+      }
+      .msg-bubble.referenced::after {
+        content: "正在追问中";
+        position: absolute;
+        top: -10px;
+        right: 8px;
+        background: var(--color-primary);
+        color: var(--color-on-primary);
+        font-size: 10px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        padding: 2px 8px;
+        border-radius: var(--radius-pill);
+      }
+
+      .composer {
+        padding: 16px 24px 20px;
+        background: linear-gradient(to top, var(--color-canvas) 75%, var(--color-canvas-fade));
+      }
+      .composer-inner {
+        max-width: 680px;
+        margin: 0 auto;
+      }
+      .composer-shell {
+        background: var(--color-canvas);
+        border: 1px solid var(--color-hairline);
+        border-radius: var(--radius-lg);
+        padding: 12px;
+        box-shadow: var(--shadow-md);
+      }
+      .composer-row {
+        display: flex;
+        gap: 8px;
+        align-items: flex-end;
+      }
+      .composer-row textarea {
+        flex: 1;
+        border: 0;
+        background: transparent;
+        outline: none;
+        font-family: var(--font-body);
+        font-size: 15px;
+        line-height: 1.55;
+        color: var(--color-ink);
+        resize: none;
+        min-height: 24px;
+        max-height: 160px;
+        padding: 6px 4px;
+      }
+      .composer-tip {
+        text-align: center;
+        margin-top: 8px;
+        font-size: 12px;
+        color: var(--color-muted-soft);
+      }
+
+      /* —— 右侧支线 ————————————————————————————————————— */
+      .col-branch {
+        display: flex;
+        flex-direction: column;
+        background: var(--color-surface-soft);
+        border-left: 1px solid var(--color-hairline-soft);
+        min-height: 0;
+      }
+      .branch-head {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--color-hairline-soft);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: var(--color-canvas);
+      }
+      .branch-head .title {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--color-ink);
+      }
+      .branch-head .close {
+        margin-left: auto;
+        background: transparent;
+        border: 0;
+        color: var(--color-muted);
+        cursor: pointer;
+        font-size: 18px;
+        line-height: 1;
+        padding: 4px;
+      }
+      .branch-source {
+        margin: 12px 16px;
+        padding: 10px 12px;
+        background: var(--color-canvas);
+        border-radius: var(--radius-md);
+        border-left: 3px solid var(--color-primary);
+        font-size: 13px;
+        color: var(--color-body);
+        line-height: 1.5;
+      }
+      .branch-source .source-label {
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 1.2px;
+        text-transform: uppercase;
+        color: var(--color-primary);
+        margin-bottom: 4px;
+      }
+
+      .branch-scroll {
+        flex: 1;
+        overflow-y: auto;
+        padding: 4px 16px 16px;
+      }
+      .branch-msg {
+        margin-bottom: 12px;
+        font-size: 14px;
+        line-height: 1.6;
+      }
+      .branch-msg.ai {
+        background: var(--color-canvas);
+        border-radius: var(--radius-md);
+        padding: 10px 12px;
+        border-left: 2px solid var(--color-primary);
+      }
+      .branch-msg.user {
+        background: var(--color-msg-user-bg);
+        border-radius: var(--radius-md);
+        padding: 10px 12px;
+        border: 1px solid var(--color-msg-user-border);
+        margin-left: 24px;
+      }
+
+      .branch-composer {
+        padding: 12px 16px 16px;
+        background: var(--color-canvas);
+        border-top: 1px solid var(--color-hairline-soft);
+      }
+      .branch-composer .input-shell {
+        background: var(--color-surface-soft);
+        border: 1px solid var(--color-hairline);
+        border-radius: var(--radius-md);
+        padding: 8px;
+        display: flex;
+        gap: 6px;
+        align-items: flex-end;
+      }
+      .branch-composer textarea {
+        flex: 1;
+        border: 0;
+        background: transparent;
+        outline: none;
+        font-family: var(--font-body);
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--color-ink);
+        resize: none;
+        min-height: 20px;
+        max-height: 100px;
+        padding: 4px;
+      }
+      .branch-foot-tip {
+        margin-top: 8px;
+        font-size: 11px;
+        color: var(--color-muted-soft);
+        text-align: center;
+      }
+      .branch-actions {
+        display: flex;
+        gap: 8px;
+        margin: 12px 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top-nav">
+      <a class="brand" href="../index.html"><span class="brand-mark">✱</span> Echora</a>
+      <div class="nav-tab active" style="margin-left: 24px;">学习</div>
+      <div class="nav-tab">设置</div>
+      <span class="session-title">餐厅点餐 · 第 3 轮</span>
+      <span class="badge badge-soft" style="margin-left: 8px;">awaiting_next</span>
+      <span class="spacer"></span>
+      <span class="badge badge-coral">辅助追问开启</span>
+      <span class="avatar" style="margin-left: 12px;">林</span>
+    </header>
+
+    <div class="chat-shell">
+      <!-- 历史 -->
+      <aside class="col-history">
+        <div class="history-head">
+          <input class="input" placeholder="搜索历史 (V1 不实现)" disabled />
+        </div>
+        <button class="btn btn-secondary new-chat-btn">＋ 新建对话</button>
+        <div class="history-list scroll">
+          <div class="history-section">当前</div>
+          <div class="conv-item active">
+            <div class="conv-title">🍝 餐厅点餐</div>
+            <div class="conv-meta">第 3 轮 · 5 题</div>
+          </div>
+          <div class="history-section">本周</div>
+          <div class="conv-item">
+            <div class="conv-title">🏫 校园对话</div>
+            <div class="conv-meta">昨天 · 8 题</div>
+          </div>
+          <div class="conv-item">
+            <div class="conv-title">✈️ 旅行问路</div>
+            <div class="conv-meta">2 天前 · 6 题</div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 主聊天区 -->
+      <main class="col-main">
+        <div class="main-scroll scroll">
+          <div class="main-inner">
+            <div class="msg msg-ai">
+              <div class="msg-bubble">
+                第 1 题 · 半句翻译: "我想要一份牛排,五分熟。"
+              </div>
+            </div>
+
+            <div class="msg msg-user">
+              <div class="msg-bubble">I want a steak, medium.</div>
+            </div>
+
+            <!-- 这条消息正在被追问 (引用高亮) -->
+            <div class="msg msg-ai">
+              <div class="msg-bubble referenced" style="background: var(--color-canvas);">
+                <strong>75 分</strong> · 你的表达基本对,但更礼貌的说法是
+                <span style="color: var(--color-success); font-weight: 500;">I'd like a steak, medium-rare, please.</span><br />
+                标签: politeness · collocation
+              </div>
+            </div>
+
+            <div class="msg msg-ai">
+              <div class="msg-bubble">
+                来第 2 题,这次练一下"询问菜品做法"...
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="composer">
+          <div class="composer-inner">
+            <div class="composer-shell">
+              <div class="composer-row">
+                <button class="btn-icon no-border"><span class="iconish">☰</span></button>
+                <textarea placeholder="主线继续 · 追问在右侧进行" rows="1"></textarea>
+                <button class="btn btn-primary btn-sm">发送 →</button>
+              </div>
+            </div>
+            <div class="composer-tip">主线不被支线干扰 · 答题完成后历史详情解锁</div>
+          </div>
+        </div>
+      </main>
+
+      <!-- 右侧支线 -->
+      <aside class="col-branch">
+        <div class="branch-head">
+          <span class="badge badge-coral" style="font-size: 10px;">支线</span>
+          <span class="title">深入追问</span>
+          <button class="close" title="关闭">×</button>
+        </div>
+
+        <!-- 来源引用 (follow-up-source widget) -->
+        <div class="branch-source">
+          <div class="source-label">↳ 来自:这次批改</div>
+          为什么 "I'd like" 比 "I want" 更礼貌?
+        </div>
+
+        <div class="branch-scroll scroll">
+          <div class="branch-msg ai">
+            <strong>I want</strong> 直白表达需求,日常和熟人之间没问题,但在服务场合显得急促。<br /><br />
+            <strong>I'd like (= I would like)</strong> 用条件式包装,把"我要"变成"我会喜欢",
+            语气委婉,在餐厅、商店、办公室是默认表达。
+          </div>
+          <div class="branch-msg user">那 in the morning 为什么用 in 不用 on?</div>
+          <div class="branch-msg ai">
+            一般规律:
+            <ul style="margin: 8px 0; padding-left: 18px;">
+              <li><strong>in</strong> 一段较长时间 (in the morning, in 2026)</li>
+              <li><strong>on</strong> 具体某一天 (on Monday, on May 16)</li>
+              <li><strong>at</strong> 具体时刻 (at 8pm, at noon)</li>
+            </ul>
+            所以早晨/下午/晚上这种"时间段"用 in。但 "on Monday morning" 用 on,因为强调具体那一天。
+          </div>
+          <div class="branch-msg user">明白了,谢谢!</div>
+        </div>
+
+        <div class="branch-actions">
+          <button class="btn btn-ghost btn-sm" style="flex: 1;">📌 加入复盘</button>
+          <button class="btn btn-ghost btn-sm" style="flex: 1;">📋 复制解释</button>
+        </div>
+
+        <div class="branch-composer">
+          <div class="input-shell">
+            <textarea placeholder="继续追问..." rows="1"></textarea>
+            <button class="btn btn-primary btn-sm">↑</button>
+          </div>
+          <div class="branch-foot-tip">支线不计入薄弱点 · 主线状态不变</div>
+        </div>
+      </aside>
+    </div>
+
+    <script src="../scripts/interactions.js"></script>
+  </body>
+</html>

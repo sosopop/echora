@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Widget · intent-confirm</title>
+    <link rel="stylesheet" href="../styles/tokens.css" />
+    <link rel="stylesheet" href="../styles/components.css" />
+    <link rel="stylesheet" href="../styles/widget-preview.css" />
+  </head>
+  <body>
+    <header class="top-nav">
+      <a class="brand" href="../index.html"><span class="brand-mark">✱</span> Echora</a>
+      <span class="breadcrumb"><a href="../index.html">原型索引</a> / Widget / intent-confirm</span>
+      <span class="spacer"></span>
+      <a class="btn btn-ghost btn-sm" href="../index.html">← 返回</a>
+    </header>
+
+    <div class="preview-shell" data-tab-group>
+      <div class="preview-head">
+        <div>
+          <div class="caption-upper muted">W · 08</div>
+          <h1 class="display-md">intent-confirm</h1>
+          <p class="lead">
+            低置信度意图确认卡片。AI Router 对自由文本无法高置信路由时,
+            展示 2-3 个自然选项让用户确认,而非直接降级到 general-chat。
+          </p>
+        </div>
+        <div class="tabs">
+          <button data-tab="ambig" class="active">2 选项</button>
+          <button data-tab="three">3 选项</button>
+          <button data-tab="confirm">高风险确认</button>
+        </div>
+      </div>
+
+      <!-- ambig (2 options) -->
+      <section data-tab-panel="ambig" class="active preview-stage">
+        <div class="msg msg-user">
+          <div class="msg-bubble">换一个</div>
+        </div>
+
+        <div class="msg msg-ai" style="max-width: 100%;">
+          <div class="msg-bubble" style="padding: 0; max-width: 100%; background: transparent; border-left: 0;">
+            <div class="widget" style="border-left: 3px solid var(--color-accent-amber);">
+              <div class="widget-head" style="background: rgba(232, 165, 90, 0.06);">
+                <span class="iconish" style="color: var(--color-accent-amber);">？</span>
+                <span class="title-sm">想换什么?</span>
+                <span class="spacer"></span>
+                <span class="caption muted">置信度 · 中</span>
+              </div>
+              <div class="widget-body">
+                <div class="caption muted" style="margin-bottom: 12px;">
+                  我不太确定你说的"换一个"是指 ↓
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                  <button class="choice-confirm">
+                    <span class="ic">🎬</span>
+                    <div>
+                      <div class="title">换一个场景</div>
+                      <div class="desc">退出当前餐厅点餐,重新挑场景</div>
+                    </div>
+                    <span class="arrow">→</span>
+                  </button>
+                  <button class="choice-confirm">
+                    <span class="ic">🔄</span>
+                    <div>
+                      <div class="title">换这一题</div>
+                      <div class="desc">同场景下,再生成一道难度相同的题</div>
+                    </div>
+                    <span class="arrow">→</span>
+                  </button>
+                </div>
+              </div>
+              <div class="widget-foot">
+                <span class="caption muted">输入"场景/这题"也能直接告诉我</span>
+                <span class="spacer"></span>
+                <button class="btn btn-ghost btn-sm">取消</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- three options -->
+      <section data-tab-panel="three" class="preview-stage">
+        <div class="msg msg-user">
+          <div class="msg-bubble">看一下我之前的</div>
+        </div>
+
+        <div class="msg msg-ai" style="max-width: 100%;">
+          <div class="msg-bubble" style="padding: 0; max-width: 100%; background: transparent; border-left: 0;">
+            <div class="widget" style="border-left: 3px solid var(--color-accent-amber);">
+              <div class="widget-head" style="background: rgba(232, 165, 90, 0.06);">
+                <span class="iconish" style="color: var(--color-accent-amber);">？</span>
+                <span class="title-sm">你想看的是?</span>
+              </div>
+              <div class="widget-body">
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                  <button class="choice-confirm">
+                    <span class="ic">📊</span>
+                    <div>
+                      <div class="title">本轮的复盘</div>
+                      <div class="desc">第 3 轮 · 5 题平均 82</div>
+                    </div>
+                    <span class="arrow">→</span>
+                  </button>
+                  <button class="choice-confirm">
+                    <span class="ic">📚</span>
+                    <div>
+                      <div class="title">之前的薄弱点</div>
+                      <div class="desc">missing_word · preposition</div>
+                    </div>
+                    <span class="arrow">→</span>
+                  </button>
+                  <button class="choice-confirm">
+                    <span class="ic">🗂</span>
+                    <div>
+                      <div class="title">所有历史会话</div>
+                      <div class="desc">打开左侧抽屉</div>
+                    </div>
+                    <span class="arrow">→</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- high-risk confirm (PRD §3.3 关键动作) -->
+      <section data-tab-panel="confirm" class="preview-stage">
+        <div class="msg msg-user">
+          <div class="msg-bubble">删掉这个会话</div>
+        </div>
+
+        <div class="msg msg-ai" style="max-width: 100%;">
+          <div class="msg-bubble" style="padding: 0; max-width: 100%; background: transparent; border-left: 0;">
+            <div class="widget" style="border-left: 3px solid var(--color-error);">
+              <div class="widget-head" style="background: rgba(198, 69, 69, 0.06);">
+                <span class="iconish" style="color: var(--color-error);">⚠</span>
+                <span class="title-sm">确认删除会话?</span>
+                <span class="spacer"></span>
+                <span class="badge badge-error">高风险</span>
+              </div>
+              <div class="widget-body">
+                <p style="font-size: 14px; color: var(--color-body); line-height: 1.65; margin: 0 0 8px;">
+                  你正在删除「🍝 餐厅点餐 · 第 3 轮」会话。
+                </p>
+                <ul style="margin: 0 0 12px; padding-left: 20px; font-size: 13px; color: var(--color-muted); line-height: 1.6;">
+                  <li>5 道题的练习记录将一并清除</li>
+                  <li>掌握度变化保留 (来自结构化表)</li>
+                  <li>该操作不可恢复</li>
+                </ul>
+                <label class="checkbox" style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--color-body); cursor: pointer;">
+                  <input type="checkbox" style="accent-color: var(--color-error);" />
+                  <span>我已了解风险</span>
+                </label>
+              </div>
+              <div class="widget-foot">
+                <button class="btn btn-ghost btn-sm">取消</button>
+                <span class="spacer"></span>
+                <button class="btn btn-sm" style="background: var(--color-error); color: white;" disabled>
+                  确认删除
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <style>
+      .choice-confirm {
+        display: flex; align-items: center; gap: 14px;
+        padding: 14px 16px;
+        background: var(--color-canvas);
+        border: 1px solid var(--color-hairline);
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        text-align: left;
+        font-family: var(--font-body);
+        transition: border-color 0.15s, transform 0.15s;
+      }
+      .choice-confirm:hover {
+        border-color: var(--color-primary);
+        transform: translateX(2px);
+      }
+      .choice-confirm .ic {
+        font-size: 22px;
+        flex: none;
+      }
+      .choice-confirm .title { font-size: 15px; font-weight: 500; color: var(--color-ink); }
+      .choice-confirm .desc { font-size: 13px; color: var(--color-muted); margin-top: 2px; }
+      .choice-confirm .arrow {
+        margin-left: auto;
+        color: var(--color-muted);
+        font-size: 18px;
+        flex: none;
+      }
+      .choice-confirm:hover .arrow { color: var(--color-primary); }
+    </style>
+
+    <aside class="spec">
+      <h3>触发条件</h3>
+      <ul>
+        <li>AI Router 返回 confidence &lt; 阈值时</li>
+        <li>用户输入对应多个可能 Skill 时</li>
+        <li>关键动作 (删除、归档、清空进度) 必须显式确认</li>
+      </ul>
+      <h3>降级策略</h3>
+      <p>不在 <code>practicing</code> / <code>grading</code> 中触发降级到 general-chat。
+      高风险操作必须勾选"我已了解风险"才能解锁主按钮。</p>
+      <h3>关联</h3>
+      <p>系统层调用,不是单独 Skill。命中后才路由到对应 Skill。</p>
+    </aside>
+
+    <script src="../scripts/interactions.js"></script>
+  </body>
+</html>

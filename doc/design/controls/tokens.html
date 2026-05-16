@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Echora · 设计 Token 与基础控件</title>
+    <link rel="stylesheet" href="../styles/tokens.css" />
+    <link rel="stylesheet" href="../styles/components.css" />
+    <link rel="stylesheet" href="../styles/widget-preview.css" />
+    <style>
+      .section-block {
+        margin-bottom: 56px;
+      }
+      .section-block .head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        margin-bottom: 16px;
+      }
+      .section-block h2 {
+        font-family: var(--font-display);
+        font-weight: 400;
+        font-size: 28px;
+        letter-spacing: -0.4px;
+      }
+
+      /* Color swatches */
+      .swatch-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 12px;
+      }
+      .swatch {
+        background: var(--color-canvas);
+        border: 1px solid var(--color-hairline);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+      }
+      .swatch .chip {
+        height: 64px;
+      }
+      .swatch .meta {
+        padding: 10px 12px;
+      }
+      .swatch .name { font-size: 13px; font-weight: 500; color: var(--color-ink); }
+      .swatch .hex { font-family: var(--font-mono); font-size: 11px; color: var(--color-muted); margin-top: 2px; }
+      .swatch.dark .name { color: var(--color-on-dark); }
+      .swatch.dark .hex { color: var(--color-on-dark-soft); }
+      .swatch.dark .meta { background: var(--color-surface-dark); }
+
+      /* Type stack */
+      .type-row {
+        padding: 16px 0;
+        border-bottom: 1px solid var(--color-hairline-soft);
+        display: flex; align-items: baseline; gap: 24px;
+      }
+      .type-row:last-child { border-bottom: 0; }
+      .type-row .meta {
+        flex: 0 0 200px;
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--color-muted);
+      }
+      .type-row .meta strong { color: var(--color-ink); display: block; margin-bottom: 2px; font-family: var(--font-body); }
+      .type-row .demo { color: var(--color-ink); flex: 1; }
+
+      /* Spacing demo */
+      .spacing-grid {
+        display: flex; flex-direction: column; gap: 8px;
+      }
+      .spacing-row {
+        display: flex; align-items: center; gap: 12px;
+      }
+      .spacing-row .name {
+        flex: 0 0 160px;
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--color-muted);
+      }
+      .spacing-row .name strong { color: var(--color-ink); }
+      .spacing-row .bar {
+        background: var(--color-primary);
+        height: 14px;
+        border-radius: 2px;
+      }
+
+      /* Radius demo */
+      .radius-row {
+        display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+      }
+      .radius-cell {
+        background: var(--color-surface-card);
+        width: 64px; height: 64px;
+        display: flex; align-items: center; justify-content: center;
+        font-family: var(--font-mono); font-size: 11px;
+        color: var(--color-ink);
+      }
+
+      /* Component samples */
+      .sample-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+      .sample-row {
+        background: var(--color-surface-soft);
+        border-radius: var(--radius-lg);
+        padding: 20px;
+      }
+      .sample-row .label {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--color-muted);
+        margin-bottom: 12px;
+        letter-spacing: 0.5px;
+      }
+      .sample-row .label strong { color: var(--color-ink); }
+      .sample-row .demo {
+        display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+      }
+
+      /* Spec table */
+      .spec-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      .spec-table th, .spec-table td {
+        text-align: left;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--color-hairline-soft);
+      }
+      .spec-table th {
+        font-family: var(--font-body);
+        font-size: 11px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        color: var(--color-muted);
+      }
+      .spec-table code {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--color-primary);
+        background: var(--color-canvas);
+        padding: 1px 6px;
+        border-radius: 3px;
+      }
+
+      .dot-chip {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 4px;
+        vertical-align: -1px;
+        border: 1px solid transparent;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top-nav">
+      <a class="brand" href="../index.html"><span class="brand-mark">✱</span> Echora</a>
+      <span class="breadcrumb"><a href="../index.html">原型索引</a> / 控件 / Token & 基础控件库</span>
+      <span class="spacer"></span>
+      <a class="btn btn-ghost btn-sm" href="../index.html">← 返回</a>
+    </header>
+
+    <div class="preview-shell">
+      <div class="preview-head">
+        <div>
+          <div class="caption-upper muted">CTRL · 02</div>
+          <h1 class="display-md">设计 Token & 基础控件</h1>
+          <p class="lead">
+            从 <code style="font-family: var(--font-mono); color: var(--color-primary);">DESIGN.md</code>
+            与 <code style="font-family: var(--font-mono); color: var(--color-primary);">PRD §4.2</code>
+            提取的 token 实例化与控件示例。支持明/暗双主题,
+            通过右上角按钮切换 (或跟随系统偏好)。
+          </p>
+        </div>
+      </div>
+
+      <!-- —— 主题机制 ———————————————————————————————————— -->
+      <section class="section-block">
+        <div class="head">
+          <h2>主题机制 · Theme</h2>
+          <span class="caption muted">明 / 暗 双主题</span>
+        </div>
+
+        <div class="sample-row" style="background: var(--color-surface-soft);">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: stretch;">
+            <!-- light theme card -->
+            <div style="background: #faf9f5; color: #141413; border: 1px solid #e6dfd8; border-radius: var(--radius-lg); padding: 20px;">
+              <div style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 1.5px; color: #6c6a64; text-transform: uppercase; margin-bottom: 8px;">
+                Light · 默认
+              </div>
+              <div style="font-family: var(--font-display); font-size: 22px; letter-spacing: -0.3px; margin-bottom: 12px;">奶油画布</div>
+              <div style="font-size: 13px; color: #3d3d3a; line-height: 1.6;">
+                canvas <code style="background: #efe9de; padding: 1px 6px; border-radius: 4px; font-family: var(--font-mono); font-size: 11px;">#faf9f5</code>
+                · ink <code style="background: #efe9de; padding: 1px 6px; border-radius: 4px; font-family: var(--font-mono); font-size: 11px;">#141413</code>
+              </div>
+              <div style="display: flex; gap: 6px; margin-top: 12px;">
+                <span style="display: inline-block; width: 22px; height: 22px; border-radius: 50%; background: #faf9f5; border: 1px solid #e6dfd8;"></span>
+                <span style="display: inline-block; width: 22px; height: 22px; border-radius: 50%; background: #f5f0e8;"></span>
+                <span style="display: inline-block; width: 22px; height: 22px; border-radius: 50%; background: #efe9de;"></span>
+                <span style="display: inline-block; width: 22px; height: 22px; border-radius: 50%; background: #cc785c;"></span>
+              </div>
+            </div>
+
+            <!-- dark theme card (固定暗色预览, 不跟随当前主题) -->
+            <div style="background: #181715; color: #faf9f5; border: 1px solid #2f2d2a; border-radius: var(--radius-lg); padding: 20px;">
+              <div style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 1.5px; color: #a09d96; text-transform: uppercase; margin-bottom: 8px;">
+                Dark · 跟随系统或手动
+              </div>
+              <div style="font-family: var(--font-display); font-size: 22px; letter-spacing: -0.3px; margin-bottom: 12px;">暖深黑画布</div>
+              <div style="font-size: 13px; color: #d4d1c9; line-height: 1.6;">
+                canvas <code style="background: #252320; padding: 1px 6px; border-radius: 4px; font-family: var(--font-mono); font-size: 11px; color: #cc785c;">#181715</code>
+                · ink <code style="background: #252320; padding: 1px 6px; border-radius: 4px; font-family: var(--font-mono); font-size: 11px; color: #cc785c;">#faf9f5</code>
+              </div>
+              <div style="display: flex; gap: 6px; margin-top: 12px;">
+                <span style="display: inline-block; width: 22px; height: 22px; border-radius: 50%; background: #181715; border: 1px solid #2f2d2a;"></span>
+                <span style="display: inline-block; width: 22px; height: 22px; border-radius: 50%; background: #1f1e1b;"></span>
+                <span style="display: inline-block; width: 22px; height: 22px; border-radius: 50%; background: #252320;"></span>
+                <span style="display: inline-block; width: 22px; height: 22px; border-radius: 50%; background: #cc785c;"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sample-row" style="margin-top: 12px;">
+          <div class="label"><strong>切换规则</strong></div>
+          <ul style="margin: 0; padding-left: 22px; font-size: 13px; line-height: 1.75; color: var(--color-body);">
+            <li>默认跟随系统 <code>@media (prefers-color-scheme: dark)</code>,无需用户操作</li>
+            <li>用户点击顶栏 🌙 / ☀ 按钮可强制切换,写入 <code>localStorage.echora-theme</code></li>
+            <li>所有 token 以 CSS 变量定义,组件不硬编码色值 (PRD §4.2)</li>
+            <li>语义色 (success / warning / error) 与品牌色 (primary) 在两个主题下保持一致</li>
+            <li><code>--color-hairline-dark: #2f2d2a</code> 已补入 tokens.css 作为暗色分割线</li>
+          </ul>
+        </div>
+
+        <h3 class="title-sm" style="margin: 24px 0 8px;">Token 对照表</h3>
+        <div class="sample-row" style="padding: 0; overflow: hidden;">
+          <table class="spec-table" style="margin: 0;">
+            <thead>
+              <tr>
+                <th>Token</th>
+                <th>Light</th>
+                <th>Dark</th>
+                <th>用途</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>canvas</code></td>
+                <td><span class="dot-chip" style="background: #faf9f5; border-color: #e6dfd8;"></span> #faf9f5</td>
+                <td><span class="dot-chip" style="background: #181715; border-color: #2f2d2a;"></span> #181715</td>
+                <td>页面底色</td>
+              </tr>
+              <tr>
+                <td><code>surface-soft</code></td>
+                <td><span class="dot-chip" style="background: #f5f0e8;"></span> #f5f0e8</td>
+                <td><span class="dot-chip" style="background: #1f1e1b;"></span> #1f1e1b</td>
+                <td>分区背景</td>
+              </tr>
+              <tr>
+                <td><code>surface-card</code></td>
+                <td><span class="dot-chip" style="background: #efe9de;"></span> #efe9de</td>
+                <td><span class="dot-chip" style="background: #252320;"></span> #252320</td>
+                <td>Widget 卡片</td>
+              </tr>
+              <tr>
+                <td><code>hairline</code></td>
+                <td><span class="dot-chip" style="background: #e6dfd8;"></span> #e6dfd8</td>
+                <td><span class="dot-chip" style="background: #2f2d2a;"></span> #2f2d2a</td>
+                <td>边框分割</td>
+              </tr>
+              <tr>
+                <td><code>ink</code> (标题)</td>
+                <td><span class="dot-chip" style="background: #141413;"></span> #141413</td>
+                <td><span class="dot-chip" style="background: #faf9f5; border-color: #2f2d2a;"></span> #faf9f5</td>
+                <td>标题</td>
+              </tr>
+              <tr>
+                <td><code>body</code> (正文)</td>
+                <td><span class="dot-chip" style="background: #3d3d3a;"></span> #3d3d3a</td>
+                <td><span class="dot-chip" style="background: #d4d1c9;"></span> #d4d1c9</td>
+                <td>正文</td>
+              </tr>
+              <tr>
+                <td><code>muted</code></td>
+                <td><span class="dot-chip" style="background: #6c6a64;"></span> #6c6a64</td>
+                <td><span class="dot-chip" style="background: #a09d96;"></span> #a09d96</td>
+                <td>辅助文字</td>
+              </tr>
+              <tr>
+                <td><code>msg-ai-bg</code></td>
+                <td><span class="dot-chip" style="background: #faf9f5; border-color: #e6dfd8;"></span> #faf9f5</td>
+                <td><span class="dot-chip" style="background: #1f1e1b;"></span> #1f1e1b</td>
+                <td>AI 气泡</td>
+              </tr>
+              <tr>
+                <td><code>msg-user-bg</code></td>
+                <td><span class="dot-chip" style="background: #ffffff; border-color: #e6dfd8;"></span> #ffffff</td>
+                <td><span class="dot-chip" style="background: #252320;"></span> #252320</td>
+                <td>用户气泡</td>
+              </tr>
+              <tr>
+                <td><code>primary</code></td>
+                <td colspan="2"><span class="dot-chip" style="background: #cc785c;"></span> #cc785c · 双主题保持</td>
+                <td>CTA / 强调</td>
+              </tr>
+              <tr>
+                <td><code>success / warning / error</code></td>
+                <td colspan="2"><span class="dot-chip" style="background: #5db872;"></span> <span class="dot-chip" style="background: #d4a017;"></span> <span class="dot-chip" style="background: #c64545;"></span> · 双主题保持</td>
+                <td>语义状态</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 class="title-sm" style="margin: 24px 0 8px;">气泡在两种主题下</h3>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+          <div style="background: #faf9f5; border: 1px solid #e6dfd8; border-radius: var(--radius-lg); padding: 20px;">
+            <div style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 1.5px; color: #6c6a64; text-transform: uppercase; margin-bottom: 12px;">Light</div>
+            <div style="display: flex; margin-bottom: 8px;">
+              <div style="max-width: 85%; padding: 12px 14px; background: #faf9f5; border-left: 3px solid #cc785c; border-radius: 4px 8px 8px 4px; color: #3d3d3a; font-size: 14px;">
+                AI 消息 · 象牙白 + 陶土左线
+              </div>
+            </div>
+            <div style="display: flex; justify-content: flex-end;">
+              <div style="max-width: 75%; padding: 12px 14px; background: #ffffff; border: 1px solid #e6dfd8; border-radius: 8px; color: #3d3d3a; font-size: 14px;">
+                用户消息 · 纯白 + 暖描边
+              </div>
+            </div>
+          </div>
+          <div style="background: #181715; border: 1px solid #2f2d2a; border-radius: var(--radius-lg); padding: 20px;">
+            <div style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 1.5px; color: #a09d96; text-transform: uppercase; margin-bottom: 12px;">Dark</div>
+            <div style="display: flex; margin-bottom: 8px;">
+              <div style="max-width: 85%; padding: 12px 14px; background: #1f1e1b; border-left: 3px solid #cc785c; border-radius: 4px 8px 8px 4px; color: #d4d1c9; font-size: 14px;">
+                AI 消息 · 深灰 + 陶土左线
+              </div>
+            </div>
+            <div style="display: flex; justify-content: flex-end;">
+              <div style="max-width: 75%; padding: 12px 14px; background: #252320; border: 1px solid #2f2d2a; border-radius: 8px; color: #d4d1c9; font-size: 14px;">
+                用户消息 · 暖深灰 + 暗描边
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- —— 颜色 ———————————————————————————————————— -->
+      <section class="section-block">
+        <div class="head">
+          <h2>颜色 · Color</h2>
+          <span class="caption muted">明色 token · 暗色见上方对照表</span>
+        </div>
+
+        <h3 class="title-sm" style="margin: 16px 0 8px;">Brand & Accent</h3>
+        <div class="swatch-grid">
+          <div class="swatch"><div class="chip" style="background: #cc785c;"></div><div class="meta"><div class="name">primary</div><div class="hex">#cc785c</div></div></div>
+          <div class="swatch"><div class="chip" style="background: #a9583e;"></div><div class="meta"><div class="name">primary-active</div><div class="hex">#a9583e</div></div></div>
+          <div class="swatch"><div class="chip" style="background: #e6dfd8;"></div><div class="meta"><div class="name">primary-disabled</div><div class="hex">#e6dfd8</div></div></div>
+          <div class="swatch"><div class="chip" style="background: #5db8a6;"></div><div class="meta"><div class="name">accent-teal</div><div class="hex">#5db8a6</div></div></div>
+          <div class="swatch"><div class="chip" style="background: #e8a55a;"></div><div class="meta"><div class="name">accent-amber</div><div class="hex">#e8a55a</div></div></div>
+        </div>
+
+        <h3 class="title-sm" style="margin: 24px 0 8px;">Surface · 浅色</h3>
+        <div class="swatch-grid">
+          <div class="swatch"><div class="chip" style="background: #faf9f5; border: 1px solid var(--color-hairline);"></div><div class="meta"><div class="name">canvas</div><div class="hex">#faf9f5</div></div></div>
+          <div class="swatch"><div class="chip" style="background: #f5f0e8;"></div><div class="meta"><div class="name">surface-soft</div><div class="hex">#f5f0e8</div></div></div>
+          <div class="swatch"><div class="chip" style="background: #efe9de;"></div><div class="meta"><div class="name">surface-card</div><div class="hex">#efe9de</div></div></div>
+          <div class="swatch"><div class="chip" style="background: #e8e0d2;"></div><div class="meta"><div class="name">surface-cream-strong</div><div class="hex">#e8e0d2</div></div></div>
+          <div class="swatch"><div class="chip" style="background: #e6dfd8;"></div><div class="meta"><div class="name">hairline</div><div class="hex">#e6dfd8</div></div></div>
+          <div class="swatch"><div class="chip" style="background: #ebe6df;"></div><div class="meta"><div class="name">hairline-soft</div><div class="hex">#ebe6df</div></div></div>
+        </div>
+
+        <h3 class="title-sm" style="margin: 24px 0 8px;">Surface · 暗色</h3>
+        <div class="swatch-grid">
+          <div class="swatch dark"><div class="chip" style="background: #181715;"></div><div class="meta"><div class="name">surface-dark</div><div class="hex">#181715</div></div></div>
+          <div class="swatch dark"><div class="chip" style="background: #252320;"></div><div class="meta"><div class="name">surface-dark-elevated</div><div class="hex">#252320</div></div></div>
+          <div class="swatch dark"><div class="chip" style="background: #1f1e1b;"></div><div class="meta"><div class="name">surface-dark-soft</div><div class="hex">#1f1e1b</div></div></div>
+        </div>
+
+        <h3 class="title-sm" style="margin: 24px 0 8px;">Text</h3>
+        <div class="swatch-grid">
+          <div class="swatch"><div class="chip" style="background: #141413;"></div><div class="meta"><div class="name">ink</div><div class="hex">#141413</div></div></div>
+          <div class="swatch"><div class="chip" style="background: #252523;"></div><div class="meta"><div class="name">body-strong</div><div class="hex">#252523</div></div></div>
+          <div class="swatch"><div class="chip" style="background: #3d3d3a;"></div><div class="meta"><div class="name">body</div><div class="hex">#3d3d3a</div></div></div>
+          <div class="swatch"><div class="chip" style="background: #6c6a64;"></div><div class="meta"><div class="name">muted</div><div class="hex">#6c6a64</div></div></div>
+          <div class="swatch"><div class="chip" style="background: #8e8b82;"></div><div class="meta"><div class="name">muted-soft</div><div class="hex">#8e8b82</div></div></div>
+        </div>
+
+        <h3 class="title-sm" style="margin: 24px 0 8px;">Semantic</h3>
+        <div class="swatch-grid">
+          <div class="swatch"><div class="chip" style="background: #5db872;"></div><div class="meta"><div class="name">success</div><div class="hex">#5db872</div></div></div>
+          <div class="swatch"><div class="chip" style="background: #d4a017;"></div><div class="meta"><div class="name">warning</div><div class="hex">#d4a017</div></div></div>
+          <div class="swatch"><div class="chip" style="background: #c64545;"></div><div class="meta"><div class="name">error</div><div class="hex">#c64545</div></div></div>
+        </div>
+      </section>
+
+      <!-- —— 字体 ——————————————————————————————————— -->
+      <section class="section-block">
+        <div class="head">
+          <h2>字体 · Typography</h2>
+          <span class="caption muted">Display 用 serif · Body 用 sans</span>
+        </div>
+
+        <div class="type-row">
+          <div class="meta"><strong>display-xl</strong>64 / 1.05 / -1.5</div>
+          <div class="demo display-xl">Meet your thinking partner</div>
+        </div>
+        <div class="type-row">
+          <div class="meta"><strong>display-lg</strong>48 / 1.1 / -1</div>
+          <div class="demo display-lg">真实场景里练英语</div>
+        </div>
+        <div class="type-row">
+          <div class="meta"><strong>display-md</strong>36 / 1.15 / -0.5</div>
+          <div class="demo display-md">餐厅点餐 · 进步明显</div>
+        </div>
+        <div class="type-row">
+          <div class="meta"><strong>display-sm</strong>28 / 1.2 / -0.3</div>
+          <div class="demo display-sm">学习报告</div>
+        </div>
+        <div class="type-row">
+          <div class="meta"><strong>title-lg</strong>22 / 500</div>
+          <div class="demo title-lg">餐厅点餐 · 第 3 轮</div>
+        </div>
+        <div class="type-row">
+          <div class="meta"><strong>title-md</strong>18 / 500</div>
+          <div class="demo title-md">想换什么?</div>
+        </div>
+        <div class="type-row">
+          <div class="meta"><strong>title-sm</strong>16 / 500</div>
+          <div class="demo title-sm">学习菜单</div>
+        </div>
+        <div class="type-row">
+          <div class="meta"><strong>body-md</strong>16 / 1.55</div>
+          <div class="demo body-md">在餐厅里 I'd like 比 I want 更礼貌; 五分熟接近 medium-rare。</div>
+        </div>
+        <div class="type-row">
+          <div class="meta"><strong>body-sm</strong>14 / 1.55</div>
+          <div class="demo body-sm">练习中:历史会话的答案、参考与批改详情已暂时隐藏。</div>
+        </div>
+        <div class="type-row">
+          <div class="meta"><strong>caption</strong>13 / 500</div>
+          <div class="demo caption">基于你的画像 · 4 个</div>
+        </div>
+        <div class="type-row">
+          <div class="meta"><strong>caption-upper</strong>12 / 500 / 1.5px</div>
+          <div class="demo caption-upper">需要加强</div>
+        </div>
+        <div class="type-row">
+          <div class="meta"><strong>code</strong>14 / mono</div>
+          <div class="demo" style="font-family: var(--font-mono); font-size: 14px; color: var(--color-ink);">
+            await skillRegistry.dispatch('grade', ctx)
+          </div>
+        </div>
+      </section>
+
+      <!-- —— Spacing ———————————————————————————————— -->
+      <section class="section-block">
+        <div class="head">
+          <h2>间距 · Spacing</h2>
+          <span class="caption muted">基准 4px</span>
+        </div>
+        <div class="spacing-grid">
+          <div class="spacing-row"><div class="name"><strong>xxs</strong> 4</div><div class="bar" style="width: 4px;"></div></div>
+          <div class="spacing-row"><div class="name"><strong>xs</strong> 8</div><div class="bar" style="width: 8px;"></div></div>
+          <div class="spacing-row"><div class="name"><strong>sm</strong> 12</div><div class="bar" style="width: 12px;"></div></div>
+          <div class="spacing-row"><div class="name"><strong>md</strong> 16</div><div class="bar" style="width: 16px;"></div></div>
+          <div class="spacing-row"><div class="name"><strong>lg</strong> 24</div><div class="bar" style="width: 24px;"></div></div>
+          <div class="spacing-row"><div class="name"><strong>xl</strong> 32</div><div class="bar" style="width: 32px;"></div></div>
+          <div class="spacing-row"><div class="name"><strong>xxl</strong> 48</div><div class="bar" style="width: 48px;"></div></div>
+          <div class="spacing-row"><div class="name"><strong>section</strong> 96</div><div class="bar" style="width: 96px;"></div></div>
+        </div>
+      </section>
+
+      <!-- —— Radius ———————————————————————————————— -->
+      <section class="section-block">
+        <div class="head">
+          <h2>圆角 · Radius</h2>
+          <span class="caption muted">7 档</span>
+        </div>
+        <div class="radius-row">
+          <div class="radius-cell" style="border-radius: 4px;">xs · 4</div>
+          <div class="radius-cell" style="border-radius: 6px;">sm · 6</div>
+          <div class="radius-cell" style="border-radius: 8px;">md · 8</div>
+          <div class="radius-cell" style="border-radius: 12px;">lg · 12</div>
+          <div class="radius-cell" style="border-radius: 16px;">xl · 16</div>
+          <div class="radius-cell" style="border-radius: 9999px;">pill</div>
+        </div>
+      </section>
+
+      <!-- —— Buttons ——————————————————————————————— -->
+      <section class="section-block">
+        <div class="head">
+          <h2>按钮 · Button</h2>
+          <span class="caption muted">默认 / 激活 / 禁用</span>
+        </div>
+        <div class="sample-grid">
+          <div class="sample-row">
+            <div class="label"><strong>btn-primary</strong> · 主 CTA · 陶土色</div>
+            <div class="demo">
+              <button class="btn btn-primary">主按钮</button>
+              <button class="btn btn-primary btn-sm">小号</button>
+              <button class="btn btn-primary btn-lg">大号</button>
+              <button class="btn btn-primary" disabled>禁用</button>
+            </div>
+          </div>
+          <div class="sample-row">
+            <div class="label"><strong>btn-secondary</strong> · 次按钮 · 描边</div>
+            <div class="demo">
+              <button class="btn btn-secondary">次按钮</button>
+              <button class="btn btn-secondary btn-sm">小号</button>
+              <button class="btn btn-secondary">📋 复制</button>
+            </div>
+          </div>
+          <div class="sample-row">
+            <div class="label"><strong>btn-ghost</strong> · 文本按钮</div>
+            <div class="demo">
+              <button class="btn btn-ghost">幽灵按钮</button>
+              <button class="btn btn-ghost btn-sm">取消</button>
+              <button class="btn btn-ghost" style="color: var(--color-primary);">点我追问</button>
+            </div>
+          </div>
+          <div class="sample-row" style="background: var(--color-surface-dark);">
+            <div class="label" style="color: var(--color-on-dark-soft);">
+              <strong style="color: var(--color-on-dark);">btn-on-dark</strong> · 暗背景上的按钮
+            </div>
+            <div class="demo">
+              <button class="btn btn-on-dark">暗色按钮</button>
+              <button class="btn btn-primary">主按钮 (在暗色上)</button>
+            </div>
+          </div>
+          <div class="sample-row">
+            <div class="label"><strong>btn-icon</strong> · 圆形图标按钮</div>
+            <div class="demo">
+              <button class="btn-icon">＋</button>
+              <button class="btn-icon">☰</button>
+              <button class="btn-icon">↻</button>
+              <button class="btn-icon no-border">×</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- —— Badges ———————————————————————————————— -->
+      <section class="section-block">
+        <div class="head">
+          <h2>徽章 · Badge</h2>
+          <span class="caption muted">状态、标签、计数</span>
+        </div>
+        <div class="sample-row">
+          <div class="demo">
+            <span class="badge">默认 · cream</span>
+            <span class="badge badge-coral">NEW</span>
+            <span class="badge badge-success">✓ 已答对</span>
+            <span class="badge badge-warn">轻微问题</span>
+            <span class="badge badge-error">✗ 待加强</span>
+            <span class="badge badge-soft">awaiting_next</span>
+            <span class="badge badge-outline">outline</span>
+          </div>
+        </div>
+
+        <h3 class="title-sm" style="margin: 24px 0 8px;">错误标签 chip · 12 类</h3>
+        <div class="sample-row">
+          <div class="demo">
+            <span class="tag-chip">spelling</span>
+            <span class="tag-chip">word_order</span>
+            <span class="tag-chip">tense</span>
+            <span class="tag-chip">preposition</span>
+            <span class="tag-chip">article</span>
+            <span class="tag-chip">subject_verb_agreement</span>
+            <span class="tag-chip">auxiliary_verb</span>
+            <span class="tag-chip">collocation</span>
+            <span class="tag-chip">politeness</span>
+            <span class="tag-chip">literal_translation</span>
+            <span class="tag-chip">missing_word</span>
+            <span class="tag-chip">extra_word</span>
+          </div>
+        </div>
+        <div class="sample-row" style="margin-top: 12px;">
+          <div class="label">批改结果中带状态:</div>
+          <div class="demo">
+            <span class="tag-chip ok">✓ politeness</span>
+            <span class="tag-chip ok">✓ collocation</span>
+            <span class="tag-chip bad">missing_word (to)</span>
+            <span class="tag-chip bad">preposition</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- —— Inputs ———————————————————————————————— -->
+      <section class="section-block">
+        <div class="head">
+          <h2>输入 · Input</h2>
+          <span class="caption muted">默认 / 聚焦 / 错误</span>
+        </div>
+        <div class="sample-grid">
+          <div class="sample-row">
+            <div class="label"><strong>input</strong> · 默认</div>
+            <div class="demo" style="display: block;">
+              <input class="input" placeholder="占位文字" style="max-width: 360px;" />
+            </div>
+          </div>
+          <div class="sample-row">
+            <div class="label"><strong>input</strong> · 聚焦 (陶土色描边 + 外环)</div>
+            <div class="demo" style="display: block;">
+              <input class="input" value="lin@example.com" autofocus style="max-width: 360px; border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(204, 120, 92, 0.18);" />
+            </div>
+          </div>
+          <div class="sample-row">
+            <div class="label"><strong>field</strong> · 带 label / help / error</div>
+            <div class="demo" style="display: block; max-width: 360px;">
+              <label class="field-label" for="x">邮箱</label>
+              <input id="x" class="input" placeholder="you@example.com" value="bad-email" style="border-color: var(--color-error); box-shadow: 0 0 0 3px rgba(198, 69, 69, 0.15);" />
+              <div class="field-error">邮箱格式不正确</div>
+              <label class="field-label" for="y" style="margin-top: 16px;">密码</label>
+              <input id="y" class="input" type="password" value="••••••••" />
+              <div class="field-help">至少 8 位,含字母和数字</div>
+            </div>
+          </div>
+          <div class="sample-row">
+            <div class="label"><strong>textarea</strong> · 自适应行高</div>
+            <div class="demo" style="display: block;">
+              <textarea class="input" rows="3" style="max-width: 480px;">I'd like a steak, medium-rare, please.</textarea>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- —— 消息气泡 ——————————————————————————————— -->
+      <section class="section-block">
+        <div class="head">
+          <h2>消息气泡 · Message Bubble</h2>
+          <span class="caption muted">AI / 用户 / 系统 / 锁定</span>
+        </div>
+        <div class="sample-row" style="background: var(--color-canvas);">
+          <div class="msg msg-ai">
+            <div class="msg-bubble">
+              这是 AI 消息。象牙白底 + 左侧 3px 陶土色竖线,圆角 8px,
+              max-width 85%,行高 1.6。
+            </div>
+          </div>
+          <div class="msg msg-user">
+            <div class="msg-bubble">这是用户消息。白色底 + 暖色描边,max-width 75%。</div>
+          </div>
+          <div class="msg msg-system">
+            <div class="msg-bubble">— 系统消息 · 居中 · 浅色 —</div>
+          </div>
+          <div class="msg msg-ai">
+            <div class="msg-bubble">
+              AI 流式输出中<span class="cursor"></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- —— 状态条 ——————————————————————————————— -->
+      <section class="section-block">
+        <div class="head">
+          <h2>状态条 · State Bar</h2>
+          <span class="caption muted">grading-result 顶部 4px</span>
+        </div>
+        <div class="sample-row">
+          <div class="demo" style="display: block;">
+            <div style="background: var(--color-canvas); border-radius: var(--radius-md); border: 1px solid var(--color-hairline); margin-bottom: 12px; overflow: hidden;">
+              <div class="state-bar ok"></div>
+              <div style="padding: 14px 18px;">≥ 90 · ok 绿</div>
+            </div>
+            <div style="background: var(--color-canvas); border-radius: var(--radius-md); border: 1px solid var(--color-hairline); margin-bottom: 12px; overflow: hidden;">
+              <div class="state-bar warn"></div>
+              <div style="padding: 14px 18px;">60-89 · warn 黄</div>
+            </div>
+            <div style="background: var(--color-canvas); border-radius: var(--radius-md); border: 1px solid var(--color-hairline); overflow: hidden;">
+              <div class="state-bar bad"></div>
+              <div style="padding: 14px 18px;">&lt; 60 · bad 红</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- —— 进度环 ——————————————————————————————— -->
+      <section class="section-block">
+        <div class="head">
+          <h2>进度环 · Progress Ring</h2>
+          <span class="caption muted">用 SVG · 不引入 ECharts</span>
+        </div>
+        <div class="sample-row">
+          <div class="demo">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="position: relative; width: 44px; height: 44px;">
+                <svg width="44" height="44" viewBox="0 0 44 44" style="transform: rotate(-90deg);">
+                  <circle class="ring-track" cx="22" cy="22" r="18" fill="none" stroke-width="4"/>
+                  <circle cx="22" cy="22" r="18" fill="none" stroke="#5db872" stroke-width="4" stroke-dasharray="113" stroke-dashoffset="22" stroke-linecap="round"/>
+                </svg>
+                <span style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 12px; font-weight: 500;">80</span>
+              </div>
+              <span class="caption muted">success · 80%</span>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="position: relative; width: 44px; height: 44px;">
+                <svg width="44" height="44" viewBox="0 0 44 44" style="transform: rotate(-90deg);">
+                  <circle class="ring-track" cx="22" cy="22" r="18" fill="none" stroke-width="4"/>
+                  <circle cx="22" cy="22" r="18" fill="none" stroke="#cc785c" stroke-width="4" stroke-dasharray="113" stroke-dashoffset="46" stroke-linecap="round"/>
+                </svg>
+                <span style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 12px; font-weight: 500;">60</span>
+              </div>
+              <span class="caption muted">primary · 60%</span>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="position: relative; width: 44px; height: 44px;">
+                <svg width="44" height="44" viewBox="0 0 44 44" style="transform: rotate(-90deg);">
+                  <circle class="ring-track" cx="22" cy="22" r="18" fill="none" stroke-width="4"/>
+                  <circle cx="22" cy="22" r="18" fill="none" stroke="#d4a017" stroke-width="4" stroke-dasharray="113" stroke-dashoffset="79" stroke-linecap="round"/>
+                </svg>
+                <span style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 12px; font-weight: 500;">30</span>
+              </div>
+              <span class="caption muted">warning · 30%</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="sample-row" style="margin-top: 12px;">
+          <div class="demo" style="display: block;">
+            <div style="margin-bottom: 12px;">
+              <div class="caption muted" style="margin-bottom: 4px;">线性进度</div>
+              <div class="progress-bar">
+                <div class="progress-bar-fill" style="width: 60%;"></div>
+              </div>
+            </div>
+            <div>
+              <div class="caption muted" style="margin-bottom: 4px;">线性进度 · ok</div>
+              <div class="progress-bar">
+                <div class="progress-bar-fill ok" style="width: 82%;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- —— Layout Specs ————————————————————————————— -->
+      <section class="section-block">
+        <div class="head">
+          <h2>布局规格 · Layout</h2>
+          <span class="caption muted">来自 PRD §4.4</span>
+        </div>
+        <div class="sample-row">
+          <table class="spec-table">
+            <thead>
+              <tr><th>断点</th><th>宽度</th><th>主结构</th><th>Widget 列数</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>桌面</td><td>≥ 1180px</td><td><code>240</code> + <code>720</code> + <code>360</code> 三栏</td><td>2-3</td></tr>
+              <tr><td>平板</td><td>768-1179</td><td>主聊天优先,侧栏可折叠</td><td>2</td></tr>
+              <tr><td>移动</td><td>&lt; 768px</td><td>全宽单栏 + 抽屉</td><td>1-2 / 横滑</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="sample-row" style="margin-top: 12px;">
+          <table class="spec-table">
+            <thead>
+              <tr><th>层级</th><th>处理</th><th>用途</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Flat</td><td>无阴影 · 无边框</td><td>顶栏 · 主体</td></tr>
+              <tr><td>Hairline</td><td>1px <code>hairline</code></td><td>输入 · 子导航</td></tr>
+              <tr><td>Cream Card</td><td><code>surface-card</code> 底</td><td>feature 卡</td></tr>
+              <tr><td>Dark Surface</td><td><code>surface-dark</code></td><td>注册侧栏 · CTA</td></tr>
+              <tr><td>Drop Shadow</td><td><code>shadow-md</code> 极少使用</td><td>composer · popover</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <p class="caption muted" style="margin-top: 64px; text-align: center;">
+        所有 token 与样式定义在 <code>doc/design/styles/tokens.css</code> 与
+        <code>doc/design/styles/components.css</code>,可直接复制到正式工程的样式入口。
+      </p>
+    </div>
+
+    <script src="../scripts/interactions.js"></script>
+  </body>
+</html>
