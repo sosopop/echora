@@ -20,6 +20,11 @@ import type {
   ChatStreamEvent,
 } from '../types.js';
 import type { RouterInput, RouterDecision } from '../../../shared/skill.js';
+import {
+  DEEPSEEK_THINKING_DISABLED,
+  isDeepSeekBaseURL,
+  type DeepSeekThinkingDisabled,
+} from './deepseek.js';
 
 export interface OpenAIProviderOptions {
   apiKey: string;
@@ -40,6 +45,7 @@ export class OpenAIProvider implements AIProvider {
   readonly name = 'openai';
   private readonly client: OpenAI;
   private readonly model: string;
+  private readonly disableThinkingForRoute: boolean;
 
   constructor(opts: OpenAIProviderOptions) {
     if (!opts.apiKey || opts.apiKey.trim() === '') {
@@ -50,6 +56,7 @@ export class OpenAIProvider implements AIProvider {
       baseURL: opts.baseURL,
     });
     this.model = opts.model ?? 'gpt-4o-mini';
+    this.disableThinkingForRoute = isDeepSeekBaseURL(opts.baseURL);
   }
 
   async route(input: RouterInput): Promise<RouterDecision> {
@@ -59,7 +66,8 @@ export class OpenAIProvider implements AIProvider {
         ? input.userText
         : '(用户未输入文本,请基于当前学习态判断意图)';
 
-    const response = await this.client.chat.completions.create({
+    const routeParams: OpenAI.ChatCompletionCreateParamsNonStreaming &
+      Partial<DeepSeekThinkingDisabled> = {
       model: this.model,
       max_tokens: 512,
       messages: [
@@ -106,7 +114,12 @@ export class OpenAIProvider implements AIProvider {
         type: 'function',
         function: { name: ROUTE_FUNCTION_NAME },
       },
-    });
+    };
+    if (this.disableThinkingForRoute) {
+      routeParams.thinking = DEEPSEEK_THINKING_DISABLED.thinking;
+    }
+
+    const response = await this.client.chat.completions.create(routeParams);
 
     const message = response.choices[0]?.message;
     const toolCall = message?.tool_calls?.[0];

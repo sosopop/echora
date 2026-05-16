@@ -18,6 +18,11 @@ import type {
   RouterInput,
   RouterDecision,
 } from '../../../shared/skill.js';
+import {
+  DEEPSEEK_THINKING_DISABLED,
+  isDeepSeekBaseURL,
+  type DeepSeekThinkingDisabled,
+} from './deepseek.js';
 
 export interface AnthropicProviderOptions {
   apiKey: string;
@@ -38,6 +43,7 @@ export class AnthropicProvider implements AIProvider {
   readonly name = 'anthropic';
   private readonly client: Anthropic;
   private readonly model: string;
+  private readonly disableThinkingForRoute: boolean;
 
   constructor(opts: AnthropicProviderOptions) {
     if (!opts.apiKey || opts.apiKey.trim() === '') {
@@ -48,6 +54,7 @@ export class AnthropicProvider implements AIProvider {
       baseURL: opts.baseURL,
     });
     this.model = opts.model ?? 'claude-sonnet-4-6';
+    this.disableThinkingForRoute = isDeepSeekBaseURL(opts.baseURL);
   }
 
   async route(input: RouterInput): Promise<RouterDecision> {
@@ -56,7 +63,8 @@ export class AnthropicProvider implements AIProvider {
       ? input.userText
       : '(用户未输入文本,请基于当前学习态判断意图)';
 
-    const response = await this.client.messages.create({
+    const routeParams: Anthropic.MessageCreateParamsNonStreaming &
+      Partial<DeepSeekThinkingDisabled> = {
       model: this.model,
       max_tokens: 512,
       system,
@@ -95,7 +103,12 @@ export class AnthropicProvider implements AIProvider {
         },
       ],
       tool_choice: { type: 'tool', name: ROUTE_TOOL_NAME },
-    });
+    };
+    if (this.disableThinkingForRoute) {
+      routeParams.thinking = DEEPSEEK_THINKING_DISABLED.thinking;
+    }
+
+    const response = await this.client.messages.create(routeParams);
 
     const toolUseBlock = response.content.find(
       (b): b is { type: 'tool_use'; name: string; input: unknown; id: string } =>
@@ -116,6 +129,7 @@ export class AnthropicProvider implements AIProvider {
   }
 
   async *chat(req: ChatRequest): AsyncIterable<ChatStreamEvent> {
+    const toolChoice = toAnthropicToolChoice(req.toolChoice);
     const stream = this.client.messages.stream(
       {
         model: this.model,
@@ -130,7 +144,7 @@ export class AnthropicProvider implements AIProvider {
           description: t.description,
           input_schema: t.inputSchema as Anthropic.Tool.InputSchema,
         })),
-        tool_choice: req.toolChoice,
+        tool_choice: toolChoice,
       } as Anthropic.MessageStreamParams,
       { signal: req.signal }
     );
@@ -205,6 +219,14 @@ export class AnthropicProvider implements AIProvider {
 
     yield { type: 'message-stop', stopReason };
   }
+}
+
+export function toAnthropicToolChoice(
+  toolChoice: ChatRequest['toolChoice']
+): Anthropic.ToolChoice | undefined {
+  if (toolChoice === undefined) return undefined;
+  if (toolChoice === 'auto') return { type: 'auto' };
+  return { type: 'tool', name: toolChoice.name };
 }
 
 function buildRouteSystemPrompt(input: RouterInput): string {
