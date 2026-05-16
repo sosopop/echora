@@ -35,6 +35,9 @@ beforeAll(async () => {
     anthropicApiKey: null,
     anthropicBaseURL: 'https://api.anthropic.com',
     anthropicModel: 'claude-sonnet-4-6',
+    openaiApiKey: null,
+    openaiBaseURL: 'https://api.openai.com/v1',
+    openaiModel: 'gpt-4o-mini',
     corsOrigin: ['http://localhost'],
     nodeEnv: 'test',
   };

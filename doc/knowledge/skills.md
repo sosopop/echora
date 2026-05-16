@@ -31,6 +31,14 @@
 - 各 stub Skill handler 产出:1-2 条 text-chunk + 必要的 mode-switch + widget-init/ready + done
 - `general-chat` 与 `explain` 不产 widget,纯文本流
 
+## 真实 Provider 接入(002)
+
+- **Anthropic**(`AnthropicProvider`):`route()` 用 `tool_use`(`route_to_skill` 工具)强制 JSON;`chat()` 用 `messages.stream`,转 `ChatStreamEvent`(text-delta / tool-use / message-stop)
+- **OpenAI**(`OpenAIProvider`):`route()` 用 function calling(`tool_choice: {type: 'function', function: {name: 'route_to_skill'}}`)强制 JSON;`chat()` 用 `chat.completions.create({stream: true})`,delta 累积成 ChatStreamEvent
+- 两者均通过相同 `AIProvider` 接口暴露,skill handler 不感知具体 provider
+- 缺 key / endpoint 不可达 → `createProvider` 抛错;route 失败 → `decide` 抛错 → chat.ts 返 502
+- 同时验证两个 provider:`npm run test:smoke:ai`(严格模式,任一 key 缺即报错)
+
 ## Onboarding Skill(002 已真实接入)
 
 - 入口:`server/skills/onboarding.ts` + `server/skills/_helpers/onboardingFsm.ts`
@@ -45,17 +53,19 @@
 
 ```
 provider.route()
-  → 校验 skillName ∈ skillRegistry
-  → 校验 currentLearningState ∈ skill.allowedStates(空数组视为任意态)
-  → 任一失败 → fallback 到 general-chat decision(rationale 注明原因)
+  → 校验 skillName ∈ skillRegistry(失败抛 RouterValidationError)
+  → 校验 currentLearningState ∈ skill.allowedStates(空数组视为任意态;失败抛 RouterValidationError)
+  → 任一失败 → 错误向上传播
 ```
+
+**无 fallback**(002 patch):provider 抛错或 router 校验失败不会降级到 general-chat,而是抛错。chat 路由 `/api/chat/send` catch 后返 `502 PROVIDER_ERROR`,前端看到具体原因。设计意图:让上游问题立即暴露,避免误以为系统正常。`scripts/diag-{anthropic,openai}.ts` 提供绕开 router 直接调 provider 的诊断入口。
 
 ## 约束与失败点
 
 - handler 不直接写库,事件即唯一事实源:由 chat 路由消费 yield 时统一落 `messages.stream_events` JSON 数组
 - 任意 handler 抛错 → 路由 catch → 发 `error` 事件 → `agent_runs.status = 'failed'`
-- `practicing` / `grading` 中不得降级到 `general-chat`(由 router 二次校验保障)
-- AI Provider 抛错时 router 自动降级到 general-chat 并 warn 日志,不阻断响应
+- `practicing` / `grading` 中 router 校验失败时**直接抛错**(不再 fallback 到 general-chat,002 patch)
+- AI Provider 抛错时 router 不 catch,直接传播到 chat 路由,返 `502 PROVIDER_ERROR`
 
 ## 测试入口
 

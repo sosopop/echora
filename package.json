@@ -16,6 +16,7 @@
     "test:server": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand",
     "test:web": "vitest run",
     "test:smoke": "tsx tests/smoke/run-smoke.ts",
+    "test:smoke:ai": "tsx tests/smoke/run-smoke-ai.ts",
     "migrate": "tsx server/db/migrate.ts",
     "release": "node scripts/release.js",
     "start": "node dist-server/server/index.js"
@@ -28,6 +29,7 @@
     "dotenv": "^16.4.7",
     "express": "^5.0.1",
     "jsonwebtoken": "^9.0.2",
+    "openai": "^6.38.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

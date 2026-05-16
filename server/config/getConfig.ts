@@ -11,7 +11,7 @@ import * as dotenv from 'dotenv';
 
 dotenv.config(); // 加载 .env(若存在),不覆盖已存在的 process.env
 
-export type AIProviderKind = 'stub' | 'anthropic';
+export type AIProviderKind = 'stub' | 'anthropic' | 'openai';
 
 export interface Config {
   port: number;
@@ -21,6 +21,9 @@ export interface Config {
   anthropicApiKey: string | null;
   anthropicBaseURL: string;
   anthropicModel: string;
+  openaiApiKey: string | null;
+  openaiBaseURL: string;
+  openaiModel: string;
   corsOrigin: string[];
   nodeEnv: string;
 }
@@ -33,6 +36,9 @@ const DEFAULTS: Config = {
   anthropicApiKey: null,
   anthropicBaseURL: 'https://api.anthropic.com',
   anthropicModel: 'claude-sonnet-4-6',
+  openaiApiKey: null,
+  openaiBaseURL: 'https://api.openai.com/v1',
+  openaiModel: 'gpt-4o-mini',
   corsOrigin: ['http://localhost:5173'],
   nodeEnv: 'development',
 };
@@ -115,7 +121,11 @@ export function getConfig(opts?: { reload?: boolean }): Config {
     asString(pick(src, 'AI_PROVIDER', 'aiProvider'))?.toLowerCase() ??
     DEFAULTS.aiProvider;
   const aiProvider: AIProviderKind =
-    providerRaw === 'anthropic' ? 'anthropic' : 'stub';
+    providerRaw === 'anthropic'
+      ? 'anthropic'
+      : providerRaw === 'openai'
+      ? 'openai'
+      : 'stub';
 
   const anthropicApiKey =
     asString(pick(src, 'ANTHROPIC_API_KEY', 'anthropicApiKey')) ?? null;
@@ -128,6 +138,17 @@ export function getConfig(opts?: { reload?: boolean }): Config {
   const anthropicModel =
     asString(pick(src, 'ANTHROPIC_MODEL', 'anthropicModel')) ??
     DEFAULTS.anthropicModel;
+
+  const openaiApiKey =
+    asString(pick(src, 'OPENAI_API_KEY', 'openaiApiKey')) ?? null;
+
+  const openaiBaseURL = (
+    asString(pick(src, 'OPENAI_BASE_URL', 'openaiBaseURL')) ??
+    DEFAULTS.openaiBaseURL
+  ).replace(/\/+$/, '');
+
+  const openaiModel =
+    asString(pick(src, 'OPENAI_MODEL', 'openaiModel')) ?? DEFAULTS.openaiModel;
 
   const corsOrigin =
     asStringArray(pick(src, 'CORS_ORIGIN', 'corsOrigin')) ?? DEFAULTS.corsOrigin;
@@ -142,10 +163,15 @@ export function getConfig(opts?: { reload?: boolean }): Config {
     );
   }
 
-  // 选 anthropic 但缺 key
+  // Provider 缺 key 告警(运行时会抛错,这里只警告)
   if (aiProvider === 'anthropic' && !anthropicApiKey) {
     console.warn(
-      '[getConfig] WARNING: AI_PROVIDER=anthropic 但 ANTHROPIC_API_KEY 未设置,运行时将抛错'
+      '[getConfig] WARNING: AI_PROVIDER=anthropic 但 ANTHROPIC_API_KEY 未设置,createProvider 将抛错'
+    );
+  }
+  if (aiProvider === 'openai' && !openaiApiKey) {
+    console.warn(
+      '[getConfig] WARNING: AI_PROVIDER=openai 但 OPENAI_API_KEY 未设置,createProvider 将抛错'
     );
   }
 
@@ -157,6 +183,9 @@ export function getConfig(opts?: { reload?: boolean }): Config {
     anthropicApiKey,
     anthropicBaseURL,
     anthropicModel,
+    openaiApiKey,
+    openaiBaseURL,
+    openaiModel,
     corsOrigin,
     nodeEnv,
   };

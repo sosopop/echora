@@ -59,17 +59,31 @@
 - `scripts/diag-stub.ts` — 同上但用 stub provider,验证降级路径
 - `CLAUDE.md` + `doc/knowledge/task-handoff.md` — 任务文档结构从 4 段升 5 段,新增「手工测试」强约束
 
+### 补丁(commit 8 · OpenAI Provider + 删除 fallback)
+- `server/ai/providers/openai.ts` — OpenAIProvider 真实接入(route 用 function calling + tool_choice 强制 JSON;chat 用 chat.completions.create stream 转 ChatStreamEvent)
+- `server/ai/providers/index.ts` — 新增 `openai` 分支;**移除 fallback**:缺 key 直接抛错,不再悄悄降级到 stub
+- `server/ai/router.ts` — **移除 try/catch fallback**:provider.route 抛错直接传播;新增 `RouterValidationError`(reason: skill_not_found / state_not_allowed)
+- `server/routes/chat.ts` — `/api/chat/send` 在 router.decide() 抛错时返 `502 PROVIDER_ERROR`(含原始错误消息),让客户端看到具体原因
+- `server/config/getConfig.ts` — `AIProviderKind` 加 `'openai'`;新增 `openaiApiKey` / `openaiBaseURL`(默认 `https://api.openai.com/v1`)/ `openaiModel`(默认 `gpt-4o-mini`)
+- `tests/smoke/run-smoke-ai.ts` — 严格双 Provider 烟雾(preflight 检查所有 key,缺即报错);测每个 provider 的 route() + chat()(含 tool-use 验证)
+- `scripts/diag-openai.ts` — 独立诊断入口
+- `server/__tests__/ai-router.test.ts` — 5 测试覆盖正常路径 + 3 类失败路径(provider 抛 / skill 不存在 / state 不允许)+ 空 allowedStates 任意态
+- `package.json` — 新增 `npm run test:smoke:ai` 脚本;新增 `openai ^6.38` 依赖
+- `.env.example` — 增 OpenAI 三项 + fallback 关闭说明
+- CLAUDE.md + `doc/knowledge/skills.md` — 同步 OpenAI Provider 与「无 fallback」约定
+
 ### 验证结果
 
 | 命令 | 结果 |
 |---|---|
 | `npx tsc -p tsconfig.server.json --noEmit` | ✓ 后端类型干净 |
 | `npx tsc -p tsconfig.json --noEmit` | ✓ 前端类型干净 |
-| `npm run test:server` | ✓ 13 passed (4 suites) |
+| `npm run test:server` | ✓ 18 passed (5 suites,新增 ai-router) |
 | `npm run test:web` | ✓ 16 passed (3 suites) |
-| `npm run test:smoke` | ✓ 6/6 (register / profile-empty / profile-update / me / send / stream) |
+| `npm run test:smoke` | ✓ 6/6 (stub provider 全链) |
+| `npm run test:smoke:ai` | ⚠ 需 ANTHROPIC_API_KEY + OPENAI_API_KEY 双备 才能跑完整链(详见「手工测试 · test:smoke:ai」) |
 | 手工 curl(stub provider) | ✓ register → /me → profile CRUD → send → SSE 全链 |
-| 手工 curl(anthropic provider) | ⚠ 链路完整但 `provider.route` 在第三方中转 endpoint 上 401,降级 general-chat(详见「手工测试 · 诊断记录」) |
+| 手工 curl(anthropic provider) | ⚠ 链路完整但 `provider.route` 在第三方中转 endpoint 上 401,**现已不再 fallback**:`/api/chat/send` 直接返 502(详见「手工测试 · 诊断记录」) |
 
 ## 手工测试
 
@@ -190,21 +204,28 @@ curl -s -X POST http://127.0.0.1:8787/api/chat/conversations \
 命令:
 
 ```bash
-curl -s -X POST http://127.0.0.1:8787/api/chat/send \
+curl -i -X POST http://127.0.0.1:8787/api/chat/send \
   -H "Authorization: Bearer <TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{"conversationId":<CONV_ID>,"text":"hi"}'
 ```
 
-响应(本次实测,中转 endpoint 401 触发降级):
+响应(本次实测,中转 endpoint 401,**已不再 fallback,直接返 502**):
 
-```json
-{"data":{"conversationId":1,"userMessageId":1,"assistantMessageId":2,"streamId":"<STREAM_ID>","decision":{"skillName":"general-chat","confidence":0.3,"rationale":"router fallback (provider_error)"}}}
+```
+HTTP/1.1 502 Bad Gateway
+Content-Type: application/json
 ```
 
-⚠ **router 降级到 general-chat**(rationale=`provider_error`)。说明 `AnthropicProvider.route()` 抛错被 `createAIRouter` catch,自动 fallback。原因见下「诊断记录」。Provider 正常时 `skillName` 应为 `"onboarding"`,`confidence` ≥ 0.8。**把 `streamId` 的值记为 `<STREAM_ID>`**。
+```json
+{"error":{"code":"PROVIDER_ERROR","message":"AI 路由失败: 401 {\"error\":{\"code\":\"\",\"message\":\"无效的令牌 (request id: ...)\",\"type\":\"new_api_error\"}}"}}
+```
 
-#### Step 6 · GET /api/chat/stream(SSE)
+⚠ **设计意图**(002 patch):router 不再 catch 错误降级。前端 chat store / Login / Register 上拿到 502 即可显示真实失败原因(`PROVIDER_ERROR: AI 路由失败: 401 ...`),不再被假装成 general-chat 的「我收到啦」掩盖。Provider 正常时此步返 202 + streamId,后续 SSE 流出真实 LLM 文本 + tool_use 调用。
+
+#### Step 6 · GET /api/chat/stream(SSE,仅 Step 5 成功时执行)
+
+> Step 5 已 502 时跳过本步骤(无 streamId)。Provider 通时:
 
 命令:
 
@@ -212,19 +233,59 @@ curl -s -X POST http://127.0.0.1:8787/api/chat/send \
 curl -N "http://127.0.0.1:8787/api/chat/stream?streamId=<STREAM_ID>&lastSeq=0&token=<TOKEN>"
 ```
 
-输出(general-chat stub 流):
+输出(provider 通时,onboarding skill 真实流):
 
 ```
-data: {"type":"text-chunk","payload":{"text":"我收到啦。你可以告诉我\"开始练习\"、\"换场景\",或者直接打字描述你想练什么。"},"seq":1,"streamId":"<STREAM_ID>","timestamp":1778918052751}
+data: {"type":"text-chunk","payload":{"text":"你好!我叫 Echo,"},"seq":1,...}
 
-data: {"type":"done","payload":{},"seq":2,"streamId":"<STREAM_ID>","timestamp":1778918052751}
+data: {"type":"text-chunk","payload":{"text":"先问下你叫什么?"},"seq":2,...}
+
+data: {"type":"state-transition","payload":{"nextLearningState":"scene_selecting","activeSkill":null},"seq":N,...}
+
+data: {"type":"done","payload":{},"seq":N+1,...}
 ```
 
-✓ SSE 协议工作正常,事件按 seq 单调,`done` 后流关闭。general-chat skill 的 stub 流也按契约产出。Provider 通时应看到多个 `text-chunk` + 1 个 `state-transition` + `done`。
+✓ SSE 协议工作正常,事件按 seq 单调,`done` 后流关闭。state-transition 在所有必填字段齐全后触发。
+
+### test:smoke:ai · 双 Provider 真实接入烟雾
+
+严格模式:任一 Provider API key 未配置即 preflight 报错退出。
+
+命令:
+
+```bash
+npm run test:smoke:ai
+```
+
+输出(本次实测,缺 OPENAI_API_KEY):
+
+```
+[smoke:ai] ✗ 严格模式:缺以下环境变量,无法进行 AI provider 测试
+[smoke:ai]   - OPENAI_API_KEY
+[smoke:ai] 提示:在 .env 中配置 ANTHROPIC_API_KEY / OPENAI_API_KEY,或临时把对应的 RUN_* 改为 false 跳过
+```
+
+⚠ 预期行为。完整跑通需要两个 key 都配齐;若只想测一个 provider,改 `tests/smoke/run-smoke-ai.ts` 顶部的 `RUN_ANTHROPIC` / `RUN_OPENAI` 常量。
+
+完整跑通时(provider 都正常)期望输出:
+
+```
+[smoke:ai] === Anthropic Provider ===
+[smoke:ai]   baseURL=... model=...
+[smoke:ai] === OpenAI Provider ===
+[smoke:ai]   baseURL=... model=...
+
+[smoke:ai] === Results ===
+[smoke:ai] ✓ anthropic/route: skillName=general-chat confidence=0.85
+[smoke:ai] ✓ anthropic/chat: textDelta=12 toolUse=1 input={"name":"张三"}
+[smoke:ai] ✓ openai/route: skillName=general-chat confidence=0.80
+[smoke:ai] ✓ openai/chat: textDelta=8 toolUse=1 input={"name":"张三"}
+[smoke:ai] PASSED 4/4
+```
 
 ### 诊断记录 · Anthropic 401
 
-- **现象**:Step 5 中 `decision.rationale = "router fallback (provider_error)"`,SSE 流回退到 general-chat
+- **现象**:Step 5 中 `/api/chat/send` 返 `502 PROVIDER_ERROR`,错误消息含 `401 无效的令牌`。Provider 没有被 fallback 隐藏,客户端直接看到根因
 - **诊断**:运行 `scripts/diag-anthropic.ts` 绕开 router 直接调 provider.route():
 
   命令:
@@ -250,7 +311,17 @@ data: {"type":"done","payload":{},"seq":2,"streamId":"<STREAM_ID>","timestamp":1
   1. 确认 `ANTHROPIC_API_KEY` 是 code-relay.com 控制台签发的有效 token(不是 Anthropic 原生 key)
   2. 或临时把 `ANTHROPIC_BASE_URL` 改回默认 `https://api.anthropic.com` + 用原生 sk-ant-* key 验证 SDK 接入本身没问题
   3. 验证后 `route()` 应返回 `{skillName: 'onboarding', confidence: 0.85+, ...}`,SSE 流应是真实 LLM 文本 + tool_use 调用
-- **降级表现符合预期**:即使 provider 完全不通,系统不阻塞,而是降级到 general-chat,日志(stderr)留 warn(本次 tsx watch stdio 没捕获到 warn,可考虑后续把 dev-server.js 换成 stdio:'pipe' 再 pipe 出)
+- **fallback 已删除**(002 patch 8):即使 provider 完全不通,系统不再悄悄降级。`/api/chat/send` 直接 502,前端能看到 `PROVIDER_ERROR` 与具体的 SDK 错误消息(401 / 404 / 网络超时等)
+
+### 诊断记录 · OpenAI 未配置
+
+- **现象**:`test:smoke:ai` 预检退出 / `diag-openai` 报「OPENAI_API_KEY 未配置」
+- **处置**:在 `.env` 中配置 `OPENAI_API_KEY` + 可选 `OPENAI_BASE_URL` / `OPENAI_MODEL`(默认 `https://api.openai.com/v1` + `gpt-4o-mini`)
+- **诊断命令**:
+
+  ```bash
+  npx tsx scripts/diag-openai.ts
+  ```
 
 ### Stub Provider 诊断(参考)
 

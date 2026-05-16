@@ -139,6 +139,7 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
       });
 
       // 3. AI Router 决策
+      //    失败不做 fallback,直接抛错让客户端看到具体原因
       const routerInput: RouterInput = {
         userText: body.text,
         profile: null,
@@ -146,7 +147,17 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
         conversationId: conv.id,
         availableSkills: skillRegistry.names(),
       };
-      const decision = await aiRouter.decide(routerInput);
+      let decision;
+      try {
+        decision = await aiRouter.decide(routerInput);
+      } catch (e) {
+        const reason = e instanceof Error ? e.message : String(e);
+        throw new HttpError(
+          502,
+          ERROR_CODES.PROVIDER_ERROR,
+          `AI 路由失败: ${reason}`
+        );
+      }
       const skill = skillRegistry.get(decision.skillName);
       if (!skill) {
         throw new HttpError(

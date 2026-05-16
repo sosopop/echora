@@ -23,7 +23,8 @@ npm run dev:web              # Frontend Vite on :5173 (proxies /api → :8787)
 npm test                     # Full gate: server + web + smoke
 npm run test:server          # Jest + supertest (backend)
 npm run test:web             # Vitest + jsdom (frontend)
-npm run test:smoke           # E2E: register → send → consume SSE in tests/smoke/
+npm run test:smoke           # E2E with stub provider: register → send → consume SSE
+npm run test:smoke:ai        # Strict E2E against real Anthropic + OpenAI (needs both keys)
 
 npm run build                # tsc -p tsconfig.server.json && vite build
 npm run release              # Build + stage clean release/ directory
@@ -59,7 +60,12 @@ The 8 stub skills in `server/skills/` are minimal templates: 1–2 `text-chunk` 
 
 ## Architecture: Provider Abstraction
 
-`AI_PROVIDER` env (`stub` | `anthropic`) selects the implementation via `server/ai/providers/index.ts`. **Stub is the default** for zero-config dev. `AnthropicProvider` is real (002): `route()` uses `tool_use` to force JSON, `chat()` streams via `messages.stream`. Configure with `ANTHROPIC_API_KEY` + optional `ANTHROPIC_BASE_URL` (default `https://api.anthropic.com`, supports third-party relays/proxies) + `ANTHROPIC_MODEL` (default `claude-sonnet-4-6`). When endpoint or token is misconfigured, the router falls back to `general-chat` silently — use `scripts/diag-anthropic.ts` to surface the underlying SDK error.
+`AI_PROVIDER` env (`stub` | `anthropic` | `openai`) selects the implementation via `server/ai/providers/index.ts`. **Stub is the default** for zero-config dev.
+
+- `AnthropicProvider` (002): `route()` uses `tool_use` to force JSON; `chat()` streams via `messages.stream`. Configure with `ANTHROPIC_API_KEY` + optional `ANTHROPIC_BASE_URL` (default `https://api.anthropic.com`, supports third-party relays) + `ANTHROPIC_MODEL` (default `claude-sonnet-4-6`).
+- `OpenAIProvider` (002 patch): `route()` uses function calling; `chat()` streams via `chat.completions.create({stream:true})`. Configure with `OPENAI_API_KEY` + optional `OPENAI_BASE_URL` (default `https://api.openai.com/v1`) + `OPENAI_MODEL` (default `gpt-4o-mini`).
+
+**No fallback** (002 patch): when Provider is misconfigured or fails, `createProvider` and `AIRouter.decide` both throw — the chat route maps the error to `502 PROVIDER_ERROR` so the frontend sees the real cause. This is intentional: silent degradation hides upstream issues. To diagnose without going through the chat flow, use `scripts/diag-anthropic.ts` / `scripts/diag-openai.ts`. To exercise both providers' real route+chat path, run `npm run test:smoke:ai` (strict mode — fails if any provider's API key is missing).
 
 ## Shared Code Boundaries (`shared/`)
 
