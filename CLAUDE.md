@@ -1,0 +1,107 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Before Starting Any Task
+
+Read `doc/knowledge/task-handoff.md` first — it's a permanent workflow contract. **Every task that changes code or docs must end by producing a `doc/task/<NNN>-<slug>.md` execution log** with four fixed sections: 任务背景 / 执行摘要 / 遗留 TODO / 下一阶段建议. Filename uses a 0-padded 3-digit serial starting from `001`; before creating a new one, list `doc/task/` and take `max + 1`.
+
+The authoritative product spec is `doc/prd.md` (V1 MVP), the authoritative engineering convention is `doc/esd.md`, and the design tokens are in `DESIGN.md` (with a live HTML prototype under `doc/design/`).
+
+## Common Commands
+
+```bash
+npm install                  # First time / after dep changes
+copy .env.example .env       # Windows; cp on POSIX
+
+npm run migrate              # Apply migrations/*.sql (creates db/echora.db on first run)
+npm run dev                  # Backend tsx watch on :8787 (NODE_ENV=development)
+npm run dev:web              # Frontend Vite on :5173 (proxies /api → :8787)
+
+npm test                     # Full gate: server + web + smoke
+npm run test:server          # Jest + supertest (backend)
+npm run test:web             # Vitest + jsdom (frontend)
+npm run test:smoke           # E2E: register → send → consume SSE in tests/smoke/
+
+npm run build                # tsc -p tsconfig.server.json && vite build
+npm run release              # Build + stage clean release/ directory
+```
+
+Run a single backend test: `node --experimental-vm-modules ./node_modules/jest/bin/jest.js path/to.test.ts` or `-t "name"`.
+Run a single frontend test: `npx vitest run path/to.test.tsx` or `-t "name"`.
+
+Commit prefixes (ESD §11.2): `feat:` / `fix:` / `refactor:` / `docs:` / `test:`.
+
+## Architecture: The Skill Event Loop
+
+The runtime hinges on one async pipeline that's worth understanding before touching anything:
+
+```
+user input
+  → POST /api/chat/send (server/routes/chat.ts)
+  → AIRouter.decide (server/ai/router.ts)
+       → provider.route() returns { skillName, params, confidence }
+       → second pass: validate skill exists + learningState ∈ skill.allowedStates
+       → fallback to general-chat on any validation failure
+  → background task runs skill.handler(ctx) — an async generator yielding SkillEventInput
+  → each yielded event gets seq/streamId/timestamp added, gets appended to
+       messages.stream_events (JSON array) AND broadcast via streamBus
+  → GET /api/chat/stream (SSE) subscribes; replays buffered events past lastSeq on reconnect
+  → frontend useChatStore consumes events, accumulates text-chunk into streamBuffer,
+       tracks widget-* into activeWidgets keyed by widget.id
+```
+
+**The invariant: SkillEvents are the single source of truth.** Skill handlers never write to the DB directly — the chat route consumes yielded events and persists them. To add a new skill, only yield correct events; persistence, SSE plumbing, and `agent_runs` accounting are free.
+
+The 8 stub skills in `server/skills/` are minimal templates: 1–2 `text-chunk` + (optional) `mode-switch` + `widget-init` → `widget-ready` + `done`. See `doc/knowledge/skills.md` for the full skill ↔ widget ↔ allowedStates mapping.
+
+## Architecture: Provider Abstraction
+
+`AI_PROVIDER` env (`stub` | `anthropic`) selects the implementation via `server/ai/providers/index.ts`. **Stub is the default** so the system runs with zero config — it always routes to `general-chat`. `AnthropicProvider` is a skeleton; `route()` and `complete()` throw NotImplemented until V1.x. The only contract is the `AIProvider` interface in `server/ai/types.ts`.
+
+## Shared Code Boundaries (`shared/`)
+
+Imported by both server and src. Strict rules:
+
+- **No backend deps** (`better-sqlite3`, `express`, `jsonwebtoken`) — these crash Vitest jsdom. Only `zod` and pure TS.
+- **`@shared/*` alias is frontend-only** (Vite resolves at bundle time). Backend uses relative imports `../../shared/skill.js` because NodeNext doesn't resolve tsconfig paths at runtime.
+- **`.js` extension required on every server-side relative import** even when the source is `.ts`. `import { connect } from './db/connect.js'` is correct; omitting `.js` fails at runtime with `ERR_MODULE_NOT_FOUND`.
+
+## Frontend State
+
+5 Zustand stores in `src/stores/`:
+- `auth` — token + user, persists to `localStorage.echora_token`, registers itself as the token getter for `api/client.ts`
+- `chat` — conversations, messages, `streamingMessageId`, `streamBuffer` keyed by messageId, `activeWidgets` keyed by widgetId, current `inputMode`
+- `learningState` — 7-state mirror; illegal transitions `console.warn` only (server is the truth)
+- `profile` — V1 frontend-only cache, no API yet
+- `theme` — writes `data-theme` to `<html>`, shares `localStorage.echora-theme` key with the design prototype
+
+`src/main.tsx` startup order: import styles → `theme.apply()` → register 401 callback → `auth.hydrate()` → render `<RouterProvider />`.
+
+## Database
+
+10 tables created upfront by `migrations/0001_init.sql`. New schema changes go in `NNNN_<slug>.sql` files — migrations are append-only, run inside a transaction by `server/db/migrate.ts`, and idempotent via `schema_migrations`. JSON fields (`weakness_tags`, `widget_snapshot`, `stream_events`, `payload`) are stored as strings; services do parse/stringify.
+
+## SSE Caveats
+
+- `EventSource` cannot set custom headers, so V1 SSE auth uses `?token=` query param. Production should migrate to `fetch + ReadableStream`. Noted in `doc/knowledge/api-contract.md`.
+- `req.on('close', unsubscribe)` is mandatory in `/api/chat/stream`; without it, streamBus subscribers leak.
+- The `ended` flag in the SSE `send` callback short-circuits writes after `done`/`error`, preventing `ERR_STREAM_WRITE_AFTER_END` when buffered events arrive late.
+
+## Configuration
+
+`server/config/getConfig.ts` resolves `env > SERVER_CONFIG_PATH JSON file > defaults`. It accepts both `UPPER_SNAKE` and `camelCase` keys. Paths are normalized with `path.resolve(process.cwd(), ...)` at the boundary so cwd drift doesn't affect runtime. `JWT_SECRET` defaults to a dev value and warns (but doesn't block) when `NODE_ENV=production`.
+
+## Knowledge Base
+
+`doc/knowledge/` is the engineering reference. Each topic doc uses the same 4 H2s: 入口 / 关键源码 / 约束与失败点 / 测试入口. **Update the relevant doc whenever changing public behavior, API contracts, shared types, test entries, or build/release paths** — not just code.
+
+## Out of Scope for V1 (PRD §4.10, ESD §4)
+
+Don't add or assume:
+- ESLint / Prettier / lint scripts — ESD explicitly says don't assume they exist
+- ECharts / voice / audio (text-only product)
+- Tailwind / CSS-in-JS (sticks with `tokens.css` + `components.css`)
+- JWT refresh tokens (re-login on 7-day expiry)
+- Guest mode / user-typed slash commands / custom theme colors
+- Docker / CI / nginx / systemd configs
