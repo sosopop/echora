@@ -36,6 +36,7 @@
 - **批改卡片 loading(009)**:`grading-result` 在 `status='ready'` 且 `score/isCorrect` 都存在前不渲染结果卡,避免先出现 0 分再跳到真实分数;等待态由 assistant 文本承载。
 - **场景卡片 loading(011)**:`scene-cards` 在 `status='loading'` 时不渲染空候选小部件,只保留 assistant 文本;`ready` 后一次性出现卡片,`error` 时才显示恢复提示。
 - **Chat widget 间距(011)**:`src/views/Chat/index.module.css` 的 `.messageRow` gap 为 16px,让 AI 文本和其下方 widget 有更清楚的呼吸感。
+- **Widget loading 总防线(012)**:`src/views/Chat/WidgetSlot.tsx` 统一过滤 `status='loading'` 的 widget,并对 `exercise-card` / `grading-result` 做必填数据校验后才占用 widget 槽位;`ExerciseCard` 自身也在 `ready + attemptId/stage/questionNo/questionType/contextZh` 完整前返回 `null`,避免显示"阶段 ? / 第 ? 题"半成品。
 
 ## 测试入口
 
@@ -45,6 +46,7 @@
 - Chat 消息顺序/思考占位:`src/__tests__/stores/chat.test.ts` + `src/__tests__/views/MessageBubble.test.tsx`
 - 批改卡片 loading:`src/__tests__/components/widgets/widgets.test.tsx`
 - 场景卡片 loading:`src/__tests__/components/widgets/widgets.test.tsx`
+- 题卡 loading 与 widget 槽位过滤:`src/__tests__/components/widgets/widgets.test.tsx` + `src/__tests__/views/WidgetSlot.test.tsx`
 
 ## Pending
 

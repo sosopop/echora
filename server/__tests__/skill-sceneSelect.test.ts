@@ -25,7 +25,7 @@ import {
   appendSceneHistory,
 } from '../services/sceneHistory.js';
 import { getActiveSceneDialogue } from '../services/sceneDialogue.js';
-import type { SkillEventInput } from '../../shared/skill.js';
+import type { LearningState, SkillEventInput } from '../../shared/skill.js';
 
 let db: Db;
 let tmpDir: string;
@@ -96,14 +96,18 @@ function makeProvider(opts: {
   };
 }
 
-function makeCtx(provider: AIProvider, action?: unknown): ServerSkillContext {
+function makeCtx(
+  provider: AIProvider,
+  action?: unknown,
+  learningState: LearningState = 'scene_selecting'
+): ServerSkillContext {
   return {
     user: { id: userId, email: 'scene@test.com' },
     conversationId,
     messageId,
     streamId: 'test-stream',
     params: action ? { action } : {},
-    learningState: 'scene_selecting',
+    learningState,
     signal: new AbortController().signal,
     provider,
     db,
@@ -159,6 +163,20 @@ describe('sceneSelect skill', () => {
     const cards = (ready as { payload: { patch: { data: { cards: { id: string }[] } } } })
       .payload.patch.data.cards;
     expect(cards.find((c) => c.id === 'restaurant')).toBeUndefined();
+  });
+
+  it('practicing 中 request-new-scenes 会切回 scene_selecting 再展示候选', async () => {
+    const provider = makeProvider({ proposeScenes: MOCK_SCENES });
+    const events = await collect(
+      makeCtx(provider, { type: 'request-new-scenes' }, 'practicing')
+    );
+
+    const transition = events.find((e) => e.type === 'state-transition') as {
+      payload: { nextLearningState: string; activeSkill: string | null };
+    };
+    expect(transition.payload.nextLearningState).toBe('scene_selecting');
+    expect(transition.payload.activeSkill).toBe('scene-select');
+    expect(events.find((e) => e.type === 'widget-ready')).toBeDefined();
   });
 
   it('action=select-scene → 生成 dialogue + scene_history + 自动出第一题', async () => {

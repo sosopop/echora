@@ -89,7 +89,12 @@ beforeEach(() => {
     fakeSkill('practice', ['scene_selecting', 'practicing', 'awaiting_next'])
   );
   skillRegistry.register(
-    fakeSkill('scene-select', ['scene_selecting', 'awaiting_next', 'reviewing'])
+    fakeSkill('scene-select', [
+      'scene_selecting',
+      'awaiting_next',
+      'reviewing',
+      'practicing',
+    ])
   );
   const aiRouter: AIRouter = {
     async decide(input): Promise<RouterDecision> {
@@ -198,6 +203,22 @@ describe('POST /api/chat/send', () => {
     expect(res.body.data.decision).toMatchObject({
       skillName: 'practice',
       params: { action: { type: 'next-question' } },
+    });
+    expect(decideCalls).toHaveLength(0);
+  });
+
+  it('practicing 中换场景直接走场景选择,不会绕回 AI Router', async () => {
+    seedAttempt();
+
+    const res = await request(app)
+      .post('/api/chat/send')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ conversationId, text: '换场景' });
+
+    expect(res.status).toBe(202);
+    expect(res.body.data.decision).toMatchObject({
+      skillName: 'scene-select',
+      params: { action: { type: 'request-new-scenes' } },
     });
     expect(decideCalls).toHaveLength(0);
   });

@@ -117,6 +117,21 @@ describe('SceneCards widget', () => {
 });
 
 describe('ExerciseCard widget', () => {
+  it('loading 状态不显示阶段问号题卡', () => {
+    const widget: LearningWidgetInstance = {
+      id: 'e-loading',
+      type: 'exercise-card',
+      status: 'loading',
+      data: {},
+      version: 1,
+    };
+
+    const { container } = render(<ExerciseCard widget={widget} />);
+
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByText(/阶段 \?/)).not.toBeInTheDocument();
+  });
+
   it('fill 模式渲染阶段/题号/中文上下文/英文空白', () => {
     const widget: LearningWidgetInstance = {
       id: 'e1',

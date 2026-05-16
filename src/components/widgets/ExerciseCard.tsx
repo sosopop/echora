@@ -25,8 +25,19 @@ export default function ExerciseCard({
   widget,
 }: {
   widget: LearningWidgetInstance;
-}): JSX.Element {
+}): JSX.Element | null {
   const data = (widget.data ?? {}) as ExerciseCardData;
+  if (
+    widget.status !== 'ready' ||
+    typeof data.attemptId !== 'number' ||
+    typeof data.stage !== 'number' ||
+    typeof data.questionNo !== 'number' ||
+    typeof data.questionType !== 'string' ||
+    typeof data.contextZh !== 'string' ||
+    data.contextZh.trim().length === 0
+  ) {
+    return null;
+  }
   const isFill = data.questionType === 'fill_word';
   return (
     <div className={styles.exerciseCard}>

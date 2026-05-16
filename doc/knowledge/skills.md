@@ -16,7 +16,7 @@
 | Skill          | allowedStates                                              | primaryWidget       |
 |----------------|------------------------------------------------------------|---------------------|
 | onboarding     | onboarding                                                  | (无)                |
-| scene-select   | scene_selecting / awaiting_next / reviewing                 | scene-cards         |
+| scene-select   | scene_selecting / awaiting_next / reviewing / practicing    | scene-cards         |
 | practice       | scene_selecting / practicing / awaiting_next                | exercise-card       |
 | grade          | practicing / grading                                        | grading-result      |
 | explain        | practicing / grading / awaiting_next / reviewing / scene_selecting | (无)        |
@@ -65,6 +65,7 @@
 - 工具:`propose_scenes`(批量场景候选)+ `generate_scene_dialogue`(完整对话 JSON)
 - 已用队列:`scene_history` 表 max 10 per user,服务层 prune
 - 失败恢复(005):`runScenePropose` 失败时,handler 会把已初始化的 `scene-cards` widget patch 为 `status='error'`,写入空 `cards` 与可读 `message`,随后 `mode-switch('chat')` 再发 `error` 终止。前端遇到历史 loading/空候选 widget 时也允许点击"重新生成场景"或直接输入主题,避免 `select` 输入模式永久卡住。
+- 012 起,用户在 `practicing` 中输入 `换场景` / `换一批` / `重新生成场景` 会确定性路由到 `scene-select`;handler 先发 `state-transition('scene_selecting','scene-select')`,再输出 `mode-switch('select')` 和场景卡片,避免继续保持 practicing 导致卡片不可点。
 
 ## practice Skill(003 已真实接入,MVP 阶段 1+2)
 
@@ -103,13 +104,13 @@ provider.route()
 - `practicing` / `grading` 中 router 校验失败时**直接抛错**(不再 fallback,002 patch)
 - AI Provider 抛错时 router 不 catch,直接传播到 chat 路由,返 `502 PROVIDER_ERROR`
 - POST `/api/chat/send` body `text` 与 `action` **二选一**(zod refine);action 由 chat route 确定性映射到 skill,并放入 `decision.params.action`
-- 008 起练习态直接输入答案时,chat route 可能把 `text` 规范化为 `submit-answer` action;消息历史仍保存用户原始输入文本。010 起 `awaiting_next` 下输入 `next` / `START` / `开始练习` 会确定性触发 `request-new-scenes`,减少完成一场景后的断流。
+- 008 起练习态直接输入答案时,chat route 可能把 `text` 规范化为 `submit-answer` action;消息历史仍保存用户原始输入文本。010 起 `awaiting_next` 下输入 `next` / `START` / `开始练习` 会确定性触发 `request-new-scenes`,减少完成一场景后的断流。012 起 `practicing` 下的换场景类文本也确定性触发 `request-new-scenes`,不再交给 AI Router。
 
 ## 测试入口
 
 - AI Router 校验链测试:`server/__tests__/ai-router.test.ts`(5 测试,正常路径 + 3 失败路径 + 任意 state)
 - onboarding skill 单测:`server/__tests__/skill-onboarding.test.ts`(5 测试)
-- scene-select 单测:`server/__tests__/skill-sceneSelect.test.ts`(5 测试)
+- scene-select 单测:`server/__tests__/skill-sceneSelect.test.ts`(6 测试)
 - practice 单测:`server/__tests__/skill-practice.test.ts`(5 测试)
 - grade 单测:`server/__tests__/skill-grade.test.ts`(6 测试)
 - learning services 单测:`server/__tests__/learning-services.test.ts`(12 测试)

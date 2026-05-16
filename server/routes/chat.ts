@@ -438,8 +438,10 @@ function createTextControlAction(
   const isNext = isNextPracticeText(text);
   const isScene = isSceneRequestText(text);
   if (isNext || isScene) {
-    if (conv.learningState === 'practicing' && isNext) {
-      return { type: 'next-question' };
+    if (conv.learningState === 'practicing') {
+      return isScene
+        ? { type: 'request-new-scenes' }
+        : { type: 'next-question' };
     }
     if (
       conv.learningState === 'awaiting_next' ||

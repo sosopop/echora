@@ -40,7 +40,7 @@ const SHOW_COUNT = 5;
 export const sceneSelectSkill: Skill = {
   name: SKILL_NAMES.sceneSelect,
   description: 'AI 生成候选场景 + 用户选定后生成场景对话(PRD §2.5)',
-  allowedStates: ['scene_selecting', 'awaiting_next', 'reviewing'],
+  allowedStates: ['scene_selecting', 'awaiting_next', 'reviewing', 'practicing'],
   primaryWidget: 'scene-cards',
 
   async *handler(_ctx): AsyncIterable<SkillEventInput> {
@@ -110,6 +110,15 @@ export const sceneSelectSkill: Skill = {
       type: 'text-chunk',
       payload: { text: '我来根据你的画像准备几个场景。点击一张进入练习。' },
     };
+    if (ctx.learningState === 'practicing') {
+      yield {
+        type: 'state-transition',
+        payload: {
+          nextLearningState: 'scene_selecting',
+          activeSkill: 'scene-select',
+        },
+      };
+    }
     yield { type: 'mode-switch', payload: { mode: 'select' } };
     const widgetId = ctx.makeWidgetId('scene-cards');
     yield {

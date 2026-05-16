@@ -11,10 +11,7 @@ export default function WidgetSlot({
 }: {
   widget: LearningWidgetInstance;
 }): JSX.Element | null {
-  if (widget.type === 'grading-result' && widget.status !== 'ready') {
-    return null;
-  }
-  if (widget.type === 'scene-cards' && widget.status === 'loading') {
+  if (!shouldRenderWidget(widget)) {
     return null;
   }
   return (
@@ -22,4 +19,46 @@ export default function WidgetSlot({
       <WidgetRenderer widget={widget} />
     </div>
   );
+}
+
+function shouldRenderWidget(widget: LearningWidgetInstance): boolean {
+  if (widget.status === 'loading') return false;
+
+  if (widget.type === 'scene-cards') {
+    return widget.status === 'ready' || widget.status === 'error';
+  }
+
+  if (widget.type === 'grading-result') {
+    const data = widget.data as
+      | { score?: unknown; isCorrect?: unknown }
+      | undefined;
+    return (
+      widget.status === 'ready' &&
+      typeof data?.score === 'number' &&
+      typeof data?.isCorrect === 'boolean'
+    );
+  }
+
+  if (widget.type === 'exercise-card') {
+    const data = widget.data as
+      | {
+          attemptId?: unknown;
+          stage?: unknown;
+          questionNo?: unknown;
+          questionType?: unknown;
+          contextZh?: unknown;
+        }
+      | undefined;
+    return (
+      widget.status === 'ready' &&
+      typeof data?.attemptId === 'number' &&
+      typeof data?.stage === 'number' &&
+      typeof data?.questionNo === 'number' &&
+      typeof data?.questionType === 'string' &&
+      typeof data?.contextZh === 'string' &&
+      data.contextZh.trim().length > 0
+    );
+  }
+
+  return true;
 }
