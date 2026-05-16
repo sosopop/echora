@@ -42,12 +42,14 @@ async function main(): Promise<void> {
     jwtSecret: 'smoke-secret',
     aiProvider: 'stub' as const,
     anthropicApiKey: null,
+    anthropicBaseURL: 'https://api.anthropic.com',
+    anthropicModel: 'claude-sonnet-4-6',
     corsOrigin: ['http://localhost'],
     nodeEnv: 'test',
   };
   const provider = createProvider(config);
   const aiRouter = createAIRouter(provider, skillRegistry);
-  const app = createApp({ config, db, skillRegistry, aiRouter });
+  const app = createApp({ config, db, skillRegistry, aiRouter, provider });
 
   const server: Server = await new Promise((resolve) => {
     const s = app.listen(0, () => resolve(s));
@@ -79,6 +81,65 @@ async function main(): Promise<void> {
           throw new Error(`register 失败 ${res.status}: ${JSON.stringify(body)}`);
         }
         token = body.data.token;
+      },
+    },
+    {
+      name: 'profile-empty',
+      async run() {
+        const res = await fetch(`${baseUrl}/api/profile`, {
+          headers: { Authorization: `Bearer ${token!}` },
+        });
+        const body = (await res.json()) as {
+          data?: { name: string | null; level: string | null };
+        };
+        if (res.status !== 200) {
+          throw new Error(`GET /profile 失败 ${res.status}`);
+        }
+        if (body.data?.name !== null || body.data?.level !== null) {
+          throw new Error(
+            `空 profile 不空: ${JSON.stringify(body.data)}`
+          );
+        }
+      },
+    },
+    {
+      name: 'profile-update',
+      async run() {
+        const res = await fetch(`${baseUrl}/api/profile`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token!}`,
+          },
+          body: JSON.stringify({ name: '冒烟用户', level: 'B1' }),
+        });
+        const body = (await res.json()) as {
+          data?: { name: string; level: string };
+        };
+        if (res.status !== 200) {
+          throw new Error(`PUT /profile 失败 ${res.status}`);
+        }
+        if (body.data?.name !== '冒烟用户' || body.data?.level !== 'B1') {
+          throw new Error(
+            `PUT /profile 写入未生效: ${JSON.stringify(body.data)}`
+          );
+        }
+      },
+    },
+    {
+      name: 'me-onboarding-completed',
+      async run() {
+        const res = await fetch(`${baseUrl}/api/auth/me`, {
+          headers: { Authorization: `Bearer ${token!}` },
+        });
+        const body = (await res.json()) as {
+          data?: { onboardingCompleted: boolean };
+        };
+        if (res.status !== 200 || body.data?.onboardingCompleted !== true) {
+          throw new Error(
+            `/me 未返 onboardingCompleted=true: ${JSON.stringify(body.data)}`
+          );
+        }
       },
     },
     {

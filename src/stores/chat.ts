@@ -17,6 +17,7 @@ import { chatApi } from '../api/chat.js';
 import { openStream } from '../api/sse.js';
 import { useAuthStore } from './auth.js';
 import { useLearningStateStore } from './learningState.js';
+import { useProfileStore } from './profile.js';
 import type {
   ConversationDTO,
   MessageDTO,
@@ -190,5 +191,10 @@ function handleStreamEvent(
     }));
   } else if (evt.type === 'mode-switch') {
     set({ inputMode: evt.payload.mode });
+  } else if (evt.type === 'state-transition') {
+    useLearningStateStore.getState().setState(evt.payload.nextLearningState);
+    // 学习态变化(如 onboarding → scene_selecting)往往伴随 profile 更新,
+    // 异步刷新画像,RouteGuard / 视图凭新 profile 决定下一步导航
+    void useProfileStore.getState().reload();
   }
 }

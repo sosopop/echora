@@ -19,6 +19,8 @@ export interface Config {
   jwtSecret: string;
   aiProvider: AIProviderKind;
   anthropicApiKey: string | null;
+  anthropicBaseURL: string;
+  anthropicModel: string;
   corsOrigin: string[];
   nodeEnv: string;
 }
@@ -29,6 +31,8 @@ const DEFAULTS: Config = {
   jwtSecret: 'echora-dev-secret-change-me',
   aiProvider: 'stub',
   anthropicApiKey: null,
+  anthropicBaseURL: 'https://api.anthropic.com',
+  anthropicModel: 'claude-sonnet-4-6',
   corsOrigin: ['http://localhost:5173'],
   nodeEnv: 'development',
 };
@@ -116,6 +120,15 @@ export function getConfig(opts?: { reload?: boolean }): Config {
   const anthropicApiKey =
     asString(pick(src, 'ANTHROPIC_API_KEY', 'anthropicApiKey')) ?? null;
 
+  const anthropicBaseURL = (
+    asString(pick(src, 'ANTHROPIC_BASE_URL', 'anthropicBaseURL')) ??
+    DEFAULTS.anthropicBaseURL
+  ).replace(/\/+$/, '');
+
+  const anthropicModel =
+    asString(pick(src, 'ANTHROPIC_MODEL', 'anthropicModel')) ??
+    DEFAULTS.anthropicModel;
+
   const corsOrigin =
     asStringArray(pick(src, 'CORS_ORIGIN', 'corsOrigin')) ?? DEFAULTS.corsOrigin;
 
@@ -142,6 +155,8 @@ export function getConfig(opts?: { reload?: boolean }): Config {
     jwtSecret,
     aiProvider,
     anthropicApiKey,
+    anthropicBaseURL,
+    anthropicModel,
     corsOrigin,
     nodeEnv,
   };

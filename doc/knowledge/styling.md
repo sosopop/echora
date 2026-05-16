@@ -30,6 +30,7 @@
 - **不要硬编码十六进制色**:用 `var(--color-...)`,否则暗色模式断
 - **品牌色与语义色双主题保持一致**:primary / success / warning / error 不在暗色下变色
 - **Widget 协议样式在 `widget-preview.css`**:此文件仅用于原型预览,**不**进 src/styles
+- **视图局部样式用 `*.module.css`**(Vite 原生支持,002 起约定):公共组件继续 global,视图层局部样式拆模块化(class hash 隔离),示例见 `src/views/Onboarding/index.module.css`
 
 ## 测试入口
 
@@ -38,5 +39,4 @@
 
 ## Pending
 
-- React 组件层是否需要 CSS Modules 隔离(目前全 global)
 - 未来 12 Widget 实现时是否拆出 `src/styles/widgets/` 子目录

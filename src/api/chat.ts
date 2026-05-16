@@ -11,13 +11,20 @@ import type {
   ChatSendReq,
   ChatSendResp,
 } from '@shared/api';
+import type { LearningState } from '@shared/skill';
 
 export const chatApi = {
   listConversations(): Promise<ConversationDTO[]> {
     return apiClient.get<ConversationDTO[]>('/chat/conversations');
   },
-  createConversation(): Promise<ConversationDTO> {
-    return apiClient.post<ConversationDTO>('/chat/conversations');
+  createConversation(opts?: {
+    title?: string;
+    learningState?: LearningState;
+  }): Promise<ConversationDTO> {
+    return apiClient.post<ConversationDTO>(
+      '/chat/conversations',
+      opts ?? {}
+    );
   },
   getMessages(conversationId: number): Promise<MessageDTO[]> {
     return apiClient.get<MessageDTO[]>(

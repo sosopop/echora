@@ -27,8 +27,19 @@
 ## Stub 行为
 
 - `StubProvider.route()` 固定返回 `{ skillName: 'general-chat', confidence: 0.6, ... }`
-- 每个 Skill stub handler 产出:1-2 条 text-chunk + 必要的 mode-switch + widget-init/ready + done
-- `general-chat` 与 `onboarding` / `explain` 不产 widget,纯文本流
+- `StubProvider` 不实现 `chat()`(可选接口),onboarding 等需 LLM 的 skill 在 stub provider 下会 yield error
+- 各 stub Skill handler 产出:1-2 条 text-chunk + 必要的 mode-switch + widget-init/ready + done
+- `general-chat` 与 `explain` 不产 widget,纯文本流
+
+## Onboarding Skill(002 已真实接入)
+
+- 入口:`server/skills/onboarding.ts` + `server/skills/_helpers/onboardingFsm.ts`
+- 流程:`ensureProfile` → `decideMissingFields` → `buildSystemPrompt` → `provider.chat()` 流式
+- 工具:定义 `update_profile` tool,AI 通过 tool_use 提供清洗后的字段(name/age/grade/level)
+- 落库:tool input 在流结束后一次性 `upsertProfile`
+- 完成判定:`isOnboardingComplete = !!(name && level)`(必填),完成后 yield `state-transition('scene_selecting', null)`
+- 短路:已完成时跳过 LLM 调用,直接 yield text-chunk + state-transition + done
+- 依赖:`provider.chat` 必须存在(StubProvider 不支持时 yield error)
 
 ## AI Router 校验链
 
@@ -53,6 +64,7 @@ provider.route()
 
 ## Pending
 
-- 真实 Anthropic Provider 接入(`server/ai/providers/anthropic.ts` 仅骨架)
-- Skill 取消机制:`ctx.signal` 已传入,handler 内尚未消费
+- 真实 Anthropic Provider `route()` 低置信度处理(<0.5 触发 intent-confirm widget)未实现
+- Skill 取消机制:`ctx.signal` 已传入,onboarding 已消费;其他 7 stub 尚未消费
 - `agent_runs.payload` 字段写入 finalSeq 与累计文本长度的细节
+- grade skill 自身 yield state-transition 后,删除 chat.ts 兼容分支

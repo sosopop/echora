@@ -57,6 +57,13 @@ export type SkillEventInput =
     }
   | { type: 'mode-switch'; payload: { mode: InputMode } }
   | { type: 'quick-actions'; payload: { actions: QuickAction[] } }
+  | {
+      type: 'state-transition';
+      payload: {
+        nextLearningState: LearningState;
+        activeSkill: string | null;
+      };
+    }
   | { type: 'done'; payload?: Record<string, unknown> }
   | { type: 'error'; payload: { code: string; message: string } };
 

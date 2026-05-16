@@ -31,11 +31,14 @@ import {
 import { streamBus } from '../services/streamBus.js';
 import type { SkillRegistry } from '../skills/registry.js';
 import type { AIRouter } from '../ai/router.js';
+import type { AIProvider } from '../ai/types.js';
+import type { ServerSkillContext } from '../skills/types.js';
 import type {
-  SkillContext,
   SkillEvent,
   RouterInput,
+  LearningState,
 } from '../../shared/skill.js';
+import { ALL_LEARNING_STATES } from '../../shared/skill.js';
 import type { ChatSendResp } from '../../shared/api.js';
 
 const sendSchema = z.object({
@@ -44,16 +47,24 @@ const sendSchema = z.object({
   mode: z.enum(['chat', 'fill', 'select', 'menu']).optional(),
 });
 
+const createConversationSchema = z.object({
+  title: z.string().min(1).max(200).optional(),
+  learningState: z
+    .enum(ALL_LEARNING_STATES as [LearningState, ...LearningState[]])
+    .optional(),
+});
+
 export interface ChatRouterDeps {
   db: Db;
   config: Config;
   skillRegistry: SkillRegistry;
   aiRouter: AIRouter;
+  provider: AIProvider;
 }
 
 export function createChatRouter(deps: ChatRouterDeps): Router {
   const router = Router();
-  const { db, config, skillRegistry, aiRouter } = deps;
+  const { db, config, skillRegistry, aiRouter, provider } = deps;
   const auth = requireAuth(config);
 
   // —— 会话列表 ————————————————————————————————————————————
@@ -63,9 +74,17 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
   });
 
   // —— 新建空会话 ——————————————————————————————————————————
-  router.post('/conversations', auth, (req, res) => {
-    const conv = createConversation(db, req.user!.id);
-    res.status(201).json({ data: conv });
+  router.post('/conversations', auth, (req, res, next) => {
+    try {
+      const body = createConversationSchema.parse(req.body ?? {});
+      const conv = createConversation(db, req.user!.id, {
+        title: body.title,
+        learningState: body.learningState,
+      });
+      res.status(201).json({ data: conv });
+    } catch (e) {
+      next(e);
+    }
   });
 
   // —— 历史消息 ————————————————————————————————————————————
@@ -165,6 +184,7 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
       const streamId = `stream-${assistantMsg.id}-${randomUUID().slice(0, 8)}`;
       runSkillInBackground({
         db,
+        provider,
         skill,
         decision,
         streamId,
@@ -266,6 +286,7 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
  * ========================================================== */
 interface RunSkillArgs {
   db: Db;
+  provider: AIProvider;
   skill: import('../../shared/skill.js').Skill;
   decision: import('../../shared/skill.js').RouterDecision;
   streamId: string;
@@ -280,6 +301,7 @@ interface RunSkillArgs {
 function runSkillInBackground(args: RunSkillArgs): void {
   const {
     db,
+    provider,
     skill,
     decision,
     streamId,
@@ -295,7 +317,7 @@ function runSkillInBackground(args: RunSkillArgs): void {
   let seq = 0;
   const controller = new AbortController();
 
-  const ctx: SkillContext = {
+  const ctx: ServerSkillContext = {
     user: { id: userId, email: userEmail },
     conversationId,
     messageId,
@@ -303,9 +325,10 @@ function runSkillInBackground(args: RunSkillArgs): void {
     params: decision.params,
     learningState,
     signal: controller.signal,
+    provider,
+    db,
     emit() {
-      // 这里仅占位:Skill 不直接调,是通过 yield 产事件给外部循环。
-      // 为符合接口,提供一个无效实现。
+      // 占位:Skill 通过 yield 产事件,emit 接口暂不使用
     },
     makeWidgetId(prefix) {
       return `${prefix}-${randomUUID().slice(0, 8)}`;
@@ -318,13 +341,24 @@ function runSkillInBackground(args: RunSkillArgs): void {
      WHERE run_id = ?`
   );
 
-  // 处理 mode-switch / widget-* 副作用(更新 conversations.input_mode)
+  // 处理 mode-switch / state-transition / widget-* 副作用
   const handleSideEffects = (event: SkillEvent): void => {
     if (event.type === 'mode-switch') {
       try {
         updateInputMode(db, conversationId, event.payload.mode);
       } catch (e) {
         console.warn('[runSkill] updateInputMode 失败', e);
+      }
+    } else if (event.type === 'state-transition') {
+      try {
+        updateLearningState(
+          db,
+          conversationId,
+          event.payload.nextLearningState,
+          event.payload.activeSkill
+        );
+      } catch (e) {
+        console.warn('[runSkill] updateLearningState 失败', e);
       }
     }
   };
@@ -376,7 +410,7 @@ function runSkillInBackground(args: RunSkillArgs): void {
 
       runUpdate.run('done', Date.now() - startedAt, null, runId);
 
-      // 切学习态(简化:仅 grade → awaiting_next,其他保持)
+      // TODO 003: grade skill 真实实现后改由其自身 yield state-transition,删除此分支
       if (skill.name === 'grade') {
         updateLearningState(db, conversationId, 'awaiting_next', null);
       }

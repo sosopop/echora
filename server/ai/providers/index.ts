@@ -18,7 +18,11 @@ export function createProvider(config: Config): AIProvider {
       );
       return new StubProvider();
     }
-    return new AnthropicProvider({ apiKey: config.anthropicApiKey });
+    return new AnthropicProvider({
+      apiKey: config.anthropicApiKey,
+      baseURL: config.anthropicBaseURL,
+      model: config.anthropicModel,
+    });
   }
   return new StubProvider();
 }

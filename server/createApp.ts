@@ -10,8 +10,10 @@ import type { Db } from './db/connect.js';
 import type { Config } from './config/getConfig.js';
 import type { SkillRegistry } from './skills/registry.js';
 import type { AIRouter } from './ai/router.js';
+import type { AIProvider } from './ai/types.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createChatRouter } from './routes/chat.js';
+import { createProfileRouter } from './routes/profile.js';
 import { errorHandler } from './middleware/error.js';
 
 export interface AppDeps {
@@ -19,6 +21,7 @@ export interface AppDeps {
   db: Db;
   skillRegistry: SkillRegistry;
   aiRouter: AIRouter;
+  provider: AIProvider;
 }
 
 export function createApp(deps: AppDeps): Application {
@@ -41,6 +44,7 @@ export function createApp(deps: AppDeps): Application {
 
   // —— 业务路由 ——————————————————————————————————————————
   app.use('/api/auth', createAuthRouter({ db: deps.db, config }));
+  app.use('/api/profile', createProfileRouter({ db: deps.db, config }));
   app.use(
     '/api/chat',
     createChatRouter({
@@ -48,6 +52,7 @@ export function createApp(deps: AppDeps): Application {
       config,
       skillRegistry: deps.skillRegistry,
       aiRouter: deps.aiRouter,
+      provider: deps.provider,
     })
   );
 

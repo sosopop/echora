@@ -43,7 +43,7 @@ async function main(): Promise<void> {
 
   const aiRouter = createAIRouter(provider, skillRegistry);
 
-  const app = createApp({ config, db, skillRegistry, aiRouter });
+  const app = createApp({ config, db, skillRegistry, aiRouter, provider });
 
   app.listen(config.port, () => {
     console.log(`[server] Listening on http://localhost:${config.port}`);

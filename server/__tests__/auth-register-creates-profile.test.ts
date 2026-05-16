@@ -1,7 +1,5 @@
 /**
- * 占位测试:GET /api/health 返 200 + { ok: true }
- *
- * 真实业务测试后续按 routes / services 拆分覆盖。
+ * 副作用:POST /api/auth/register 后,user_profiles 表必有对应行(空 profile)。
  */
 
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
@@ -16,6 +14,7 @@ import { registerAllSkills } from '../skills/registry.js';
 import { createProvider } from '../ai/providers/index.js';
 import { createAIRouter } from '../ai/router.js';
 import { createApp } from '../createApp.js';
+import type { Config } from '../config/getConfig.js';
 
 let app: Application;
 let db: Db;
@@ -28,11 +27,11 @@ beforeAll(async () => {
   migrate(db);
 
   const skillRegistry = await registerAllSkills();
-  const config = {
+  const config: Config = {
     port: 0,
     databasePath: dbPath,
     jwtSecret: 'test-secret',
-    aiProvider: 'stub' as const,
+    aiProvider: 'stub',
     anthropicApiKey: null,
     anthropicBaseURL: 'https://api.anthropic.com',
     anthropicModel: 'claude-sonnet-4-6',
@@ -53,10 +52,20 @@ afterAll(() => {
   }
 });
 
-describe('GET /api/health', () => {
-  it('返回 200 + { ok: true }', async () => {
-    const res = await request(app).get('/api/health');
-    expect(res.status).toBe(200);
-    expect(res.body.ok).toBe(true);
+describe('POST /api/auth/register 副作用', () => {
+  it('成功后 user_profiles 表存在对应行', async () => {
+    const reg = await request(app)
+      .post('/api/auth/register')
+      .send({ email: 'side@test.com', password: 'echora1234' });
+    expect(reg.status).toBe(201);
+    const userId = reg.body.data.user.id;
+
+    const row = db
+      .prepare('SELECT * FROM user_profiles WHERE user_id = ?')
+      .get(userId) as { user_id: number; weakness_tags: string } | undefined;
+    expect(row).toBeDefined();
+    expect(row?.user_id).toBe(userId);
+    // 空 array JSON 字段
+    expect(row?.weakness_tags).toBe('[]');
   });
 });

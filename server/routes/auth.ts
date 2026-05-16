@@ -14,6 +14,11 @@ import type { Config } from '../config/getConfig.js';
 import { requireAuth, signToken } from '../middleware/auth.js';
 import { HttpError } from '../middleware/error.js';
 import { ERROR_CODES } from '../../shared/errors.js';
+import {
+  ensureProfile,
+  getProfile,
+  isOnboardingComplete,
+} from '../services/profile.js';
 import type {
   AuthRegisterResp,
   AuthLoginResp,
@@ -46,12 +51,14 @@ export function createAuthRouter(deps: { db: Db; config: Config }): Router {
         throw new HttpError(409, ERROR_CODES.EMAIL_EXISTS, '该邮箱已注册');
       }
       const hash = bcrypt.hashSync(password, 10);
-      const result = db
-        .prepare(
-          'INSERT INTO users (email, password_hash) VALUES (?, ?)'
-        )
-        .run(email, hash);
-      const id = Number(result.lastInsertRowid);
+      const id = db.transaction(() => {
+        const result = db
+          .prepare('INSERT INTO users (email, password_hash) VALUES (?, ?)')
+          .run(email, hash);
+        const newId = Number(result.lastInsertRowid);
+        ensureProfile(db, newId);
+        return newId;
+      })();
       const token = signToken({ id, email }, config.jwtSecret);
 
       const body: AuthRegisterResp = { token, user: { id, email } };
@@ -97,7 +104,13 @@ export function createAuthRouter(deps: { db: Db; config: Config }): Router {
   // —— 当前用户 ——————————————————————————————————————————————
   router.get('/me', requireAuth(config), (req, res) => {
     const user = req.user!;
-    const body: MeResp = { id: user.id, email: user.email };
+    const profile = getProfile(db, user.id);
+    const body: MeResp = {
+      id: user.id,
+      email: user.email,
+      profile,
+      onboardingCompleted: isOnboardingComplete(profile),
+    };
     res.json({ data: body });
   });
 

@@ -41,6 +41,34 @@ export interface AuthLoginResp {
 export interface MeResp {
   id: number;
   email: string;
+  profile: ProfileDTO | null;
+  onboardingCompleted: boolean;
+}
+
+/* ============================================================
+ * Profile
+ * ========================================================== */
+export type CefrLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
+
+export interface ProfileDTO {
+  userId: number;
+  name: string | null;
+  age: number | null;
+  grade: string | null;
+  level: CefrLevel | null;
+  weaknessTags: string[];
+  recentTopics: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProfileUpdateReq {
+  name?: string;
+  age?: number;
+  grade?: string;
+  level?: CefrLevel;
+  weaknessTags?: string[];
+  recentTopics?: string[];
 }
 
 /* ============================================================

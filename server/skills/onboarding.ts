@@ -1,28 +1,159 @@
 /**
- * onboarding Skill — 画像收集(stub)
+ * onboarding Skill — 真实实现
  *
- * 真实业务后续接入:对话式提取 name / age / grade / level,
- * 写入 user_profiles。本 stub 仅产文本流引导。
+ * 流程:
+ *   1. 读 user_profiles(ensureProfile)
+ *   2. decideMissingFields → 决定还需问哪些字段
+ *   3. buildSystemPrompt → 拼装 system 提示
+ *   4. provider.chat() 流式调用,monitor:
+ *      - text-delta → yield text-chunk
+ *      - tool-use(update_profile) → 累积到 collected
+ *   5. 流结束后,若 collected 非空 → upsertProfile
+ *   6. 若 onboarding 完成(name + level 齐全)→ yield state-transition('scene_selecting')
+ *   7. yield done
+ *
+ * Provider 必须实现 chat();否则 yield error。
  */
 
-import type { Skill } from '../../shared/skill.js';
+import type { Skill, SkillEventInput } from '../../shared/skill.js';
 import { SKILL_NAMES } from '../../shared/skill.js';
+import type { ServerSkillContext } from './types.js';
+import type { ProfileUpdateReq } from '../../shared/api.js';
+import type { ChatMessage } from '../ai/types.js';
+import {
+  ensureProfile,
+  upsertProfile,
+  isOnboardingComplete,
+} from '../services/profile.js';
+import { getMessages } from '../services/message.js';
+import {
+  decideMissingFields,
+  buildSystemPrompt,
+  updateProfileTool,
+} from './_helpers/onboardingFsm.js';
 
 export const onboardingSkill: Skill = {
   name: SKILL_NAMES.onboarding,
-  description: '对话式收集用户画像(stub)',
+  description: '对话式收集用户画像(姓名 / 年级 / 英语水平)',
   allowedStates: ['onboarding'],
-  async *handler(ctx) {
-    yield {
-      type: 'text-chunk',
-      payload: { text: '你好!我是 Echo,你的英语对话教练 👋' },
-    };
-    yield {
-      type: 'text-chunk',
-      payload: {
-        text: '先认识下你 — 怎么称呼你?顺便告诉我你的年级和当前的英语水平,我好挑合适的场景。',
-      },
-    };
+
+  async *handler(_ctx): AsyncIterable<SkillEventInput> {
+    const ctx = _ctx as ServerSkillContext;
+
+    if (!ctx.provider.chat) {
+      yield {
+        type: 'error',
+        payload: {
+          code: 'PROVIDER_CHAT_UNAVAILABLE',
+          message:
+            '当前 AI Provider 不支持 chat 接口,无法运行 onboarding。请将 AI_PROVIDER 设为 anthropic 并配置 ANTHROPIC_API_KEY。',
+        },
+      };
+      return;
+    }
+
+    // 1. 读画像与缺失字段
+    const profile = ensureProfile(ctx.db, ctx.user.id);
+    const missing = decideMissingFields(profile);
+
+    // 2. 必填项已齐 → 直接转场,不再调用 LLM
+    if (isOnboardingComplete(profile)) {
+      yield {
+        type: 'text-chunk',
+        payload: { text: '画像已采集完成,马上为你推荐合适的场景。' },
+      };
+      yield {
+        type: 'state-transition',
+        payload: { nextLearningState: 'scene_selecting', activeSkill: null },
+      };
+      yield { type: 'done', payload: {} };
+      return;
+    }
+
+    // 3. 拼 system + 历史消息
+    const system = buildSystemPrompt(profile, missing);
+    const history = getMessages(ctx.db, ctx.conversationId)
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .map<ChatMessage>((m) => ({
+        role: m.role === 'assistant' ? 'assistant' : 'user',
+        content: m.content ?? '',
+      }))
+      .filter((m) => m.content.trim().length > 0);
+
+    // 若无历史(首条),fabricate 一条 user kickoff
+    const messages: ChatMessage[] =
+      history.length > 0 ? history : [{ role: 'user', content: 'hi' }];
+
+    // 4. 流式调用
+    let collected: ProfileUpdateReq = {};
+    try {
+      for await (const ev of ctx.provider.chat({
+        system,
+        messages,
+        tools: [updateProfileTool],
+        toolChoice: 'auto',
+        maxTokens: 1024,
+        signal: ctx.signal,
+      })) {
+        if (ctx.signal.aborted) break;
+        if (ev.type === 'text-delta') {
+          yield { type: 'text-chunk', payload: { text: ev.text } };
+        } else if (ev.type === 'tool-use' && ev.toolName === 'update_profile') {
+          collected = mergeProfileFields(collected, ev.input);
+        }
+      }
+    } catch (err) {
+      yield {
+        type: 'error',
+        payload: {
+          code: 'SKILL_HANDLER_FAILED',
+          message: err instanceof Error ? err.message : String(err),
+        },
+      };
+      return;
+    }
+
+    // 5. 落库
+    if (Object.keys(collected).length > 0) {
+      const updated = upsertProfile(ctx.db, ctx.user.id, collected);
+      // 6. 是否完成
+      if (isOnboardingComplete(updated)) {
+        yield {
+          type: 'state-transition',
+          payload: { nextLearningState: 'scene_selecting', activeSkill: null },
+        };
+      }
+    }
+
     yield { type: 'done', payload: {} };
   },
 };
+
+/**
+ * 把 LLM tool input 清洗合并到 collected:
+ *   - 字段类型守卫
+ *   - level enum 校验
+ *   - 字符串 trim
+ */
+function mergeProfileFields(
+  prev: ProfileUpdateReq,
+  raw: Record<string, unknown>
+): ProfileUpdateReq {
+  const next: ProfileUpdateReq = { ...prev };
+  if (typeof raw.name === 'string' && raw.name.trim()) {
+    next.name = raw.name.trim();
+  }
+  if (typeof raw.age === 'number' && Number.isInteger(raw.age) && raw.age > 0) {
+    next.age = raw.age;
+  }
+  if (typeof raw.grade === 'string' && raw.grade.trim()) {
+    next.grade = raw.grade.trim();
+  }
+  if (
+    typeof raw.level === 'string' &&
+    ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'].includes(raw.level)
+  ) {
+    next.level = raw.level as ProfileUpdateReq['level'];
+  }
+  return next;
+}
