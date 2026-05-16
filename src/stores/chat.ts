@@ -21,6 +21,8 @@ import { useProfileStore } from './profile.js';
 import type {
   ConversationDTO,
   MessageDTO,
+  ChatAction,
+  ChatSendReq,
 } from '@shared/api';
 import type {
   SkillEvent,
@@ -42,6 +44,7 @@ interface ChatState {
   loadConversations(): Promise<void>;
   selectConversation(id: number): Promise<void>;
   sendMessage(text: string): Promise<void>;
+  sendAction(action: ChatAction): Promise<void>;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -88,66 +91,84 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   async sendMessage(text: string) {
     if (!text.trim()) return;
-    const token = useAuthStore.getState().token;
-    if (!token) {
-      set({ error: '未登录,无法发送' });
-      return;
-    }
+    return await sendInternal({ text }, get, set);
+  },
 
-    const conversationId = get().currentConversationId ?? undefined;
-    set({ isLoading: true, error: null });
-    try {
-      const resp = await chatApi.send({ conversationId, text });
-      // 立即把用户消息塞进列表(乐观)
-      const optimisticUserMsg: MessageDTO = {
-        id: resp.userMessageId,
-        conversationId: resp.conversationId,
-        type: 'text',
-        role: 'user',
-        skillName: null,
-        content: text,
-        widgetSnapshot: null,
-        seq: 0,
-        createdAt: new Date().toISOString(),
-      };
-      const optimisticAssistantMsg: MessageDTO = {
-        id: resp.assistantMessageId,
-        conversationId: resp.conversationId,
-        type: 'text',
-        role: 'assistant',
-        skillName: resp.decision.skillName,
-        content: '',
-        widgetSnapshot: null,
-        seq: 0,
-        createdAt: new Date().toISOString(),
-      };
-      set((s) => ({
-        currentConversationId: resp.conversationId,
-        messages: [...s.messages, optimisticUserMsg, optimisticAssistantMsg],
-        streamingMessageId: resp.assistantMessageId,
-        isLoading: false,
-      }));
-
-      openStream(resp.streamId, {
-        token,
-        onEvent: (evt: SkillEvent) => {
-          handleStreamEvent(set, get, resp.assistantMessageId, evt);
-        },
-        onDone: () => {
-          clearStreamBuffer(set, resp.assistantMessageId, null);
-        },
-        onError: (err) => {
-          clearStreamBuffer(set, resp.assistantMessageId, err.message);
-        },
-      });
-    } catch (e) {
-      set({
-        isLoading: false,
-        error: e instanceof Error ? e.message : '发送失败',
-      });
-    }
+  async sendAction(action: ChatAction) {
+    return await sendInternal({ action }, get, set);
   },
 }));
+
+/* ============================================================
+ * 共享发送逻辑(text 或 action)
+ * ========================================================== */
+async function sendInternal(
+  body: Pick<ChatSendReq, 'text' | 'action'>,
+  get: () => ChatState,
+  set: (
+    partial: Partial<ChatState> | ((s: ChatState) => Partial<ChatState>)
+  ) => void
+): Promise<void> {
+  const token = useAuthStore.getState().token;
+  if (!token) {
+    set({ error: '未登录,无法发送' });
+    return;
+  }
+  const conversationId = get().currentConversationId ?? undefined;
+  set({ isLoading: true, error: null });
+  try {
+    const resp = await chatApi.send({ conversationId, ...body });
+    const optimisticContent = body.text
+      ? body.text
+      : `[action] ${JSON.stringify(body.action)}`;
+    const optimisticUserMsg: MessageDTO = {
+      id: resp.userMessageId,
+      conversationId: resp.conversationId,
+      type: 'text',
+      role: 'user',
+      skillName: null,
+      content: optimisticContent,
+      widgetSnapshot: null,
+      seq: 0,
+      createdAt: new Date().toISOString(),
+    };
+    const optimisticAssistantMsg: MessageDTO = {
+      id: resp.assistantMessageId,
+      conversationId: resp.conversationId,
+      type: 'text',
+      role: 'assistant',
+      skillName: resp.decision.skillName,
+      content: '',
+      widgetSnapshot: null,
+      seq: 0,
+      createdAt: new Date().toISOString(),
+    };
+    set((s) => ({
+      currentConversationId: resp.conversationId,
+      messages: [...s.messages, optimisticUserMsg, optimisticAssistantMsg],
+      streamingMessageId: resp.assistantMessageId,
+      isLoading: false,
+    }));
+
+    openStream(resp.streamId, {
+      token,
+      onEvent: (evt: SkillEvent) => {
+        handleStreamEvent(set, get, resp.assistantMessageId, evt);
+      },
+      onDone: () => {
+        clearStreamBuffer(set, resp.assistantMessageId, null);
+      },
+      onError: (err) => {
+        clearStreamBuffer(set, resp.assistantMessageId, err.message);
+      },
+    });
+  } catch (e) {
+    set({
+      isLoading: false,
+      error: e instanceof Error ? e.message : '发送失败',
+    });
+  }
+}
 
 function handleStreamEvent(
   set: (

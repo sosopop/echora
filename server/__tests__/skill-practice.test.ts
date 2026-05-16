@@ -1,0 +1,184 @@
+/**
+ * practice skill 单测
+ *
+ *   - 无 scene_dialogue → error NO_ACTIVE_SCENE
+ *   - 阶段 1 第 1 题 → widget exercise-card + mode-switch(fill) + 落 attempt(stage=1)
+ *   - 阶段 1 已通过 2 题 → 进阶段 2(mode-switch chat)
+ *   - 阶段 2 已通过 2 题 → state-transition('awaiting_next')
+ *   - dialogue.turns 不足 → error NO_QUESTION_TEMPLATE
+ */
+
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
+import path from 'node:path';
+import fs from 'node:fs';
+import os from 'node:os';
+import { connect, closeDb, type Db } from '../db/connect.js';
+import { migrate } from '../db/migrate.js';
+import { practiceSkill } from '../skills/practice.js';
+import type { ServerSkillContext } from '../skills/types.js';
+import type { AIProvider } from '../ai/types.js';
+import { ensureProfile, upsertProfile } from '../services/profile.js';
+import { createConversation } from '../services/conversation.js';
+import { appendMessage } from '../services/message.js';
+import { createSceneDialogue } from '../services/sceneDialogue.js';
+import { createAttempt } from '../services/exerciseAttempt.js';
+import { createGrading } from '../services/gradingResult.js';
+import type { SkillEventInput } from '../../shared/skill.js';
+
+let db: Db;
+let tmpDir: string;
+let userId: number;
+let conversationId: number;
+let messageId: number;
+
+beforeEach(() => {
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'echora-prac-'));
+  db = connect(path.join(tmpDir, 'test.db'));
+  migrate(db);
+  const u = db
+    .prepare("INSERT INTO users (email, password_hash) VALUES (?, ?)")
+    .run('p@test.com', 'x');
+  userId = Number(u.lastInsertRowid);
+  ensureProfile(db, userId);
+  upsertProfile(db, userId, { name: '甲', level: 'B1' });
+  const conv = createConversation(db, userId, { learningState: 'scene_selecting' });
+  conversationId = conv.id;
+  const msg = appendMessage(db, {
+    conversationId, type: 'text', role: 'assistant', skillName: 'practice',
+  });
+  messageId = msg.id;
+});
+
+afterEach(() => {
+  closeDb(db);
+  try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* lock */ }
+});
+
+const provider: AIProvider = {
+  name: 'noop',
+  async route() { throw new Error('not used'); },
+};
+
+function makeCtx(): ServerSkillContext {
+  return {
+    user: { id: userId, email: 'p@test.com' },
+    conversationId, messageId,
+    streamId: 'test', params: {},
+    learningState: 'practicing',
+    signal: new AbortController().signal,
+    provider, db,
+    emit() {},
+    makeWidgetId(prefix) { return `${prefix}-test`; },
+  };
+}
+
+async function collect(): Promise<SkillEventInput[]> {
+  const out: SkillEventInput[] = [];
+  for await (const ev of practiceSkill.handler(makeCtx())) out.push(ev);
+  return out;
+}
+
+function seedDialogue(turnCount: number): void {
+  const turns = Array.from({ length: turnCount }, (_, i) => ({
+    role: i % 2 === 0 ? 'Customer' : 'Waiter',
+    en: `Sentence number ${i + 1} please.`,
+    zh: `第 ${i + 1} 句话,请。`,
+  }));
+  createSceneDialogue(db, {
+    userId, conversationId,
+    sceneId: 'test-scene', title: '测试场景',
+    difficulty: 'B1',
+    roles: ['Customer', 'Waiter'],
+    turns,
+  });
+}
+
+describe('practice skill', () => {
+  it('无 scene_dialogue → error NO_ACTIVE_SCENE', async () => {
+    const events = await collect();
+    const err = events.find((e) => e.type === 'error');
+    expect(err).toBeDefined();
+    expect((err as { payload: { code: string } }).payload.code).toBe(
+      'NO_ACTIVE_SCENE'
+    );
+  });
+
+  it('阶段 1 第 1 题:fill 模式 + exercise-card + attempt 落库', async () => {
+    seedDialogue(6);
+    const events = await collect();
+    const mode = events.find((e) => e.type === 'mode-switch') as {
+      payload: { mode: string };
+    };
+    expect(mode.payload.mode).toBe('fill');
+
+    const ready = events.find((e) => e.type === 'widget-ready') as {
+      payload: { patch: { data: { attemptId: number; stage: number; questionType: string } } };
+    };
+    expect(ready.payload.patch.data.stage).toBe(1);
+    expect(ready.payload.patch.data.questionType).toBe('fill_word');
+    expect(ready.payload.patch.data.attemptId).toBeGreaterThan(0);
+
+    const transition = events.find((e) => e.type === 'state-transition') as {
+      payload: { nextLearningState: string };
+    };
+    expect(transition.payload.nextLearningState).toBe('practicing');
+  });
+
+  it('阶段 1 已通过 2 题 → 进阶段 2(chat 模式)', async () => {
+    seedDialogue(6);
+    // 模拟阶段 1 已 graded 2 题且全对
+    for (let i = 1; i <= 2; i++) {
+      const a = createAttempt(db, {
+        conversationId, sceneId: 'test-scene',
+        stage: 1, questionNo: i, questionType: 'fill_word', prompt: 'x',
+      });
+      createGrading(db, { attemptId: a.id, score: 100, isCorrect: true, corrections: {} });
+    }
+    const events = await collect();
+    const mode = events.find((e) => e.type === 'mode-switch') as {
+      payload: { mode: string };
+    };
+    expect(mode.payload.mode).toBe('chat');
+    const ready = events.find((e) => e.type === 'widget-ready') as {
+      payload: { patch: { data: { stage: number; questionType: string } } };
+    };
+    expect(ready.payload.patch.data.stage).toBe(2);
+    expect(ready.payload.patch.data.questionType).toBe('sentence_translation');
+  });
+
+  it('阶段 2 已通过 2 题 → state-transition awaiting_next', async () => {
+    seedDialogue(8);
+    // 阶段 1 + 2 各 2 题全对
+    for (let stage = 1; stage <= 2; stage++) {
+      for (let q = 1; q <= 2; q++) {
+        const a = createAttempt(db, {
+          conversationId, sceneId: 'test-scene',
+          stage, questionNo: q, questionType: 'x', prompt: 'x',
+        });
+        createGrading(db, { attemptId: a.id, score: 100, isCorrect: true, corrections: {} });
+      }
+    }
+    const events = await collect();
+    expect(events.find((e) => e.type === 'widget-init')).toBeUndefined();
+    const transition = events.find((e) => e.type === 'state-transition') as {
+      payload: { nextLearningState: string };
+    };
+    expect(transition.payload.nextLearningState).toBe('awaiting_next');
+  });
+
+  it('dialogue.turns 不足以出当前阶段题 → error NO_QUESTION_TEMPLATE', async () => {
+    seedDialogue(1); // 仅 1 句,阶段 1 第 1 题能出,但第 2 题不能
+    // 标阶段 1 第 1 题通过(让 next 推进到阶段 1 第 2 题)
+    const a = createAttempt(db, {
+      conversationId, sceneId: 'test-scene',
+      stage: 1, questionNo: 1, questionType: 'fill_word', prompt: 'x',
+    });
+    createGrading(db, { attemptId: a.id, score: 100, isCorrect: true, corrections: {} });
+    const events = await collect();
+    const err = events.find((e) => e.type === 'error');
+    expect(err).toBeDefined();
+    expect((err as { payload: { code: string } }).payload.code).toBe(
+      'NO_QUESTION_TEMPLATE'
+    );
+  });
+});

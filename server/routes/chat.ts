@@ -28,6 +28,7 @@ import {
   appendStreamEvent,
   getMessages,
 } from '../services/message.js';
+import { getActiveSceneDialogue } from '../services/sceneDialogue.js';
 import { streamBus } from '../services/streamBus.js';
 import type { SkillRegistry } from '../skills/registry.js';
 import type { AIRouter } from '../ai/router.js';
@@ -41,11 +42,37 @@ import type {
 import { ALL_LEARNING_STATES } from '../../shared/skill.js';
 import type { ChatSendResp } from '../../shared/api.js';
 
-const sendSchema = z.object({
-  conversationId: z.number().int().positive().optional(),
-  text: z.string().min(1).max(4000),
-  mode: z.enum(['chat', 'fill', 'select', 'menu']).optional(),
-});
+const chatActionSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('select-scene'),
+    payload: z.object({ sceneId: z.string().min(1).max(64) }),
+  }),
+  z.object({ type: z.literal('request-new-scenes') }),
+  z.object({
+    type: z.literal('submit-answer'),
+    payload: z.object({
+      attemptId: z.number().int().positive(),
+      answer: z.string().min(1).max(4000),
+    }),
+  }),
+  z.object({
+    type: z.literal('skip-question'),
+    payload: z.object({ attemptId: z.number().int().positive() }),
+  }),
+  z.object({ type: z.literal('next-question') }),
+]);
+
+const sendSchema = z
+  .object({
+    conversationId: z.number().int().positive().optional(),
+    text: z.string().min(1).max(4000).optional(),
+    action: chatActionSchema.optional(),
+    mode: z.enum(['chat', 'fill', 'select', 'menu']).optional(),
+  })
+  .refine(
+    (b) => (b.text != null) !== (b.action != null),
+    { message: 'text 与 action 必须二选一(不能同时给也不能都缺)' }
+  );
 
 const createConversationSchema = z.object({
   title: z.string().min(1).max(200).optional(),
@@ -109,6 +136,41 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
     }
   });
 
+  // —— 场景对话(scene_dialogues 的当前活跃一条) ————————————
+  router.get(
+    '/conversations/:id/scene-dialogue',
+    auth,
+    (req, res, next) => {
+      try {
+        const id = Number(req.params.id);
+        if (!Number.isInteger(id) || id <= 0) {
+          throw new HttpError(400, ERROR_CODES.VALIDATION_FAILED, '非法 id');
+        }
+        const conv = getConversation(db, id, req.user!.id);
+        if (!conv) {
+          throw new HttpError(
+            404,
+            ERROR_CODES.CONVERSATION_NOT_FOUND,
+            '会话不存在或无权访问'
+          );
+        }
+        const dialogue = getActiveSceneDialogue(db, id);
+        if (!dialogue) {
+          res.status(404).json({
+            error: {
+              code: ERROR_CODES.NOT_FOUND ?? 'NOT_FOUND',
+              message: '当前会话没有活跃场景对话',
+            },
+          });
+          return;
+        }
+        res.json({ data: dialogue });
+      } catch (e) {
+        next(e);
+      }
+    }
+  );
+
   // —— 发送消息 ————————————————————————————————————————————
   router.post('/send', auth, async (req, res, next) => {
     try {
@@ -131,17 +193,22 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
       }
 
       // 2. 持久化用户消息
+      //    text 直接落 content;action 则把 JSON 字符串化进 content 便于历史回看
+      const messageContent = body.text
+        ? body.text
+        : `[action] ${JSON.stringify(body.action)}`;
       const userMsg = appendMessage(db, {
         conversationId: conv.id,
         type: 'text',
         role: 'user',
-        content: body.text,
+        content: messageContent,
       });
 
       // 3. AI Router 决策
       //    失败不做 fallback,直接抛错让客户端看到具体原因
+      //    action 优先体现为路由 userText 提示(skill 内部从 decision.params.action 拿)
       const routerInput: RouterInput = {
-        userText: body.text,
+        userText: body.text ?? `[action:${body.action?.type}]`,
         profile: null,
         currentLearningState: conv.learningState,
         conversationId: conv.id,
@@ -157,6 +224,13 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
           ERROR_CODES.PROVIDER_ERROR,
           `AI 路由失败: ${reason}`
         );
+      }
+      // 把 action 注入 decision.params,供 skill 读取
+      if (body.action) {
+        decision = {
+          ...decision,
+          params: { ...decision.params, action: body.action },
+        };
       }
       const skill = skillRegistry.get(decision.skillName);
       if (!skill) {
@@ -421,10 +495,7 @@ function runSkillInBackground(args: RunSkillArgs): void {
 
       runUpdate.run('done', Date.now() - startedAt, null, runId);
 
-      // TODO 003: grade skill 真实实现后改由其自身 yield state-transition,删除此分支
-      if (skill.name === 'grade') {
-        updateLearningState(db, conversationId, 'awaiting_next', null);
-      }
+      // grade skill 003 已自身 yield state-transition,不再需要兼容分支
     } catch (err) {
       const errEvent: SkillEvent = {
         type: 'error',

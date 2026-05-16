@@ -37,10 +37,31 @@ JWT 7 天过期,V1 无刷新令牌。密钥来自 `JWT_SECRET`。
 | GET    | /api/chat/conversations                    | 当前用户会话列表                   |
 | POST   | /api/chat/conversations                    | 新建空会话(可选 `learningState`)|
 | GET    | /api/chat/conversations/:id/messages       | 历史消息                           |
+| GET    | /api/chat/conversations/:id/scene-dialogue | 当前活跃 scene_dialogue(003 新增)|
 | POST   | /api/chat/send                             | 发消息 → { messageId, streamId, decision } |
 | GET    | /api/chat/stream?streamId=&lastSeq=&token= | SSE 端点                           |
 
 POST `/api/chat/conversations` body 可选 `{ learningState?: LearningState, title?: string }`,Onboarding 视图传 `learningState='onboarding'`。
+
+POST `/api/chat/send` body(003 起 text 与 action 二选一):
+
+```ts
+{
+  conversationId?: number;
+  text?: string;          // 与 action 二选一
+  action?: ChatAction;    // 与 text 二选一
+  mode?: InputMode;
+}
+
+type ChatAction =
+  | { type: 'select-scene'; payload: { sceneId } }
+  | { type: 'request-new-scenes' }
+  | { type: 'submit-answer'; payload: { attemptId, answer } }
+  | { type: 'skip-question'; payload: { attemptId } }
+  | { type: 'next-question' };
+```
+
+`action` 与 `text` 二选一,zod refine 校验。`action` 自动注入到 `decision.params.action` 供 skill handler 读取。前端 widget 交互(点击场景卡片、提交答案、下一题等)统一走 `action` 路径,与 PRD §2.3 「结构化菜单动作优先走确定性路由」对齐。
 
 ## SSE 协议
 

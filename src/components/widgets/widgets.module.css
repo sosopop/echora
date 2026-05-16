@@ -1,0 +1,297 @@
+/**
+ * 12 Widget 通用样式(CSS Module 局部隔离)
+ *
+ * 公共 token / 颜色变量来自 src/styles/{tokens,components}.css。
+ * 仅在 widget 层级用,不污染全局。
+ */
+
+/* ============================================================
+ * scene-cards
+ * ========================================================== */
+.sceneCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.sceneCard {
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+}
+
+.sceneCard:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-md);
+}
+
+.sceneCard:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sceneEmoji {
+  font-size: 22px;
+}
+
+.sceneTitle {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--color-ink);
+}
+
+.sceneDesc {
+  font-size: 13px;
+  color: var(--color-muted);
+  line-height: 1.5;
+}
+
+.sceneMeta {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--color-muted);
+  margin-top: 4px;
+}
+
+.sceneFoot {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.btnGhost {
+  background: transparent;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  padding: 6px 14px;
+  font-size: 13px;
+  color: var(--color-muted);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.btnGhost:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.btnGhost:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ============================================================
+ * exercise-card
+ * ========================================================== */
+.exerciseCard {
+  background: var(--color-surface-card);
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  border-left: 3px solid var(--color-primary);
+}
+
+.exerciseHead {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--color-muted);
+  margin-bottom: 12px;
+}
+
+.exerciseStage {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-weight: 500;
+}
+
+.exerciseContextZh {
+  font-size: 15px;
+  color: var(--color-ink);
+  line-height: 1.6;
+  margin-bottom: 8px;
+}
+
+.exerciseContextEn {
+  font-size: 16px;
+  font-family: var(--font-body);
+  color: var(--color-ink);
+  line-height: 1.7;
+  margin: 8px 0;
+  background: var(--color-canvas);
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+}
+
+.exerciseHint {
+  font-size: 12px;
+  color: var(--color-muted);
+  margin-top: 6px;
+}
+
+.exerciseFoot {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--color-muted-soft);
+}
+
+/* ============================================================
+ * grading-result
+ * ========================================================== */
+.gradingCard {
+  background: var(--color-canvas);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--color-hairline);
+}
+
+.gradingBar {
+  height: 4px;
+}
+.gradingBar.correct { background: var(--color-success); }
+.gradingBar.warn { background: var(--color-warning); }
+.gradingBar.wrong { background: var(--color-error); }
+
+.gradingBody {
+  padding: 20px;
+}
+
+.gradingScoreRow {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.gradingScore {
+  font-family: var(--font-display);
+  font-size: 56px;
+  font-weight: 400;
+  letter-spacing: -1px;
+  color: var(--color-ink);
+  line-height: 1;
+}
+
+.gradingBadge {
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 500;
+}
+.gradingBadge.correct {
+  background: rgba(93, 184, 114, 0.15);
+  color: var(--color-success);
+}
+.gradingBadge.warn {
+  background: rgba(212, 160, 23, 0.15);
+  color: var(--color-warning);
+}
+.gradingBadge.wrong {
+  background: rgba(198, 69, 69, 0.15);
+  color: var(--color-error);
+}
+
+.gradingCompare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 16px 0;
+}
+
+.gradingAnswerBlock {
+  background: var(--color-surface-soft);
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+}
+
+.gradingAnswerLabel {
+  font-size: 11px;
+  color: var(--color-muted);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.gradingAnswerText {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--color-ink);
+  line-height: 1.5;
+}
+
+.gradingExplain {
+  font-size: 14px;
+  color: var(--color-body);
+  line-height: 1.6;
+  margin: 12px 0;
+}
+
+.gradingTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.gradingTag {
+  background: rgba(198, 69, 69, 0.1);
+  color: var(--color-error);
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+}
+
+.gradingActions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.btnPrimary {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  border: 0;
+  padding: 8px 18px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btnPrimary:hover:not(:disabled) {
+  background: var(--color-primary-active);
+}
+
+.btnPrimary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ============================================================
+ * fallback
+ * ========================================================== */
+.fallback {
+  background: var(--color-surface-soft);
+  border: 1px dashed var(--color-hairline);
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-muted);
+  border-radius: var(--radius-md);
+  white-space: pre-wrap;
+  word-break: break-word;
+}

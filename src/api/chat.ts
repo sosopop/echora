@@ -10,6 +10,7 @@ import type {
   MessageDTO,
   ChatSendReq,
   ChatSendResp,
+  SceneDialogueDTO,
 } from '@shared/api';
 import type { LearningState } from '@shared/skill';
 
@@ -33,5 +34,10 @@ export const chatApi = {
   },
   send(body: ChatSendReq): Promise<ChatSendResp> {
     return apiClient.post<ChatSendResp>('/chat/send', body);
+  },
+  getSceneDialogue(conversationId: number): Promise<SceneDialogueDTO> {
+    return apiClient.get<SceneDialogueDTO>(
+      `/chat/conversations/${conversationId}/scene-dialogue`
+    );
   },
 };

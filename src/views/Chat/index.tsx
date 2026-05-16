@@ -1,119 +1,92 @@
 /**
- * Chat 占位三栏壳
+ * Chat 视图首版(003 MVP)
  *
- * 用 prototype 的 .top-nav / .col-* class,后续填实组件。
+ * 仅中栏主流(左栏历史 / 右栏支线留 004)。
+ * mount 时:
+ *   - loadConversations
+ *   - 若已有 onboarding/scene_selecting/practicing 会话 → 选中
+ *   - 若无会话 → 不主动建(RouteGuard 会兜底跳 /onboarding)
+ *
+ * 子组件:ProgressBanner / MessageList / ChatInput
  */
 
-export default function Chat() {
+import { useEffect, useRef } from 'react';
+import { useChatStore } from '../../stores/chat.js';
+import { useLearningStateStore } from '../../stores/learningState.js';
+import { useAuthStore } from '../../stores/auth.js';
+import MessageList from './MessageList.js';
+import ChatInput from './ChatInput.js';
+import styles from './index.module.css';
+
+const LEARNING_STATE_LABEL: Record<string, string> = {
+  onboarding: '画像采集',
+  scene_selecting: '选择场景',
+  practicing: '练习中',
+  grading: '批改中',
+  awaiting_next: '待继续',
+  reviewing: '复盘中',
+  archived: '已归档',
+};
+
+export default function Chat(): JSX.Element {
+  const learningState = useLearningStateStore((s) => s.state);
+  const error = useChatStore((s) => s.error);
+  const conversations = useChatStore((s) => s.conversations);
+  const currentId = useChatStore((s) => s.currentConversationId);
+  const user = useAuthStore((s) => s.user);
+  const initRef = useRef(false);
+
+  useEffect(() => {
+    if (initRef.current) return;
+    initRef.current = true;
+    void (async () => {
+      const store = useChatStore.getState();
+      await store.loadConversations();
+      const list = useChatStore.getState().conversations;
+      // 优先选 practicing > scene_selecting > 第一个
+      const candidate =
+        list.find((c) => c.learningState === 'practicing') ??
+        list.find((c) => c.learningState === 'scene_selecting') ??
+        list[0];
+      if (candidate) {
+        await useChatStore.getState().selectConversation(candidate.id);
+      }
+    })();
+  }, []);
+
   return (
-    <div
-      style={{
-        height: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-      }}
-    >
-      {/* 顶栏 */}
-      <header className="top-nav">
-        <span className="brand">
-          <span className="brand-mark">✱</span>Echora
+    <div className={styles.shell}>
+      <header className={styles.topBar}>
+        <span className={styles.brand}>
+          <span className={styles.brandMark}>✱</span> Echora
         </span>
-        <span className="session-title" style={{ marginLeft: 24 }}>
-          (占位:Chat 三栏壳)
+        <span className={styles.sessionInfo}>
+          {currentId ? `会话 #${currentId}` : '尚未选择会话'}
         </span>
-        <span className="spacer" />
-        <span className="badge badge-soft">awaiting_next</span>
-        <span
-          className="avatar"
-          style={{ marginLeft: 12 }}
-          title="占位用户"
-        >
-          U
+        <span className={styles.spacer} />
+        <span className={styles.stateBadge}>
+          {LEARNING_STATE_LABEL[learningState] ?? learningState}
+        </span>
+        <span className={styles.avatar} title={user?.email ?? ''}>
+          {user?.email?.[0]?.toUpperCase() ?? '?'}
         </span>
       </header>
 
-      {/* 三栏 */}
-      <div
-        style={{
-          flex: 1,
-          display: 'grid',
-          gridTemplateColumns:
-            'var(--layout-col-history) minmax(0, 1fr) var(--layout-col-branch)',
-          minHeight: 0,
-        }}
-      >
-        {/* 左:历史 */}
-        <aside
-          style={{
-            background: 'var(--color-surface-soft)',
-            borderRight: '1px solid var(--color-hairline-soft)',
-            padding: 'var(--space-md)',
-          }}
-        >
-          <div className="caption-upper muted">历史会话(占位)</div>
-          <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>
-            后续接入 useChatStore.loadConversations
-          </div>
-        </aside>
-
-        {/* 中:主流 */}
-        <main
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            background: 'var(--color-canvas)',
-            minWidth: 0,
-            padding: 'var(--space-xl)',
-          }}
-        >
-          <div className="msg msg-system">
-            <div className="msg-bubble">— 占位:消息流 —</div>
-          </div>
-          <div className="msg msg-ai">
-            <div className="msg-bubble">
-              这里是 AI 消息占位。后续 useChatStore.sendMessage 接入真实
-              SSE 流。
+      <main className={styles.main}>
+        {error && <div className={styles.errorBar}>{error}</div>}
+        {conversations.length === 0 ? (
+          <div className={styles.empty}>
+            <div className={styles.emptyTitle}>暂无会话</div>
+            <div className={styles.emptyDesc}>
+              完成 onboarding 后,Echo 会自动为你推荐场景。
             </div>
           </div>
-          <div className="msg msg-user">
-            <div className="msg-bubble">这里是用户消息占位。</div>
-          </div>
+        ) : (
+          <MessageList />
+        )}
+      </main>
 
-          <div className="spacer" style={{ flex: 1 }} />
-
-          <div
-            className="card-bordered"
-            style={{
-              maxWidth: 720,
-              margin: '0 auto',
-              width: '100%',
-            }}
-          >
-            <div className="caption muted">输入区(占位 · chat 模式)</div>
-            <input
-              className="input"
-              placeholder="占位输入框..."
-              disabled
-              style={{ marginTop: 8 }}
-            />
-          </div>
-        </main>
-
-        {/* 右:辅助追问 */}
-        <aside
-          style={{
-            background: 'var(--color-surface-soft)',
-            borderLeft: '1px solid var(--color-hairline-soft)',
-            padding: 'var(--space-md)',
-          }}
-        >
-          <div className="caption-upper muted">辅助追问(占位)</div>
-          <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>
-            后续接入 branch_threads + follow-up-source widget
-          </div>
-        </aside>
-      </div>
+      <ChatInput />
     </div>
   );
 }

@@ -105,9 +105,24 @@ export interface MessageDTO {
 /* ============================================================
  * Chat send / stream
  * ========================================================== */
+
+/**
+ * Widget 结构化交互动作(PRD §2.3「结构化菜单动作优先走确定性路由」)。
+ * 与 ChatSendReq.text 二选一(由 zod refine 保证)。
+ */
+export type ChatAction =
+  | { type: 'select-scene'; payload: { sceneId: string } }
+  | { type: 'request-new-scenes' }
+  | { type: 'submit-answer'; payload: { attemptId: number; answer: string } }
+  | { type: 'skip-question'; payload: { attemptId: number } }
+  | { type: 'next-question' };
+
 export interface ChatSendReq {
   conversationId?: number; // 不传则自动新建
-  text: string;
+  /** 自由文本输入(与 action 二选一) */
+  text?: string;
+  /** 结构化 widget 交互(与 text 二选一) */
+  action?: ChatAction;
   mode?: InputMode;
 }
 
@@ -117,4 +132,24 @@ export interface ChatSendResp {
   assistantMessageId: number;
   streamId: string;
   decision: RouterDecision;
+}
+
+/* ============================================================
+ * Scene dialogue(PRD §2.5)
+ * ========================================================== */
+export interface SceneDialogueTurn {
+  role: string;
+  en: string;
+  zh: string;
+}
+
+export interface SceneDialogueDTO {
+  id: number;
+  conversationId: number;
+  sceneId: string;
+  title: string;
+  difficulty: CefrLevel;
+  roles: string[];
+  turns: SceneDialogueTurn[];
+  createdAt: string;
 }

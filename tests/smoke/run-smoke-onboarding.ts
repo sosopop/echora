@@ -690,6 +690,24 @@ scenario('I', 'state-transition 后下次 send 路由到 scene-select', async ()
           { type: 'message-stop', stopReason: 'tool_use' },
         ],
       },
+      // 默认匹配:scene-select skill 调用 propose_scenes
+      {
+        match: '',
+        events: [
+          {
+            type: 'tool-use',
+            toolName: 'propose_scenes',
+            input: {
+              scenes: [
+                { id: 'cafe', topic: 'cafe order', title: '咖啡店点单', description: '点饮品/打包', knowledgePoint: '礼貌请求', difficulty: 'B1' },
+                { id: 'taxi', topic: 'taxi ride', title: '打车', description: '告诉目的地', knowledgePoint: '介词', difficulty: 'B1' },
+                { id: 'bookstore', topic: 'bookstore', title: '书店', description: '找书咨询', knowledgePoint: '一般疑问句', difficulty: 'B1' },
+              ],
+            },
+          },
+          { type: 'message-stop', stopReason: 'tool_use' },
+        ],
+      },
     ],
   });
   const app = await startTestApp({ provider });
@@ -708,7 +726,7 @@ scenario('I', 'state-transition 后下次 send 路由到 scene-select', async ()
     const e1 = await collectSseEvents(app.baseUrl, s1.body.data.streamId, token);
     assertEq(eventsByType(e1, 'state-transition').length, 1, 'onboarding done');
 
-    // 2. 用同一会话再发一句 → 应被路由到 scene-select(stub)
+    // 2. 用同一会话再发一句 → 应被路由到 scene-select(003 真实实现)
     const s2 = await httpJson<{
       data: { streamId: string; decision: { skillName: string } };
     }>(app.baseUrl, 'POST', '/api/chat/send', {
@@ -718,9 +736,9 @@ scenario('I', 'state-transition 后下次 send 路由到 scene-select', async ()
     assertEq(s2.body.data.decision.skillName, 'scene-select', 'routed to scene-select');
     await delay(80);
     const e2 = await collectSseEvents(app.baseUrl, s2.body.data.streamId, token);
-    // scene-select stub 通常产 widget-init/ready + done
+    // scene-select 真实实现:propose 候选 → widget scene-cards + done
     const widgetInits = eventsByType(e2, 'widget-init');
-    assertTrue(widgetInits.length >= 1, 'scene-select stub 应产 widget-init');
+    assertTrue(widgetInits.length >= 1, 'scene-select 应产 widget-init');
     assertEq(eventsByType(e2, 'done').length, 1, 'scene-select done');
   } finally {
     await app.cleanup();
