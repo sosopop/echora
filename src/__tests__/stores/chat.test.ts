@@ -5,6 +5,7 @@ import type { SkillEvent } from '@shared/skill';
 const mocks = vi.hoisted(() => ({
   listConversations: vi.fn(),
   send: vi.fn(),
+  abortStream: vi.fn(),
   createConversation: vi.fn(),
   openStream: vi.fn(),
   profileGet: vi.fn(),
@@ -24,6 +25,7 @@ vi.mock('../../api/chat.js', () => ({
     getBranchMessages: mocks.getBranchMessages,
     sendBranchMessage: mocks.sendBranchMessage,
     send: mocks.send,
+    abortStream: mocks.abortStream,
   },
 }));
 
@@ -88,6 +90,7 @@ describe('chat store streaming', () => {
       currentConversationId: null,
       messages: [],
       streamingMessageId: null,
+      currentStreamId: null,
       streamBuffer: {},
       activeWidgets: {},
       branchThreads: [],
@@ -131,6 +134,41 @@ describe('chat store streaming', () => {
     expect(assistant?.content).toBe('嗨！我是 Echo。 请问怎么称呼你呢？');
     expect(state.streamingMessageId).toBeNull();
     expect(state.streamBuffer[102]).toBeUndefined();
+  });
+
+  it('stopGenerating 会调用 abortStream 并清理流式状态', async () => {
+    const close = vi.fn();
+    mocks.send.mockResolvedValue({
+      conversationId: 10,
+      userMessageId: 111,
+      assistantMessageId: 112,
+      streamId: 'stream-stop',
+      decision: {
+        skillName: 'general-chat',
+        params: {},
+        confidence: 0.95,
+        rationale: 'test',
+      },
+    });
+    mocks.openStream.mockReturnValue({ close });
+    mocks.abortStream.mockResolvedValue({
+      streamId: 'stream-stop',
+      aborted: true,
+    });
+
+    await useChatStore.getState().sendMessage('slow');
+    expect(useChatStore.getState().currentStreamId).toBe('stream-stop');
+
+    await useChatStore.getState().stopGenerating();
+
+    const state = useChatStore.getState();
+    expect(mocks.abortStream).toHaveBeenCalledWith('stream-stop');
+    expect(close).toHaveBeenCalled();
+    expect(state.streamingMessageId).toBeNull();
+    expect(state.currentStreamId).toBeNull();
+    expect(state.messages.find((m) => m.id === 112)?.content).toBe(
+      '已停止生成。'
+    );
   });
 
   it('POST 返回前先插入用户消息和 assistant 思考占位', async () => {

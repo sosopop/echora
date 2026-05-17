@@ -17,7 +17,7 @@ interface OpenStreamOptions {
   onError?: (err: Error) => void;
 }
 
-interface OpenStreamHandle {
+export interface OpenStreamHandle {
   close(): void;
 }
 

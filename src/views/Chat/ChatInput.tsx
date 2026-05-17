@@ -34,6 +34,7 @@ export default function ChatInput(): JSX.Element {
   const isLoading = useChatStore((s) => s.isLoading);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const sendAction = useChatStore((s) => s.sendAction);
+  const stopGenerating = useChatStore((s) => s.stopGenerating);
   const activeWidgets = useChatStore((s) => s.activeWidgets);
   const messages = useChatStore((s) => s.messages);
   const learningState = useLearningStateStore((s) => s.state);
@@ -214,10 +215,17 @@ export default function ChatInput(): JSX.Element {
           <button
             type="button"
             className={styles.sendBtn}
-            disabled={disabled}
-            onClick={() => void submit()}
+            disabled={streaming ? false : disabled}
+            onClick={() => {
+              if (streaming) {
+                shouldRestoreFocusRef.current = true;
+                void stopGenerating();
+                return;
+              }
+              void submit();
+            }}
           >
-            发送 →
+            {streaming ? '停止' : '发送 →'}
           </button>
         </div>
         {menuNotice && (

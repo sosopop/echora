@@ -34,6 +34,7 @@ import { createSceneDialogue } from '../services/sceneDialogue.js';
 import type { Config } from '../config/getConfig.js';
 import type { AIRouter } from '../ai/router.js';
 import type { AIProvider } from '../ai/types.js';
+import type { ServerSkillContext } from '../skills/types.js';
 import type {
   LearningState,
   RouterDecision,
@@ -50,6 +51,10 @@ let conversationId: number;
 let decideCalls: Array<{ userText: string }> = [];
 let routerDecisionOverride: RouterDecision | null = null;
 let providerChatImpl: AIProvider['chat'] | null = null;
+let skillHandlerOverrides = new Map<
+  string,
+  (ctx: ServerSkillContext) => AsyncIterable<SkillEventInput>
+>();
 
 const config: Config = {
   port: 0,
@@ -74,7 +79,12 @@ function fakeSkill(
     name,
     description: `fake ${name}`,
     allowedStates,
-    async *handler(): AsyncIterable<SkillEventInput> {
+    async *handler(ctx): AsyncIterable<SkillEventInput> {
+      const override = skillHandlerOverrides.get(name);
+      if (override) {
+        yield* override(ctx as ServerSkillContext);
+        return;
+      }
       yield { type: 'done', payload: {} };
     },
   };
@@ -95,6 +105,7 @@ beforeEach(() => {
   decideCalls = [];
   routerDecisionOverride = null;
   providerChatImpl = null;
+  skillHandlerOverrides = new Map();
 
   const skillRegistry = new SkillRegistry();
   skillRegistry.register(fakeSkill('grade', ['practicing', 'grading']));
@@ -559,6 +570,65 @@ describe('branch follow-up threads', () => {
 });
 
 describe('POST /api/chat/send', () => {
+  it('streams/:streamId/abort 停止生成并记录 aborted run', async () => {
+    skillHandlerOverrides.set('practice', async function* (ctx) {
+      yield { type: 'text-chunk', payload: { text: '生成中' } };
+      await new Promise<void>((resolve) => {
+        ctx.signal.addEventListener(
+          'abort',
+          () => resolve(),
+          { once: true }
+        );
+      });
+    });
+
+    const sendRes = await request(app)
+      .post('/api/chat/send')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ conversationId, action: { type: 'next-question' } });
+
+    expect(sendRes.status).toBe(202);
+    const streamId = sendRes.body.data.streamId as string;
+    const assistantMessageId = sendRes.body.data.assistantMessageId as number;
+
+    const abortRes = await request(app)
+      .post(`/api/chat/streams/${encodeURIComponent(streamId)}/abort`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+
+    expect(abortRes.status).toBe(200);
+    expect(abortRes.body.data).toMatchObject({ streamId, aborted: true });
+
+    const row = db
+      .prepare<[number], { stream_events: string }>(
+        'SELECT stream_events FROM messages WHERE id = ?'
+      )
+      .get(assistantMessageId);
+    const events = JSON.parse(row?.stream_events ?? '[]') as Array<{
+      type: string;
+      payload?: { reason?: string };
+    }>;
+    expect(
+      events.some((e) => e.type === 'done' && e.payload?.reason === 'aborted')
+    ).toBe(true);
+    const run = db
+      .prepare<[number], { status: string; error_type: string | null }>(
+        'SELECT status, error_type FROM agent_runs WHERE message_id = ?'
+      )
+      .get(assistantMessageId);
+    expect(run).toMatchObject({ status: 'aborted', error_type: 'AbortError' });
+  });
+
+  it('停止不存在的 stream 返回 404', async () => {
+    const res = await request(app)
+      .post('/api/chat/streams/not-running/abort')
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.message).toContain('没有可停止');
+  });
+
   it('practicing 中自由文本绑定最新未批改 attempt 并走 grade', async () => {
     const attemptId = seedAttempt();
 

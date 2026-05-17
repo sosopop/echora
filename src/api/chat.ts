@@ -13,6 +13,7 @@ import type {
   BranchThreadDTO,
   ChatSendReq,
   ChatSendResp,
+  ChatAbortStreamResp,
   SceneDialogueDTO,
 } from '@shared/api';
 import type { LearningState } from '@shared/skill';
@@ -65,6 +66,12 @@ export const chatApi = {
   },
   send(body: ChatSendReq): Promise<ChatSendResp> {
     return apiClient.post<ChatSendResp>('/chat/send', body);
+  },
+  abortStream(streamId: string): Promise<ChatAbortStreamResp> {
+    return apiClient.post<ChatAbortStreamResp>(
+      `/chat/streams/${encodeURIComponent(streamId)}/abort`,
+      {}
+    );
   },
   getSceneDialogue(conversationId: number): Promise<SceneDialogueDTO> {
     return apiClient.get<SceneDialogueDTO>(

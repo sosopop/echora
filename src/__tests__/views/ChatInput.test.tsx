@@ -86,6 +86,7 @@ beforeEach(() => {
     currentConversationId: 1,
     messages: [],
     streamingMessageId: null,
+    currentStreamId: null,
     streamBuffer: {},
     activeWidgets: {},
     inputMode: 'chat',
@@ -246,6 +247,20 @@ describe('ChatInput scene-select recovery', () => {
 
     await waitFor(() => expect(textarea).toHaveFocus());
     expect(textarea).toHaveValue('');
+  });
+
+  it('流式回复中发送按钮变为停止并调用 stopGenerating', () => {
+    const stopGenerating = vi.fn();
+    useChatStore.setState({
+      streamingMessageId: 123,
+      currentStreamId: 'stream-stop',
+      stopGenerating,
+    });
+
+    render(<ChatInput />);
+
+    fireEvent.click(screen.getByRole('button', { name: '停止' }));
+    expect(stopGenerating).toHaveBeenCalled();
   });
 
   it('学习菜单可触发换场景、复盘与保存提示', () => {

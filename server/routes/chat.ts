@@ -5,6 +5,7 @@
  *   POST /conversations                      新建空会话
  *   GET  /conversations/:id/messages         历史消息
  *   POST /send                               发送消息(同步) → { messageId, streamId, decision }
+ *   POST /streams/:streamId/abort            停止正在生成的 Skill 流
  *   GET  /stream?streamId=...&lastSeq=...    SSE 端点(token 走 query)
  */
 
@@ -124,6 +125,23 @@ const createBranchThreadSchema = z.object({
 const sendBranchMessageSchema = z.object({
   text: z.string().min(1).max(4000),
 });
+
+const streamIdSchema = z.string().min(1).max(160);
+
+interface ActiveSkillRun {
+  streamId: string;
+  runId: string;
+  userId: number;
+  conversationId: number;
+  messageId: number;
+  controller: AbortController;
+  startedAt: number;
+  seq: number;
+  aborted: boolean;
+  terminalSent: boolean;
+}
+
+const activeSkillRuns = new Map<string, ActiveSkillRun>();
 
 export interface ChatRouterDeps {
   db: Db;
@@ -426,6 +444,34 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
         decision,
       };
       res.status(202).json({ data: respBody });
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  // —— 停止生成 ————————————————————————————————————————————
+  router.post('/streams/:streamId/abort', auth, (req, res, next) => {
+    try {
+      const streamId = streamIdSchema.parse(req.params.streamId);
+      const run = activeSkillRuns.get(streamId);
+      if (!run || run.userId !== req.user!.id) {
+        throw new HttpError(
+          404,
+          ERROR_CODES.NOT_FOUND,
+          '没有可停止的生成任务'
+        );
+      }
+      run.aborted = true;
+      run.controller.abort();
+      publishAbortDone(db, run);
+      markAgentRunStatus(
+        db,
+        run.runId,
+        'aborted',
+        Date.now() - run.startedAt,
+        'AbortError'
+      );
+      res.json({ data: { streamId, aborted: true } });
     } catch (e) {
       next(e);
     }
@@ -1226,6 +1272,19 @@ function runSkillInBackground(args: RunSkillArgs): void {
   const startedAt = Date.now();
   let seq = 0;
   const controller = new AbortController();
+  const activeRun: ActiveSkillRun = {
+    streamId,
+    runId,
+    userId,
+    conversationId,
+    messageId,
+    controller,
+    startedAt,
+    seq,
+    aborted: false,
+    terminalSent: false,
+  };
+  activeSkillRuns.set(streamId, activeRun);
 
   const ctx: ServerSkillContext = {
     user: { id: userId, email: userEmail },
@@ -1244,12 +1303,6 @@ function runSkillInBackground(args: RunSkillArgs): void {
       return `${prefix}-${randomUUID().slice(0, 8)}`;
     },
   };
-
-  const runUpdate = db.prepare(
-    `UPDATE agent_runs
-     SET status = ?, latency_ms = ?, error_type = ?, finished_at = datetime('now')
-     WHERE run_id = ?`
-  );
 
   // 处理 mode-switch / state-transition / widget-* 副作用
   const handleSideEffects = (event: SkillEvent): void => {
@@ -1277,7 +1330,9 @@ function runSkillInBackground(args: RunSkillArgs): void {
     let sawTerminal = false;
     try {
       for await (const partial of skill.handler(ctx)) {
+        if (activeRun.aborted || controller.signal.aborted) break;
         seq += 1;
+        activeRun.seq = seq;
         const fullEvent: SkillEvent = {
           ...partial,
           seq,
@@ -1298,7 +1353,20 @@ function runSkillInBackground(args: RunSkillArgs): void {
 
         if (fullEvent.type === 'done' || fullEvent.type === 'error') {
           sawTerminal = true;
+          activeRun.terminalSent = true;
         }
+      }
+
+      if (activeRun.aborted || controller.signal.aborted) {
+        publishAbortDone(db, activeRun);
+        markAgentRunStatus(
+          db,
+          runId,
+          'aborted',
+          Date.now() - startedAt,
+          'AbortError'
+        );
+        return;
       }
 
       // 兜底:若 Skill 没产 done/error,补一条 done
@@ -1316,12 +1384,25 @@ function runSkillInBackground(args: RunSkillArgs): void {
           /* 落盘失败不阻塞 */
         }
         streamBus.publish(streamId, lastEvent);
+        activeRun.seq = lastEvent.seq;
+        activeRun.terminalSent = true;
       }
 
-      runUpdate.run('done', Date.now() - startedAt, null, runId);
+      markAgentRunStatus(db, runId, 'done', Date.now() - startedAt, null);
 
       // grade skill 003 已自身 yield state-transition,不再需要兼容分支
     } catch (err) {
+      if (activeRun.aborted || controller.signal.aborted) {
+        publishAbortDone(db, activeRun);
+        markAgentRunStatus(
+          db,
+          runId,
+          'aborted',
+          Date.now() - startedAt,
+          'AbortError'
+        );
+        return;
+      }
       const details = getDevErrorDetails(err);
       const errEvent: SkillEvent = {
         type: 'error',
@@ -1340,16 +1421,51 @@ function runSkillInBackground(args: RunSkillArgs): void {
         /* 落盘失败不阻塞 */
       }
       streamBus.publish(streamId, errEvent);
-      runUpdate.run(
+      markAgentRunStatus(
+        db,
+        runId,
         'failed',
         Date.now() - startedAt,
-        err instanceof Error ? err.name : 'unknown',
-        runId
+        err instanceof Error ? err.name : 'unknown'
       );
     } finally {
+      activeSkillRuns.delete(streamId);
       // 不立即 close streamBus,让晚来的订阅者还能 replay
     }
   })().catch((e) => {
     console.error('[runSkill] 后台任务崩溃', e);
   });
+}
+
+function publishAbortDone(db: Db, run: ActiveSkillRun): void {
+  if (run.terminalSent) return;
+  const event: SkillEvent = {
+    type: 'done',
+    payload: { reason: 'aborted' } as Record<string, unknown>,
+    seq: run.seq + 1,
+    streamId: run.streamId,
+    timestamp: Date.now(),
+  };
+  try {
+    appendStreamEvent(db, run.messageId, event);
+  } catch {
+    /* 落盘失败不阻塞停止 */
+  }
+  run.seq = event.seq;
+  run.terminalSent = true;
+  streamBus.publish(run.streamId, event);
+}
+
+function markAgentRunStatus(
+  db: Db,
+  runId: string,
+  status: 'done' | 'failed' | 'aborted',
+  latencyMs: number,
+  errorType: string | null
+): void {
+  db.prepare(
+    `UPDATE agent_runs
+     SET status = ?, latency_ms = ?, error_type = ?, finished_at = datetime('now')
+     WHERE run_id = ?`
+  ).run(status, latencyMs, errorType, runId);
 }

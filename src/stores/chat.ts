@@ -14,7 +14,7 @@
 
 import { create } from 'zustand';
 import { chatApi } from '../api/chat.js';
-import { openStream } from '../api/sse.js';
+import { openStream, type OpenStreamHandle } from '../api/sse.js';
 import { useAuthStore } from './auth.js';
 import { useLearningStateStore } from './learningState.js';
 import { useProfileStore } from './profile.js';
@@ -37,6 +37,7 @@ interface ChatState {
   currentConversationId: number | null;
   messages: MessageDTO[];
   streamingMessageId: number | null;
+  currentStreamId: string | null;
   streamBuffer: Record<number, string>;
   activeWidgets: Record<string, LearningWidgetInstance>;
   branchThreads: BranchThreadDTO[];
@@ -55,6 +56,7 @@ interface ChatState {
   startNewConversation(): Promise<void>;
   sendMessage(text: string): Promise<void>;
   sendAction(action: ChatAction): Promise<void>;
+  stopGenerating(): Promise<void>;
   openBranchForMessage(messageId: number): Promise<void>;
   closeBranch(): void;
   sendBranchMessage(text: string): Promise<void>;
@@ -65,6 +67,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   currentConversationId: null,
   messages: [],
   streamingMessageId: null,
+  currentStreamId: null,
   streamBuffer: {},
   activeWidgets: {},
   branchThreads: [],
@@ -131,6 +134,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         currentConversationId: conv.id,
         messages: [],
         streamingMessageId: null,
+        currentStreamId: null,
         streamBuffer: {},
         activeWidgets: {},
         branchThreads: [],
@@ -160,6 +164,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   async sendAction(action: ChatAction) {
     return await sendInternal({ action }, get, set);
+  },
+
+  async stopGenerating() {
+    const streamId = get().currentStreamId;
+    const messageId = get().streamingMessageId;
+    if (!streamId || messageId == null) return;
+    try {
+      await chatApi.abortStream(streamId);
+    } catch (e) {
+      set({
+        error: e instanceof Error ? e.message : '停止生成失败',
+      });
+      return;
+    } finally {
+      activeStreamHandle?.close();
+      activeStreamHandle = null;
+    }
+    clearStreamBuffer(set, messageId, null, true);
   },
 
   async openBranchForMessage(messageId: number) {
@@ -237,6 +259,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 }));
 
+let activeStreamHandle: OpenStreamHandle | null = null;
+
 /* ============================================================
  * 共享发送逻辑(text 或 action)
  * ========================================================== */
@@ -284,6 +308,7 @@ async function sendInternal(
   set((s) => ({
     messages: [...s.messages, optimisticUserMsg, optimisticAssistantMsg],
     streamingMessageId: optimisticAssistantId,
+    currentStreamId: null,
     isLoading: true,
     error: null,
   }));
@@ -310,18 +335,22 @@ async function sendInternal(
         return m;
       }),
       streamingMessageId: resp.assistantMessageId,
+      currentStreamId: resp.streamId,
       isLoading: false,
     }));
 
-    openStream(resp.streamId, {
+    activeStreamHandle?.close();
+    activeStreamHandle = openStream(resp.streamId, {
       token,
       onEvent: (evt: SkillEvent) => {
         handleStreamEvent(set, get, resp.assistantMessageId, evt);
       },
       onDone: () => {
+        activeStreamHandle = null;
         clearStreamBuffer(set, resp.assistantMessageId, null);
       },
       onError: (err) => {
+        activeStreamHandle = null;
         clearStreamBuffer(set, resp.assistantMessageId, err.message);
       },
     });
@@ -330,6 +359,7 @@ async function sendInternal(
     set({
       isLoading: false,
       streamingMessageId: null,
+      currentStreamId: null,
       error: message,
       messages: get().messages.map((m) =>
         m.id === optimisticAssistantId
@@ -487,19 +517,28 @@ function clearStreamBuffer(
       | ((s: ChatState) => Partial<ChatState>)
   ) => void,
   messageId: number,
-  error: string | null
+  error: string | null,
+  aborted = false
 ): void {
   set((s) => {
     const { [messageId]: _removed, ...rest } = s.streamBuffer;
     const fallbackError = error ? `出错了:${error}` : null;
+    const stoppedText = '已停止生成。';
     return {
       streamingMessageId: null,
+      currentStreamId: null,
       streamBuffer: rest,
       error,
       messages: fallbackError
         ? s.messages.map((m) =>
             m.id === messageId && !m.content
               ? { ...m, content: fallbackError }
+              : m
+          )
+        : aborted
+        ? s.messages.map((m) =>
+            m.id === messageId && !m.content
+              ? { ...m, content: stoppedText }
               : m
           )
         : s.messages,

@@ -43,6 +43,7 @@ JWT 7 天过期,V1 无刷新令牌。密钥来自 `JWT_SECRET`。
 | GET    | /api/chat/branch-threads/:threadId/messages | 支线消息列表                     |
 | POST   | /api/chat/branch-threads/:threadId/messages | 发送支线追问并获得支线回复       |
 | POST   | /api/chat/send                             | 发消息 → { messageId, streamId, decision } |
+| POST   | /api/chat/streams/:streamId/abort          | 停止当前用户正在生成的 Skill 流   |
 | GET    | /api/chat/stream?streamId=&lastSeq=&token= | SSE 端点                           |
 
 POST `/api/chat/conversations` body 可选 `{ learningState?: LearningState, title?: string }`,Onboarding 视图传 `learningState='onboarding'`。
@@ -179,6 +180,7 @@ interface BranchThreadDTO {
 - JSON shape:`SkillEvent`(`shared/skill.ts`,**9 类型**联合 + seq/streamId/timestamp 元数据;002 起新增 `state-transition`)
 - 心跳:每 15s 注释行 `: ping`
 - 重连:客户端用最新 `lastSeq` 续传,后端从 ring buffer(每流 200 条)replay
+- 停止生成(041):`POST /api/chat/streams/:streamId/abort` 仅能停止当前用户的活跃流。服务端 abort 对应 `AbortController`,把 `agent_runs.status` 写为 `aborted`,并补一条 `done` 事件(`payload.reason='aborted'`)让前端立刻退出流式状态;不存在或已结束的 stream 返回 `404 NOT_FOUND`。
 
 ## AI Provider 配置
 

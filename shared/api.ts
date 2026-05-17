@@ -163,6 +163,11 @@ export interface ChatSendResp {
   decision: RouterDecision;
 }
 
+export interface ChatAbortStreamResp {
+  streamId: string;
+  aborted: boolean;
+}
+
 /* ============================================================
  * Branch follow-up threads(PRD §3.2)
  * ========================================================== */
