@@ -64,7 +64,7 @@
   - `action=select-scene` → `runDialogueGeneration`(LLM 生成完整双语对话)→ `createSceneDialogue` + `appendSceneHistory` → 串接 `practiceSkill.handler` 自动生成第一题
 - 工具:`propose_scenes`(批量场景候选)+ `generate_scene_dialogue`(完整对话 JSON)
 - 已用队列:`scene_history` 表 max 10 per user,服务层 prune
-- 036 起,用户选定场景并成功生成 `scene_dialogue` 后,会把 `conversations.title` 更新为当前场景标题,用于历史会话左栏展示。
+- 036 起,用户选定场景并成功生成 `scene_dialogue` 后,会把 `conversations.title` 更新为当前场景标题,用于历史会话左栏展示。038 起前端 `scene-cards` 点击会把卡片 `title/description/knowledgePoint/difficulty` 一并传给 `select-scene`,后端优先使用这些元数据,旧客户端只传 sceneId 时仍按 sceneId 兼容推导。
 - 失败恢复(005):`runScenePropose` 失败时,handler 会把已初始化的 `scene-cards` widget patch 为 `status='error'`,写入空 `cards` 与可读 `message`,随后 `mode-switch('chat')` 再发 `error` 终止。前端遇到历史 loading/空候选 widget 时也允许点击"重新生成场景"或直接输入主题,避免 `select` 输入模式永久卡住。
 - 012 起,用户在 `practicing` 中输入 `换场景` / `换一批` / `重新生成场景` 会确定性路由到 `scene-select`;handler 先发 `state-transition('scene_selecting','scene-select')`,再输出 `mode-switch('select')` 和场景卡片,避免继续保持 practicing 导致卡片不可点。
 

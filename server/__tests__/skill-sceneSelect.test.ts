@@ -194,7 +194,13 @@ describe('sceneSelect skill', () => {
     const events = await collect(
       makeCtx(provider, {
         type: 'select-scene',
-        payload: { sceneId: 'restaurant-ordering' },
+        payload: {
+          sceneId: 'restaurant-ordering',
+          title: '餐厅点餐',
+          description: '在餐厅点餐和结账',
+          knowledgePoint: '礼貌请求',
+          difficulty: 'B1',
+        },
       })
     );
 
@@ -228,9 +234,8 @@ describe('sceneSelect skill', () => {
     // scene_history 已记录
     const history = listSceneHistory(db, userId);
     expect(history).toContain('restaurant ordering');
-    expect(getConversation(db, conversationId, userId)?.title).toBe(
-      'Restaurant Ordering'
-    );
+    expect(dialogue!.title).toBe('餐厅点餐');
+    expect(getConversation(db, conversationId, userId)?.title).toBe('餐厅点餐');
   });
 
   it('propose 失败 → widget error + mode-switch(chat) + yield error', async () => {

@@ -67,7 +67,16 @@ import { getGradingByAttempt } from '../services/gradingResult.js';
 const chatActionSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('select-scene'),
-    payload: z.object({ sceneId: z.string().min(1).max(64) }),
+    payload: z.object({
+      sceneId: z.string().min(1).max(64),
+      title: z.string().min(1).max(80).optional(),
+      description: z.string().min(1).max(200).optional(),
+      knowledgePoint: z.string().min(1).max(120).optional(),
+      difficulty: z
+        .enum(['A1', 'A2', 'B1', 'B2', 'C1', 'C2'])
+        .optional(),
+      topic: z.string().min(1).max(120).optional(),
+    }),
   }),
   z.object({ type: z.literal('request-new-scenes') }),
   z.object({

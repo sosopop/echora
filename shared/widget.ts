@@ -51,7 +51,7 @@ export const SceneCardSchema = z.object({
   title: z.string(),
   description: z.string(),
   knowledgePoint: z.string(),
-  difficulty: z.enum(['easy', 'medium', 'hard']),
+  difficulty: z.enum(['A1', 'A2', 'B1', 'B2', 'C1', 'C2']),
 });
 
 export const SceneCardsWidgetSchema = z.object({

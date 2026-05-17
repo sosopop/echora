@@ -68,7 +68,13 @@ describe('SceneCards widget', () => {
     fireEvent.click(screen.getByText('咖啡店'));
     expect(sendAction).toHaveBeenCalledWith({
       type: 'select-scene',
-      payload: { sceneId: 'cafe' },
+      payload: {
+        sceneId: 'cafe',
+        title: '咖啡店',
+        description: '点单',
+        difficulty: 'B1',
+        knowledgePoint: undefined,
+      },
     });
   });
 

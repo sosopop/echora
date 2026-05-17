@@ -112,7 +112,17 @@ export interface MessageDTO {
  * 与 ChatSendReq.text 二选一(由 zod refine 保证)。
  */
 export type ChatAction =
-  | { type: 'select-scene'; payload: { sceneId: string } }
+  | {
+      type: 'select-scene';
+      payload: {
+        sceneId: string;
+        title?: string;
+        description?: string;
+        knowledgePoint?: string;
+        difficulty?: CefrLevel;
+        topic?: string;
+      };
+    }
   | { type: 'request-new-scenes' }
   | { type: 'submit-answer'; payload: { attemptId: number; answer: string } }
   | { type: 'skip-question'; payload: { attemptId: number } }
@@ -122,7 +132,7 @@ export function describeChatAction(action: ChatAction | undefined): string {
   if (!action) return '执行操作';
   switch (action.type) {
     case 'select-scene':
-      return `选择场景:${action.payload.sceneId}`;
+      return `选择场景:${action.payload.title ?? action.payload.sceneId}`;
     case 'request-new-scenes':
       return '换一批场景';
     case 'submit-answer':

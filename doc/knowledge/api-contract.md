@@ -58,7 +58,17 @@ POST `/api/chat/send` body(003 起 text 与 action 二选一):
 }
 
 type ChatAction =
-  | { type: 'select-scene'; payload: { sceneId } }
+  | {
+      type: 'select-scene';
+      payload: {
+        sceneId;
+        title?;
+        description?;
+        knowledgePoint?;
+        difficulty?;
+        topic?;
+      };
+    }
   | { type: 'request-new-scenes' }
   | { type: 'submit-answer'; payload: { attemptId, answer } }
   | { type: 'skip-question'; payload: { attemptId } }
@@ -66,6 +76,8 @@ type ChatAction =
 ```
 
 `action` 与 `text` 二选一,zod refine 校验。前端 widget 交互(点击场景卡片、提交答案、下一题等)统一走 `action` 路径。007 起 action 不再交给 AI Router,而是由后端确定性映射到 Skill:`request-new-scenes` / `select-scene` → `scene-select`,`submit-answer` → `grade`,`next-question` / `skip-question` → `practice`;随后仍校验目标 Skill 是否允许当前 `learningState`。
+
+038 起,`select-scene.payload` 兼容两种形态:旧客户端只传 `{ sceneId }`,后端用 sceneId 推导最小场景;新客户端会随场景卡片传 `title/description/knowledgePoint/difficulty/topic`,后端优先使用这些元数据生成 `scene_dialogue` 并更新 `conversations.title`。
 
 008 起,`practicing` 态下的自由文本会先检查当前会话最新 attempt:若最新题仍是 `pending/submitted`,或已 `graded` 但结果错误且 `retry_count < 2`,后端会把非控制指令文本规范化为 `submit-answer` action 并走 `grade`。010 起 answer 绑定只看当前活跃 `scene_dialogue.sceneId` 下的 latest attempt,避免换场景后误提交旧场景题目。`出题` / `开始练习` / `继续` / `下一题` / `go` / `next` 等继续指令在 `practicing` 中确定性映射为 `next-question`,`awaiting_next` / `scene_selecting` / `reviewing` 中映射为 `request-new-scenes`;012 起 `换场景` / `换一批` / `重新生成场景` 在 `practicing` 中也确定性映射为 `request-new-scenes`,避免绕回 AI Router 或被误判为答案。015 起,`awaiting_next` / `reviewing` 下的 `复盘` / `总结` / `学习报告` / `review` 会直接形成 `RouterDecision { skillName: 'review' }`,不新增 ChatAction。
 

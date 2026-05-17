@@ -5,12 +5,9 @@
  *   分支 1 · action='select-scene' → 用户选定候选 → LLM 生成完整 dialogue → 落库 → state-transition('practicing')
  *   分支 2 · 默认 或 action='request-new-scenes' → LLM 出候选池 → 系统筛 3-5 → widget scene-cards
  *
- * 候选池存内存:在分支 2 时把 candidates 落到 widget.data.cards,前端把 sceneId 回传时
- * 后端在分支 1 重新查不到——所以分支 1 必须自带候选信息。**协议**:select-scene 的
- * payload 只传 sceneId,后端用该 id 现重新调一次 propose 拿候选并选定对应一项(简化:
- * 重生成 + 选 id 命中)。MVP 简化:select-scene 直接构造一个轻量 scene 对象(title=sceneId
- * 转空格 + 首字母大写,description="用户选择的场景",difficulty 用 profile.level),让
- * LLM dialogue 生成时基于 sceneId 推断场景细节。
+ * 候选池存内存:在分支 2 时把 candidates 落到 widget.data.cards,前端点击时
+ * 通过 select-scene payload 回传 sceneId + 标题/描述/知识点/难度。旧客户端只传 sceneId
+ * 时仍用 sceneId 构造最小 SceneCandidate 兼容。
  *
  * 这避免了「候选池存哪」的状态问题。
  */
@@ -56,10 +53,14 @@ export const sceneSelectSkill: Skill = {
       const sceneId = action.payload.sceneId;
       yield {
         type: 'text-chunk',
-        payload: { text: `好的,正在准备「${sceneId}」场景对话...` },
+        payload: {
+          text: `好的,正在准备「${action.payload.title ?? sceneId}」场景对话...`,
+        },
       };
-      // 由 sceneId 构造最小 SceneCandidate(由 LLM 在 prompt 中扩展场景细节)
-      const scene = sceneIdToCandidate(sceneId, profile.level ?? 'B1');
+      const scene = actionPayloadToCandidate(
+        action.payload,
+        profile.level ?? 'B1'
+      );
       try {
         const dialogue = await runDialogueGeneration(
           ctx.provider,
@@ -206,9 +207,26 @@ export const sceneSelectSkill: Skill = {
 };
 
 /**
- * sceneId → 最小 SceneCandidate,用于 LLM dialogue 生成时的 prompt 起点。
- * LLM 会基于 sceneId 自行扩展场景细节(title/description 是 prompt 引导,不强约束)。
+ * select-scene payload → SceneCandidate。新客户端传完整卡片元数据;
+ * 旧客户端只传 sceneId 时用 sceneId 构造兼容候选。
  */
+function actionPayloadToCandidate(
+  payload: Extract<ChatAction, { type: 'select-scene' }>['payload'],
+  level: CefrLevel
+): SceneCandidate {
+  if (payload.title) {
+    return {
+      id: payload.sceneId,
+      topic: payload.topic ?? payload.sceneId.replace(/-/g, ' '),
+      title: payload.title,
+      description: payload.description ?? `用户选择的场景:${payload.title}`,
+      knowledgePoint: payload.knowledgePoint ?? '场景对话练习',
+      difficulty: payload.difficulty ?? level,
+    };
+  }
+  return sceneIdToCandidate(payload.sceneId, level);
+}
+
 function sceneIdToCandidate(sceneId: string, level: CefrLevel): SceneCandidate {
   const titleGuess = sceneId
     .split('-')

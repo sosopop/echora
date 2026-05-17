@@ -3,7 +3,7 @@
  *
  * PRD §4.7;原型 doc/design/widgets/scene-cards.html
  * 数据来源:scene-select skill widget-ready 落到 data.cards
- * 交互:卡片 click → chat.sendAction({ type: 'select-scene', payload: { sceneId } })
+ * 交互:卡片 click → chat.sendAction({ type: 'select-scene', payload: { sceneId, ...card } })
  *      底部「换一批」→ sendAction({ type: 'request-new-scenes' })
  */
 
@@ -81,7 +81,13 @@ export default function SceneCards({
             onClick={() =>
               void sendAction({
                 type: 'select-scene',
-                payload: { sceneId: c.id },
+                payload: {
+                  sceneId: c.id,
+                  title: c.title,
+                  description: c.description,
+                  knowledgePoint: c.knowledgePoint,
+                  difficulty: c.difficulty,
+                },
               })
             }
             type="button"
