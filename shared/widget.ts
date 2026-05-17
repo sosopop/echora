@@ -68,6 +68,9 @@ export const SceneCardsWidgetSchema = z.object({
  * ========================================================== */
 export const QuestionTypeSchema = z.enum([
   'fill_word',
+  'sentence_translation',
+  'dialogue_chain',
+  'role_reversal',
   'fill_phrase',
   'half_translate',
   'full_translate',

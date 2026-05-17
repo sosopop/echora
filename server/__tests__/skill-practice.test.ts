@@ -6,7 +6,9 @@
  *   - 阶段 1 已通过 2 题 → 进阶段 2(mode-switch chat)
  *   - 未通过/重复题不把 question_no 推到模板之外
  *   - 新场景不继承旧场景已通过进度
- *   - 阶段 2 已通过 2 题 → state-transition('awaiting_next')
+ *   - 阶段 2 已通过 2 题 → 进阶段 3(dialogue_chain)
+ *   - 阶段 3 已通过 2 题 → 进阶段 4(role_reversal)
+ *   - 阶段 4 已通过 2 题 → state-transition('awaiting_next')
  *   - dialogue.turns 不足 → error NO_QUESTION_TEMPLATE
  */
 
@@ -93,6 +95,25 @@ function seedDialogue(turnCount: number): void {
     roles: ['Customer', 'Waiter'],
     turns,
   });
+}
+
+function seedPassed(stage: number, questionCount = 2): void {
+  for (let q = 1; q <= questionCount; q++) {
+    const a = createAttempt(db, {
+      conversationId,
+      sceneId: 'test-scene',
+      stage,
+      questionNo: q,
+      questionType: 'x',
+      prompt: 'x',
+    });
+    createGrading(db, {
+      attemptId: a.id,
+      score: 100,
+      isCorrect: true,
+      corrections: {},
+    });
+  }
 }
 
 describe('practice skill', () => {
@@ -188,24 +209,7 @@ describe('practice skill', () => {
 
   it('新场景不继承旧场景已通过进度', async () => {
     seedDialogue(4);
-    for (let stage = 1; stage <= 2; stage++) {
-      for (let q = 1; q <= 2; q++) {
-        const a = createAttempt(db, {
-          conversationId,
-          sceneId: 'test-scene',
-          stage,
-          questionNo: q,
-          questionType: 'x',
-          prompt: 'x',
-        });
-        createGrading(db, {
-          attemptId: a.id,
-          score: 100,
-          isCorrect: true,
-          corrections: {},
-        });
-      }
-    }
+    for (let stage = 1; stage <= 4; stage++) seedPassed(stage);
     createSceneDialogue(db, {
       userId,
       conversationId,
@@ -232,18 +236,41 @@ describe('practice skill', () => {
     expect(ready.payload.patch.data.questionNo).toBe(1);
   });
 
-  it('阶段 2 已通过 2 题 → state-transition awaiting_next', async () => {
+  it('阶段 2 已通过 2 题 → 进阶段 3 对话接龙', async () => {
     seedDialogue(8);
-    // 阶段 1 + 2 各 2 题全对
-    for (let stage = 1; stage <= 2; stage++) {
-      for (let q = 1; q <= 2; q++) {
-        const a = createAttempt(db, {
-          conversationId, sceneId: 'test-scene',
-          stage, questionNo: q, questionType: 'x', prompt: 'x',
-        });
-        createGrading(db, { attemptId: a.id, score: 100, isCorrect: true, corrections: {} });
-      }
-    }
+    seedPassed(1);
+    seedPassed(2);
+    const events = await collect();
+    const mode = events.find((e) => e.type === 'mode-switch') as {
+      payload: { mode: string };
+    };
+    expect(mode.payload.mode).toBe('chat');
+    const ready = events.find((e) => e.type === 'widget-ready') as {
+      payload: { patch: { data: { stage: number; questionType: string } } };
+    };
+    expect(ready.payload.patch.data.stage).toBe(3);
+    expect(ready.payload.patch.data.questionType).toBe('dialogue_chain');
+    expect(events.find((e) => e.type === 'state-transition' && (
+      e as { payload: { nextLearningState?: string } }
+    ).payload.nextLearningState === 'awaiting_next')).toBeUndefined();
+  });
+
+  it('阶段 3 已通过 2 题 → 进阶段 4 角色互换', async () => {
+    seedDialogue(8);
+    seedPassed(1);
+    seedPassed(2);
+    seedPassed(3);
+    const events = await collect();
+    const ready = events.find((e) => e.type === 'widget-ready') as {
+      payload: { patch: { data: { stage: number; questionType: string } } };
+    };
+    expect(ready.payload.patch.data.stage).toBe(4);
+    expect(ready.payload.patch.data.questionType).toBe('role_reversal');
+  });
+
+  it('阶段 4 已通过 2 题 → state-transition awaiting_next', async () => {
+    seedDialogue(8);
+    for (let stage = 1; stage <= 4; stage++) seedPassed(stage);
     const events = await collect();
     expect(events.find((e) => e.type === 'widget-init')).toBeUndefined();
     const transition = events.find((e) => e.type === 'state-transition') as {

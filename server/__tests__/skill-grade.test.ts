@@ -6,7 +6,9 @@
  *   - 正确答案(LLM 返 score=90)→ grading_results 落库 + 阶段未完保持 practicing
  *   - 错误答案 → retry_count=1,保持 practicing,无 transition
  *   - retry_count=2 后再错 → markNeedsReview
- *   - 阶段 2 最后一题正确 → state-transition('awaiting_next')
+ *   - 阶段 2 最后一题正确 → 保持 practicing,等待阶段 3
+ *   - 阶段 4 最后一题正确 → state-transition('awaiting_next')
+ *   - 阶段 4 答错 → retry_count=1,保持 practicing
  *   - 已 needs_review 的 attempt 再 submit → error ATTEMPT_LOCKED
  */
 
@@ -172,7 +174,7 @@ describe('grade skill', () => {
     expect(getAttempt(db, attemptId)?.retryCount).toBe(1);
   });
 
-  it('阶段 2 最后一题正确 → state-transition awaiting_next', async () => {
+  it('阶段 2 最后一题正确 → 不结束整场', async () => {
     // 阶段 1 已 2 题全过(在 DB seed 中)
     for (let q = 1; q <= 2; q++) {
       const a = createAttempt(db, {
@@ -201,11 +203,91 @@ describe('grade skill', () => {
         type: 'submit-answer', payload: { attemptId: s2q2.id, answer: 'Hello.' },
       })
     );
+    expect(events.find((e) => e.type === 'state-transition')).toBeUndefined();
+    expect(
+      events.find(
+        (e) =>
+          e.type === 'text-chunk' &&
+          (e as { payload: { text: string } }).payload.text.includes(
+            '阶段 2 完成'
+          )
+      )
+    ).toBeDefined();
+  });
+
+  it('阶段 4 最后一题正确 → state-transition awaiting_next', async () => {
+    for (let stage = 1; stage <= 4; stage++) {
+      const maxQ = stage === 4 ? 1 : 2;
+      for (let q = 1; q <= maxQ; q++) {
+        const a = createAttempt(db, {
+          conversationId,
+          sceneId: 'test',
+          stage,
+          questionNo: q,
+          questionType: 'x',
+          prompt: 'x',
+        });
+        createGrading(db, {
+          attemptId: a.id,
+          score: 100,
+          isCorrect: true,
+          corrections: {},
+        });
+      }
+    }
+    const s4q2 = createAttempt(db, {
+      conversationId,
+      sceneId: 'test',
+      stage: 4,
+      questionNo: 2,
+      questionType: 'role_reversal',
+      prompt: 'x',
+    });
+    const provider = makeProvider({
+      score: 100, is_correct: true, reference_answer: 'Hello.',
+      explanation: '完美', tags: [],
+    });
+    const events = await collect(
+      makeCtx(provider, {
+        type: 'submit-answer', payload: { attemptId: s4q2.id, answer: 'Hello.' },
+      })
+    );
     const transition = events.find((e) => e.type === 'state-transition') as {
       payload: { nextLearningState: string };
     };
     expect(transition).toBeDefined();
     expect(transition.payload.nextLearningState).toBe('awaiting_next');
+    expect(
+      events.find(
+        (e) =>
+          e.type === 'text-chunk' &&
+          (e as { payload: { text: string } }).payload.text.includes(
+            '可能会回应'
+          )
+      )
+    ).toBeDefined();
+  });
+
+  it('阶段 4 答错 → retry_count=1, 保持 practicing', async () => {
+    const attemptId = createAttempt(db, {
+      conversationId,
+      sceneId: 'test',
+      stage: 4,
+      questionNo: 1,
+      questionType: 'role_reversal',
+      prompt: 'x',
+    }).id;
+    const provider = makeProvider({
+      score: 30, is_correct: false, reference_answer: 'Hi',
+      explanation: '不对', tags: ['word_order'],
+    });
+    const events = await collect(
+      makeCtx(provider, {
+        type: 'submit-answer', payload: { attemptId, answer: 'wrong' },
+      })
+    );
+    expect(events.find((e) => e.type === 'state-transition')).toBeUndefined();
+    expect(getAttempt(db, attemptId)?.retryCount).toBe(1);
   });
 
   it('阶段完成统计只计算当前 sceneId', async () => {

@@ -23,6 +23,19 @@ onboarding
                            └─ archived
 ```
 
+练习主线(013):
+
+```
+practicing
+  → 阶段 1 fill_word(2 题通过)
+  → 阶段 2 sentence_translation(2 题通过)
+  → 阶段 3 dialogue_chain(2 题通过)
+  → 阶段 4 role_reversal(2 题通过)
+  → awaiting_next
+```
+
+阶段内答错保持 `practicing`;同题第 2 次未通过会标记 `needs_review`,后续通过 `next-question` 继续推进。
+
 ## 约束与失败点
 
 - **`practicing` / `grading` 期间锁定**:历史会话答案/参考/批改详情默认隐藏(防抄袭),由 conversations.lock_policy 控制

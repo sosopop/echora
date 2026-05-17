@@ -1,24 +1,24 @@
 /**
- * practice skill 4 阶段推进辅助(MVP 仅阶段 1+2)
+ * practice skill 4 阶段推进辅助
  *
  * 阶段定义(PRD §2.6):
  *   1. 填空(fill_word):从 dialogue.turns 选一句 en,挖关键词
  *   2. 整句翻译(sentence_translation):给中文 zh,要求用户写完整英文
- *   3. 对话接龙(留 004)
- *   4. 角色互换(留 004)
+ *   3. 对话接龙(dialogue_chain):给上一句英文,要求用户接下一句
+ *   4. 角色互换(role_reversal):用户扮演指定角色主动说一句
  *
- * 每阶段 MVP 出 2 题,通过 countStagePassed 推进。
+ * 每阶段出 2 题,通过 countStagePassed 推进。
  */
 
 import type { Db } from '../../db/connect.js';
 import type { SceneDialogueDTO } from '../../../shared/api.js';
 import { countStagePassed } from '../../services/exerciseAttempt.js';
 
-export const STAGE_GOAL = 2; // MVP 每阶段 2 题
-export const MAX_STAGE_MVP = 2; // MVP 仅做阶段 1+2
+export const STAGE_GOAL = 2; // 每阶段 2 题,整场 8 题
+export const MAX_STAGE_MVP = 4;
 
 export interface NextQuestion {
-  /** 下一题阶段;若返 > MAX_STAGE_MVP 表示本场景 MVP 已完成 */
+  /** 下一题阶段;若返 > MAX_STAGE_MVP 表示本场景已完成 */
   stage: number;
   /** 该阶段下一题号(从 1 开始) */
   questionNo: number;
@@ -50,7 +50,11 @@ export function decideNextQuestion(
  * ========================================================== */
 
 export interface BuiltQuestion {
-  questionType: 'fill_word' | 'sentence_translation';
+  questionType:
+    | 'fill_word'
+    | 'sentence_translation'
+    | 'dialogue_chain'
+    | 'role_reversal';
   prompt: string;
   /** 渲染 widget 用的额外字段 */
   display: {
@@ -61,6 +65,12 @@ export interface BuiltQuestion {
   };
   /** 参考答案(grade 时用) */
   referenceAnswer: string;
+  /** 阶段 4 答对后可展示的对方回应 */
+  followUpResponse?: {
+    role: string;
+    en: string;
+    zh: string;
+  };
 }
 
 /**
@@ -115,19 +125,104 @@ function buildSentenceTranslation(turn: { en: string; zh: string }): BuiltQuesti
 }
 
 /**
+ * 阶段 3 · 对话接龙:展示上一句英文,用户写出下一句英文回复。
+ */
+function buildDialogueChain(
+  previous: { role: string; en: string; zh: string },
+  target: { role: string; en: string; zh: string }
+): BuiltQuestion {
+  return {
+    questionType: 'dialogue_chain',
+    prompt:
+      `Continue the dialogue after "${previous.role}: ${previous.en}". ` +
+      `Target meaning: "${target.zh}"`,
+    display: {
+      contextZh: `请接住这句对话,用英文回复。目标意思:${target.zh}`,
+      contextEn: `${previous.role}: ${previous.en}`,
+      hint: `你正在回应 ${previous.role},当前角色:${target.role}`,
+      inputMode: 'chat',
+    },
+    referenceAnswer: target.en,
+  };
+}
+
+/**
+ * 阶段 4 · 角色互换:用户扮演目标角色主动开口,答对后可展示下一句回应。
+ */
+function buildRoleReversal(
+  target: { role: string; en: string; zh: string },
+  response?: { role: string; en: string; zh: string }
+): BuiltQuestion {
+  return {
+    questionType: 'role_reversal',
+    prompt: `Role reversal: play ${target.role}. Say this in English: "${target.zh}"`,
+    display: {
+      contextZh: `角色互换:你现在扮演 ${target.role},请主动说出这句话:${target.zh}`,
+      contextEn: `Your role: ${target.role}`,
+      hint: '先主动开口,不用等对方提问。',
+      inputMode: 'chat',
+    },
+    referenceAnswer: target.en,
+    followUpResponse: response,
+  };
+}
+
+function lastAdjacentPair(
+  turns: SceneDialogueDTO['turns']
+): [{ role: string; en: string; zh: string }, { role: string; en: string; zh: string }] | null {
+  if (turns.length < 2) return null;
+  return [turns[turns.length - 2], turns[turns.length - 1]];
+}
+
+function dialogueChainPair(
+  turns: SceneDialogueDTO['turns'],
+  questionNo: number
+): [{ role: string; en: string; zh: string }, { role: string; en: string; zh: string }] | null {
+  if (turns.length < 2) return null;
+  const targetIdx = 2 * STAGE_GOAL + (questionNo - 1);
+  if (targetIdx < turns.length) {
+    return [turns[Math.max(0, targetIdx - 1)], turns[targetIdx]];
+  }
+  return lastAdjacentPair(turns);
+}
+
+function roleReversalTarget(
+  turns: SceneDialogueDTO['turns'],
+  questionNo: number
+): [{ role: string; en: string; zh: string }, { role: string; en: string; zh: string } | undefined] | null {
+  if (turns.length === 0) return null;
+  if (turns.length === 1) return [turns[0], undefined];
+  const targetIdx = Math.min(questionNo - 1, turns.length - 2);
+  return [turns[targetIdx], turns[targetIdx + 1]];
+}
+
+/**
  * 从 dialogue.turns 选第 questionNo 个可用 turn(简化:按顺序取,跳过过短的)。
- * MVP:阶段 1 从 turns[0+offset], 阶段 2 从 turns[2+offset] 起拿,避免同 turn 两次问
+ * 阶段 1 从 turns[0+offset],阶段 2 从 turns[2+offset] 起拿,避免同 turn 两次问。
+ * 阶段 3/4 在短对话中允许复用相邻 turn,减少后半场断流。
  */
 export function buildQuestionFromTurn(
   dialogue: SceneDialogueDTO,
   stage: number,
   questionNo: number
 ): BuiltQuestion | null {
-  // 阶段 1 用前 STAGE_GOAL 句,阶段 2 用后 STAGE_GOAL 句
-  const baseIdx = stage === 1 ? 0 : STAGE_GOAL;
-  const turnIdx = baseIdx + (questionNo - 1);
-  if (turnIdx >= dialogue.turns.length) return null;
-  const turn = dialogue.turns[turnIdx];
-  if (stage === 1) return buildFillBlank(turn);
-  return buildSentenceTranslation(turn);
+  if (stage === 1 || stage === 2) {
+    const baseIdx = stage === 1 ? 0 : STAGE_GOAL;
+    const turnIdx = baseIdx + (questionNo - 1);
+    if (turnIdx >= dialogue.turns.length) return null;
+    const turn = dialogue.turns[turnIdx];
+    return stage === 1 ? buildFillBlank(turn) : buildSentenceTranslation(turn);
+  }
+
+  if (stage === 3) {
+    const pair = dialogueChainPair(dialogue.turns, questionNo);
+    return pair ? buildDialogueChain(pair[0], pair[1]) : null;
+  }
+
+  if (stage === 4) {
+    const target = roleReversalTarget(dialogue.turns, questionNo);
+    return target ? buildRoleReversal(target[0], target[1]) : null;
+  }
+
+  return null;
 }

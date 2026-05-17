@@ -1,10 +1,10 @@
 /**
- * practice skill 真实实现(MVP 阶段 1+2)
+ * practice skill 真实实现(阶段 1-4)
  *
  * 流程:
  *   1. 读 active scene_dialogue(无 → error)
  *   2. decideNextQuestion → 当前 stage / question_no
- *   3. 若 stage > MAX_STAGE_MVP → 整场 MVP 已通 → state-transition('awaiting_next')
+ *   3. 若 stage > MAX_STAGE_MVP → 整场已通 → state-transition('awaiting_next')
  *   4. 出题:buildQuestionFromTurn + createAttempt 落 exercise_attempts
  *   5. yield text-chunk + mode-switch + widget-init(exercise-card) + widget-ready + state-transition('practicing') + done
  *
@@ -26,7 +26,7 @@ import {
 
 export const practiceSkill: Skill = {
   name: SKILL_NAMES.practice,
-  description: '基于 scene_dialogue 按 4 阶段出题(MVP 阶段 1+2)',
+  description: '基于 scene_dialogue 按 4 阶段出题',
   allowedStates: ['scene_selecting', 'practicing', 'awaiting_next'],
   primaryWidget: 'exercise-card',
 
@@ -50,13 +50,12 @@ export const practiceSkill: Skill = {
       dialogue.sceneId
     );
 
-    // 整场已通过 MVP 阶段 → 转 awaiting_next
+    // 整场已通过 4 阶段 → 转 awaiting_next
     if (next.stage > MAX_STAGE_MVP) {
       yield {
         type: 'text-chunk',
         payload: {
-          text:
-            `本场景阶段 1-2 已完成。后续阶段(对话接龙、角色互换)在下一版本开放。`,
+          text: '本场景 4 个阶段已完成。可以换场景,也可以进入复盘。',
         },
       };
       yield {

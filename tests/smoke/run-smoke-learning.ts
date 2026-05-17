@@ -2,7 +2,7 @@
  * smoke:learning — 学习闭环 E2E 烟雾测试(确定性 ScriptedProvider)
  *
  * 覆盖 PRD §5.1 + §5.2 验收点。10 场景:
- *   A · 完整闭环(register → onboarding → scene-select → 阶段 1*2 → 阶段 2*2 → awaiting_next)
+ *   A · 完整闭环(register → onboarding → scene-select → 阶段 1*2 → 阶段 2*2 → 阶段 3*2 → 阶段 4*2 → awaiting_next)
  *   B · 换一批 → 候选过滤已用
  *   C · scene_history 累计 10 → 第 11 次 prune
  *   D · 答错 → retry_count=1 保持 practicing
@@ -280,7 +280,7 @@ function scenario(id: string, title: string, run: () => Promise<void>): void {
 }
 
 /* ------- A · 完整闭环 ------- */
-scenario('A', '完整闭环(scene → 阶段 1*2 → 阶段 2*2 → awaiting_next)', async () => {
+scenario('A', '完整闭环(scene → 阶段 1-4 各 2 题 → awaiting_next)', async () => {
   const provider = buildLearningProvider();
   const app = await startTestApp({ provider });
   try {
@@ -308,9 +308,9 @@ scenario('A', '完整闭环(scene → 阶段 1*2 → 阶段 2*2 → awaiting_nex
     assertEq(t1.length, 1, 'select-scene transition');
     assertEq((t1[0] as { payload: { nextLearningState: string } }).payload.nextLearningState, 'practicing', 'to practicing');
 
-    // 3-6. 阶段 1 两题 + 阶段 2 两题(各发 practice/grade 循环)
+    // 3-10. 阶段 1-4 各两题(各发 practice/grade 循环)
     let lastTransition: string | null = null;
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 8; i++) {
       // 触发 practice:发空内容不行,发"出题"文本
       s = await httpJson<{ data: { streamId: string } }>(
         app.baseUrl, 'POST', '/api/chat/send',
@@ -342,7 +342,7 @@ scenario('A', '完整闭环(scene → 阶段 1*2 → 阶段 2*2 → awaiting_nex
         lastTransition = (tr[0] as { payload: { nextLearningState: string } }).payload.nextLearningState;
       }
     }
-    assertEq(lastTransition, 'awaiting_next', '完成 2 阶段 后转 awaiting_next');
+    assertEq(lastTransition, 'awaiting_next', '完成 4 阶段后转 awaiting_next');
   } finally {
     await app.cleanup();
   }

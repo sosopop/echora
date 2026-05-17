@@ -67,13 +67,14 @@
 - 失败恢复(005):`runScenePropose` 失败时,handler 会把已初始化的 `scene-cards` widget patch 为 `status='error'`,写入空 `cards` 与可读 `message`,随后 `mode-switch('chat')` 再发 `error` 终止。前端遇到历史 loading/空候选 widget 时也允许点击"重新生成场景"或直接输入主题,避免 `select` 输入模式永久卡住。
 - 012 起,用户在 `practicing` 中输入 `换场景` / `换一批` / `重新生成场景` 会确定性路由到 `scene-select`;handler 先发 `state-transition('scene_selecting','scene-select')`,再输出 `mode-switch('select')` 和场景卡片,避免继续保持 practicing 导致卡片不可点。
 
-## practice Skill(003 已真实接入,MVP 阶段 1+2)
+## practice Skill(003 已真实接入,013 补齐阶段 1-4)
 
 - 入口:`server/skills/practice.ts` + `server/skills/_helpers/practiceFsm.ts`
-- 流程:`getActiveSceneDialogue` → `decideNextQuestion`(基于 `countStagePassed` 推进)→ `buildQuestionFromTurn`(阶段 1 挖词填空 / 阶段 2 中→英翻译)→ `createAttempt` → widget exercise-card + mode-switch
-- 阶段推进:每阶段 `STAGE_GOAL=2` 题,MVP `MAX_STAGE_MVP=2`;`stage > MAX` 时 yield state-transition('awaiting_next')
+- 流程:`getActiveSceneDialogue` → `decideNextQuestion`(基于 `countStagePassed` 推进)→ `buildQuestionFromTurn`(阶段 1 挖词填空 / 阶段 2 中→英翻译 / 阶段 3 对话接龙 / 阶段 4 角色互换)→ `createAttempt` → widget exercise-card + mode-switch
+- 阶段推进:每阶段 `STAGE_GOAL=2` 题,`MAX_STAGE_MVP=4`;`stage > MAX` 时 yield state-transition('awaiting_next')
 - 009 修正:阶段内下一题号按"当前阶段已通过数量 + 1"计算,不再按最大 `question_no + 1`;避免旧的未答/错题/重复点击记录把阶段 2 推到第 6/7 题后找不到模板。
 - 010 修正:阶段通过数按当前活跃 `scene_dialogue.sceneId` 统计,换新场景后不会继承旧场景的通过进度;`findLatestAttempt` 也支持按 sceneId 限定,避免新场景答案误绑定旧题。
+- 013 扩展:阶段 3 `dialogue_chain` 展示上一句英文与目标中文意思,用户用英文接下一句;阶段 4 `role_reversal` 让用户扮演目标角色主动开口,答对后可追加展示下一句对方回应。阶段 3/4 在短对话中允许复用最后一组相邻 turn,减少后半场断流。
 - **不调 LLM**:题目从结构化 `scene_dialogue.turns` 模板抽取,确定性。LLM 只在 scene 生成(sceneSelect)与批改(grade)用
 
 ## grade Skill(003 已真实接入)
@@ -83,7 +84,7 @@
 - 008/010 兜底:若用户在 `practicing` 态直接输入非控制指令文本,chat route 会把当前活跃场景下最新可作答 attempt 自动包装成 `submit-answer` 并进入 grade;前端 chat/fill 输入同样优先提交最新可作答 exercise-card,但 `出题` / `下一题` / `go` 等控制指令会确定性进入 practice,避免阶段 2 chat 模式答案被当作 general chat。
 - 008 批改 prompt 会从当前 `scene_dialogue` + attempt stage/questionNo 重新推导参考答案,并要求模型优先按参考答案批改,减少错题反馈漂移。
 - retry:错答 `incrementRetry`,达 2 次 `markNeedsReview`(MVP 不出降难替换题,留 004)
-- 阶段判断:本题对答且 `countStagePassed >= STAGE_GOAL` 且 `stage >= MAX_STAGE_MVP` → state-transition('awaiting_next')
+- 阶段判断:本题答对且 `countStagePassed >= STAGE_GOAL` 且 `stage >= MAX_STAGE_MVP(4)` → state-transition('awaiting_next');阶段 4 答对时如存在下一句对方回应,会在批改后追加自然文本展示。
 
 ## AI Router 校验链
 
@@ -111,11 +112,11 @@ provider.route()
 - AI Router 校验链测试:`server/__tests__/ai-router.test.ts`(5 测试,正常路径 + 3 失败路径 + 任意 state)
 - onboarding skill 单测:`server/__tests__/skill-onboarding.test.ts`(5 测试)
 - scene-select 单测:`server/__tests__/skill-sceneSelect.test.ts`(6 测试)
-- practice 单测:`server/__tests__/skill-practice.test.ts`(5 测试)
-- grade 单测:`server/__tests__/skill-grade.test.ts`(6 测试)
+- practice 单测:`server/__tests__/skill-practice.test.ts`(8 测试)
+- grade 单测:`server/__tests__/skill-grade.test.ts`(9 测试)
 - learning services 单测:`server/__tests__/learning-services.test.ts`(12 测试)
 - onboarding 端到端:`npm run test:smoke:onboarding`(10 场景)
-- 学习闭环端到端:`npm run test:smoke:learning`(10 场景,覆盖 PRD §5.1+§5.2 验收 8/11 条)
+- 学习闭环端到端:`npm run test:smoke:learning`(10 场景,覆盖 4 阶段完整闭环、错题重试、状态拒绝与 provider 错误路径)
 - 真实 Provider 接入:`npm run test:smoke:ai`(需双 key)
 
 ## Pending

@@ -21,6 +21,21 @@ interface ExerciseCardData {
   inputMode?: 'fill' | 'chat';
 }
 
+function labelForQuestionType(questionType: string): string {
+  switch (questionType) {
+    case 'fill_word':
+      return '单词填空';
+    case 'sentence_translation':
+      return '整句翻译';
+    case 'dialogue_chain':
+      return '对话接龙';
+    case 'role_reversal':
+      return '角色互换';
+    default:
+      return '练习题';
+  }
+}
+
 export default function ExerciseCard({
   widget,
 }: {
@@ -38,7 +53,7 @@ export default function ExerciseCard({
   ) {
     return null;
   }
-  const isFill = data.questionType === 'fill_word';
+  const questionLabel = labelForQuestionType(data.questionType);
   return (
     <div className={styles.exerciseCard}>
       <div className={styles.exerciseHead}>
@@ -46,7 +61,7 @@ export default function ExerciseCard({
           阶段 {data.stage ?? '?'}
         </span>
         <span>第 {data.questionNo ?? '?'} 题</span>
-        <span>· {isFill ? '单词填空' : '整句翻译'}</span>
+        <span>· {questionLabel}</span>
       </div>
       {data.contextZh && (
         <div className={styles.exerciseContextZh}>{data.contextZh}</div>

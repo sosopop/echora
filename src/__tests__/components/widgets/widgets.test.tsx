@@ -177,6 +177,50 @@ describe('ExerciseCard widget', () => {
     expect(screen.getByText(/整句翻译/)).toBeInTheDocument();
     expect(screen.getByText('请把这句话翻译成英文。')).toBeInTheDocument();
   });
+
+  it('对话接龙显示上一句英文和题型标签', () => {
+    const widget: LearningWidgetInstance = {
+      id: 'e3',
+      type: 'exercise-card',
+      status: 'ready',
+      data: {
+        attemptId: 44,
+        stage: 3,
+        questionNo: 1,
+        questionType: 'dialogue_chain',
+        contextZh: '请接住这句对话,用英文回复。目标意思:一杯咖啡谢谢。',
+        contextEn: 'Server: Welcome.',
+        hint: '你正在回应 Server,当前角色:Customer',
+        inputMode: 'chat',
+      },
+      version: 1,
+    };
+    render(<ExerciseCard widget={widget} />);
+    expect(screen.getByText(/对话接龙/)).toBeInTheDocument();
+    expect(screen.getByText('Server: Welcome.')).toBeInTheDocument();
+  });
+
+  it('角色互换显示角色提示和题型标签', () => {
+    const widget: LearningWidgetInstance = {
+      id: 'e4',
+      type: 'exercise-card',
+      status: 'ready',
+      data: {
+        attemptId: 45,
+        stage: 4,
+        questionNo: 1,
+        questionType: 'role_reversal',
+        contextZh: '角色互换:你现在扮演 Server,请主动说出这句话:欢迎光临。',
+        contextEn: 'Your role: Server',
+        hint: '先主动开口,不用等对方提问。',
+        inputMode: 'chat',
+      },
+      version: 1,
+    };
+    render(<ExerciseCard widget={widget} />);
+    expect(screen.getAllByText(/角色互换/).length).toBeGreaterThan(0);
+    expect(screen.getByText('Your role: Server')).toBeInTheDocument();
+  });
 });
 
 describe('GradingResult widget', () => {

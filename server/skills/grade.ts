@@ -10,7 +10,7 @@
  *   6. yield text-chunk + widget-init/ready(grading-result)
  *   7. 错答 → incrementRetry,若达 2 次 → markNeedsReview;保持 practicing
  *   8. 对答 → 阶段完成判断:
- *      - 阶段 1+2 全部 STAGE_GOAL 满足 → state-transition('awaiting_next')
+ *      - 阶段 1-4 全部 STAGE_GOAL 满足 → state-transition('awaiting_next')
  *      - 否则保持 practicing,前端发 next-question 拿下一题
  */
 
@@ -29,7 +29,11 @@ import {
 } from '../services/exerciseAttempt.js';
 import { createGrading } from '../services/gradingResult.js';
 import { runGrading } from './_helpers/gradeFsm.js';
-import { STAGE_GOAL, MAX_STAGE_MVP } from './_helpers/practiceFsm.js';
+import {
+  STAGE_GOAL,
+  MAX_STAGE_MVP,
+  buildQuestionFromTurn,
+} from './_helpers/practiceFsm.js';
 
 export const gradeSkill: Skill = {
   name: SKILL_NAMES.grade,
@@ -191,11 +195,28 @@ export const gradeSkill: Skill = {
       attempt.sceneId
     );
     const stageComplete = passedInStage >= STAGE_GOAL;
+    if (attempt.stage === 4) {
+      const followUp = dialogue
+        ? buildQuestionFromTurn(dialogue, attempt.stage, attempt.questionNo)
+            ?.followUpResponse
+        : null;
+      if (followUp) {
+        yield {
+          type: 'text-chunk',
+          payload: {
+            text:
+              `如果继续这段对话,${followUp.role} 可能会回应: ` +
+              `${followUp.en}（${followUp.zh}）`,
+          },
+        };
+      }
+    }
+
     if (stageComplete && attempt.stage >= MAX_STAGE_MVP) {
-      // 整场 MVP 完成
+      // 整场 4 阶段完成
       yield {
         type: 'text-chunk',
-        payload: { text: '🎉 本场景练习完成!' },
+        payload: { text: '本场景 4 个阶段练习完成!' },
       };
       yield {
         type: 'state-transition',
