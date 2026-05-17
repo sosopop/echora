@@ -60,6 +60,7 @@ export interface BuiltQuestion {
   display: {
     contextZh: string;        // 中文上下文(给用户看)
     contextEn?: string;       // 英文上下文(阶段 1 才显示带空白)
+    targetZh?: string;        // 用户需要用英文表达的中文目标句
     hint?: string;            // 提示
     inputMode: 'fill' | 'chat';
   };
@@ -157,9 +158,9 @@ function buildRoleReversal(
     questionType: 'role_reversal',
     prompt: `Role reversal: play ${target.role}. Say this in English: "${target.zh}"`,
     display: {
-      contextZh: `角色互换:你现在扮演 ${target.role},请主动说出这句话:${target.zh}`,
-      contextEn: `Your role: ${target.role}`,
-      hint: '先主动开口,不用等对方提问。',
+      contextZh: `角色互换:你现在扮演 ${target.role},请把下面这句话用英文说出来。`,
+      targetZh: target.zh,
+      hint: `当前角色:${target.role};先主动开口,不用等对方提问。`,
       inputMode: 'chat',
     },
     referenceAnswer: target.en,

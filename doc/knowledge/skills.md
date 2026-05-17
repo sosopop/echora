@@ -74,7 +74,7 @@
 - 阶段推进:每阶段 `STAGE_GOAL=2` 题,`MAX_STAGE_MVP=4`;`stage > MAX` 时 yield state-transition('awaiting_next')
 - 009 修正:阶段内下一题号按"当前阶段已通过数量 + 1"计算,不再按最大 `question_no + 1`;避免旧的未答/错题/重复点击记录把阶段 2 推到第 6/7 题后找不到模板。
 - 010 修正:阶段通过数按当前活跃 `scene_dialogue.sceneId` 统计,换新场景后不会继承旧场景的通过进度;`findLatestAttempt` 也支持按 sceneId 限定,避免新场景答案误绑定旧题。
-- 013 扩展:阶段 3 `dialogue_chain` 展示上一句英文与目标中文意思,用户用英文接下一句;阶段 4 `role_reversal` 让用户扮演目标角色主动开口,答对后可追加展示下一句对方回应。阶段 3/4 在短对话中允许复用最后一组相邻 turn,减少后半场断流。
+- 013 扩展:阶段 3 `dialogue_chain` 展示上一句英文与目标中文意思,用户用英文接下一句;阶段 4 `role_reversal` 让用户扮演目标角色主动开口,答对后可追加展示下一句对方回应。023 起阶段 4 widget data 会单独下发 `targetZh`,前端以"请表达"目标句块突出用户需要用英文说出的中文句,角色只放在说明/提示里。阶段 3/4 在短对话中允许复用最后一组相邻 turn,减少后半场断流。
 - **不调 LLM**:题目从结构化 `scene_dialogue.turns` 模板抽取,确定性。LLM 只在 scene 生成(sceneSelect)与批改(grade)用
 
 ## grade Skill(003 已真实接入)

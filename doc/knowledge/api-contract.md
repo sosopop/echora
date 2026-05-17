@@ -69,6 +69,8 @@ type ChatAction =
 
 021 起,`grading-result` widget 的 `data` 增加 `category?: 'exact' | 'similar' | 'incorrect'`。`score/isCorrect` 为兼容历史与统计仍保留,但前端正式卡片只展示三档文案:"完全正确"(exact,与参考表达完全匹配)、"还不错"(similar,意思相近可通过)、"错误"(incorrect,语法/拼写/意思不一致)。`submit-answer` 批改为 exact/similar 后,同一条 SkillEvent 流会继续输出下一题的 `exercise-card`;调用方不需要再触发 `next-question`。
 
+023 起,`exercise-card` widget 的 `data` 支持 `targetZh?: string`。阶段 4 `role_reversal` 使用该字段突出用户需要表达的中文目标句,例如 `targetZh: "你好！我想买一张票。"`;角色信息继续放在 `contextZh/hint` 中,不再用醒目的 `contextEn` 块展示 `Your role`。
+
 017 起,`review` 同一条 assistant 消息会连续返回 `progress-summary` 与 `answer-review` 两个 widget。`messages.widget_snapshot` 兼容两种形态:历史单 widget object,以及多 widget array。前端 `MessageList` 会按数组顺序渲染多个 `WidgetSlot`;后端 `appendStreamEvent` 也会按 widget id upsert,避免后一个 widget 覆盖前一个 widget。
 
 016 起,`awaiting_next` / `reviewing` / `scene_selecting` / `practicing` 下的 `重练` / `重练错题` / `开始重练` / `retry` 会确定性形成 `RouterDecision { skillName: 'retry' }`;`重练 <tag>` 会把 `<tag>` 写入 `decision.params.targetTag`。不新增 ChatAction。若会话 `activeSkill='retry'`,结构化 `{ type: 'next-question' }` 会继续路由 `retry`,否则仍路由 `practice`。
@@ -157,6 +159,8 @@ type ChatAction =
 `NODE_ENV !== 'production'` 时,HTTP 错误响应会在 `details.debug` 或 `details.upstream` 中附带错误 name/message/stack 与上游状态码等调试字段;前端 dev 模式会在控制台打印完整 API/SSE 错误并把 details 拼进错误提示。生产环境不附带这些调试细节。
 
 前端发送顺序(008):`useChatStore.sendMessage/sendAction` 会在 `/api/chat/send` 返回前先插入临时用户消息与空 assistant 消息;assistant 空流式消息渲染为 "Echo 正在思考中..."。服务端返回后再替换真实 messageId 并连接 SSE,随后 `text-chunk` / `widget-*` 覆盖为真实 AI 输出或小部件结果。
+
+022 起,SSE `error` 事件不再只写入全局 error state,也会写回当前 assistant 消息正文,格式为 `出错了:<code>: <message>`;dev 模式下若事件携带 `details`,会追加 JSON 调试信息。这样 `GRADE_FAILED` / `ATTEMPT_LOCKED` / provider tool_choice 错误不会在聊天列表中表现为空白回复。
 
 ## 约束与失败点
 

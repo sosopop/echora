@@ -147,6 +147,7 @@
   color: var(--color-ink);
   line-height: 1.6;
   margin-bottom: 8px;
+  white-space: pre-line;
 }
 
 .exerciseContextEn {
@@ -158,6 +159,26 @@
   background: var(--color-canvas);
   padding: 10px 14px;
   border-radius: var(--radius-md);
+}
+
+.exerciseTarget {
+  background: var(--color-canvas);
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  margin: 10px 0;
+}
+
+.exerciseTargetLabel {
+  font-size: 11px;
+  color: var(--color-muted);
+  margin-bottom: 4px;
+}
+
+.exerciseTargetText {
+  font-size: 16px;
+  color: var(--color-ink);
+  line-height: 1.6;
+  font-weight: 600;
 }
 
 .exerciseHint {

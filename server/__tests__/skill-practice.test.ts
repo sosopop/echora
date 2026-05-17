@@ -262,10 +262,16 @@ describe('practice skill', () => {
     seedPassed(3);
     const events = await collect();
     const ready = events.find((e) => e.type === 'widget-ready') as {
-      payload: { patch: { data: { stage: number; questionType: string } } };
+      payload: {
+        patch: {
+          data: { stage: number; questionType: string; targetZh?: string; contextEn?: string };
+        };
+      };
     };
     expect(ready.payload.patch.data.stage).toBe(4);
     expect(ready.payload.patch.data.questionType).toBe('role_reversal');
+    expect(ready.payload.patch.data.targetZh).toBeTruthy();
+    expect(ready.payload.patch.data.contextEn).toBeUndefined();
   });
 
   it('阶段 4 已通过 2 题 → state-transition awaiting_next', async () => {

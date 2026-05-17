@@ -126,6 +126,7 @@ export const practiceSkill: Skill = {
             prompt: q.prompt,
             contextZh: q.display.contextZh,
             contextEn: q.display.contextEn,
+            targetZh: q.display.targetZh,
             hint: q.display.hint,
             inputMode: q.display.inputMode,
           },

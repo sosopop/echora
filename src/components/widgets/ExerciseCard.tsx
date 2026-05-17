@@ -17,6 +17,7 @@ interface ExerciseCardData {
   questionType?: string;
   contextZh?: string;
   contextEn?: string;
+  targetZh?: string;
   hint?: string;
   inputMode?: 'fill' | 'chat';
 }
@@ -64,6 +65,12 @@ export default function ExerciseCard({
       </div>
       {data.contextZh && (
         <div className={styles.exerciseContextZh}>{data.contextZh}</div>
+      )}
+      {data.targetZh && (
+        <div className={styles.exerciseTarget}>
+          <div className={styles.exerciseTargetLabel}>请表达</div>
+          <div className={styles.exerciseTargetText}>「{data.targetZh}」</div>
+        </div>
       )}
       {data.contextEn && (
         <div className={styles.exerciseContextEn}>{data.contextEn}</div>

@@ -216,16 +216,19 @@ describe('ExerciseCard widget', () => {
         stage: 4,
         questionNo: 1,
         questionType: 'role_reversal',
-        contextZh: '角色互换:你现在扮演 Server,请主动说出这句话:欢迎光临。',
-        contextEn: 'Your role: Server',
-        hint: '先主动开口,不用等对方提问。',
+        contextZh: '角色互换:你现在扮演 Server,请把下面这句话用英文说出来。',
+        targetZh: '欢迎光临。',
+        hint: '当前角色:Server;先主动开口,不用等对方提问。',
         inputMode: 'chat',
       },
       version: 1,
     };
     render(<ExerciseCard widget={widget} />);
     expect(screen.getAllByText(/角色互换/).length).toBeGreaterThan(0);
-    expect(screen.getByText('Your role: Server')).toBeInTheDocument();
+    expect(screen.getByText('请表达')).toBeInTheDocument();
+    expect(screen.getByText('「欢迎光临。」')).toBeInTheDocument();
+    expect(screen.getByText(/当前角色:Server/)).toBeInTheDocument();
+    expect(screen.queryByText('Your role: Server')).not.toBeInTheDocument();
   });
 
   it('重练题显示重练标签而不是阶段 5', () => {

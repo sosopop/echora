@@ -254,4 +254,48 @@ describe('chat store streaming', () => {
       .messages.find((m) => m.role === 'user');
     expect(user?.content).toBe('A cup of water, please.');
   });
+
+  it('SSE skill error 会写入 assistant 消息,避免界面空白', async () => {
+    mocks.send.mockResolvedValue({
+      conversationId: 10,
+      userMessageId: 501,
+      assistantMessageId: 502,
+      streamId: 'stream-test',
+      decision: {
+        skillName: 'grade',
+        params: {},
+        confidence: 1,
+        rationale: 'test',
+      },
+    });
+    mocks.openStream.mockImplementation((_streamId, opts) => {
+      opts.onEvent(
+        event(
+          'error',
+          {
+            code: 'GRADE_FAILED',
+            message: 'deepseek-reasoner does not support this tool_choice',
+          },
+          1
+        )
+      );
+      opts.onError(
+        new Error(
+          'GRADE_FAILED: deepseek-reasoner does not support this tool_choice'
+        )
+      );
+      return { close: vi.fn() };
+    });
+
+    await useChatStore.getState().sendAction({
+      type: 'submit-answer',
+      payload: { attemptId: 9, answer: "It's 25 pounds" },
+    });
+
+    const state = useChatStore.getState();
+    const assistant = state.messages.find((m) => m.id === 502);
+    expect(assistant?.content).toContain('出错了:GRADE_FAILED');
+    expect(assistant?.content).toContain('does not support this tool_choice');
+    expect(state.streamingMessageId).toBeNull();
+  });
 });

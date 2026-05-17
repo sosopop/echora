@@ -279,6 +279,14 @@ function handleStreamEvent(
     // 学习态变化(如 onboarding → scene_selecting)往往伴随 profile 更新,
     // 异步刷新画像,RouteGuard / 视图凭新 profile 决定下一步导航
     void useProfileStore.getState().reload();
+  } else if (evt.type === 'error') {
+    const text = formatStreamError(evt);
+    set((s) => ({
+      streamBuffer: { ...s.streamBuffer, [messageId]: text },
+      messages: s.messages.map((m) =>
+        m.id === messageId ? { ...m, content: text } : m
+      ),
+    }));
   }
 }
 
@@ -341,10 +349,28 @@ function clearStreamBuffer(
 ): void {
   set((s) => {
     const { [messageId]: _removed, ...rest } = s.streamBuffer;
+    const fallbackError = error ? `出错了:${error}` : null;
     return {
       streamingMessageId: null,
       streamBuffer: rest,
       error,
+      messages: fallbackError
+        ? s.messages.map((m) =>
+            m.id === messageId && !m.content
+              ? { ...m, content: fallbackError }
+              : m
+          )
+        : s.messages,
     };
   });
+}
+
+function formatStreamError(
+  evt: Extract<SkillEvent, { type: 'error' }>
+): string {
+  const detailText =
+    import.meta.env.DEV && evt.payload.details
+      ? `\n${JSON.stringify(evt.payload.details, null, 2)}`
+      : '';
+  return `出错了:${evt.payload.code}: ${evt.payload.message}${detailText}`;
 }
