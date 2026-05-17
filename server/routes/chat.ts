@@ -39,12 +39,14 @@ import type {
   RouterInput,
   LearningState,
   RouterDecision,
+  LearningWidgetInstance,
 } from '../../shared/skill.js';
 import { ALL_LEARNING_STATES } from '../../shared/skill.js';
 import {
   describeChatAction,
   type ChatAction,
   type ConversationDTO,
+  type MessageDTO,
   type ChatSendResp,
 } from '../../shared/api.js';
 import { getDevErrorDetails } from '../utils/devError.js';
@@ -87,6 +89,8 @@ const sendSchema = z
   );
 
 type ChatSendBody = z.infer<typeof sendSchema>;
+
+const LOW_CONFIDENCE_THRESHOLD = 0.5;
 
 const createConversationSchema = z.object({
   title: z.string().min(1).max(200).optional(),
@@ -143,7 +147,7 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
           '会话不存在或无权访问'
         );
       }
-      const list = getMessages(db, id);
+      const list = sanitizeMessagesForLock(getMessages(db, id), conv);
       res.json({ data: list });
     } catch (e) {
       next(e);
@@ -223,7 +227,7 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
       if (normalizedInput.decision) {
         decision = normalizedInput.decision;
       } else if (normalizedInput.action) {
-        decision = createActionDecision(normalizedInput.action);
+        decision = createActionDecision(normalizedInput.action, conv);
       } else {
         const routerInput: RouterInput = {
           userText: normalizedInput.text ?? '',
@@ -234,7 +238,13 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
         };
         try {
           decision = await aiRouter.decide(routerInput);
+          decision = normalizeRouterDecision(
+            conv,
+            normalizedInput.text ?? '',
+            decision
+          );
         } catch (e) {
+          if (e instanceof HttpError) throw e;
           const reason = e instanceof Error ? e.message : String(e);
           const details = getDevErrorDetails(e);
           throw new HttpError(
@@ -386,6 +396,121 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
   return router;
 }
 
+const LOCKED_USER_ANSWER_TEXT = '完成当前题后查看完整答案';
+const LOCKED_GRADING_TEXT = '参考表达与批改详情已暂时隐藏。';
+
+function sanitizeMessagesForLock(
+  messages: MessageDTO[],
+  conv: ConversationDTO
+): MessageDTO[] {
+  if (!shouldLockHistory(conv)) return messages;
+
+  return messages.map((msg, index) => {
+    if (isLockedUserAnswer(messages, index)) {
+      return {
+        ...msg,
+        content: LOCKED_USER_ANSWER_TEXT,
+        widgetSnapshot: null,
+      };
+    }
+
+    if (isLockedGradingMessage(msg)) {
+      return {
+        ...msg,
+        content: '',
+        widgetSnapshot: sanitizeLockedWidgetSnapshot(
+          msg.widgetSnapshot,
+          msg.id,
+          conv.learningState === 'grading' ? 'grading' : 'practicing'
+        ),
+      };
+    }
+
+    return msg;
+  });
+}
+
+function shouldLockHistory(conv: ConversationDTO): boolean {
+  return (
+    conv.status === 'active' &&
+    (conv.lockPolicy === 'locked' ||
+      conv.learningState === 'practicing' ||
+      conv.learningState === 'grading')
+  );
+}
+
+function isLockedUserAnswer(messages: MessageDTO[], index: number): boolean {
+  const msg = messages[index];
+  const next = messages[index + 1];
+  return (
+    msg.role === 'user' &&
+    next?.role === 'assistant' &&
+    next.skillName === 'grade'
+  );
+}
+
+function isLockedGradingMessage(msg: MessageDTO): boolean {
+  return msg.role === 'assistant' && (
+    msg.skillName === 'grade' ||
+    widgetSnapshotToArray(msg.widgetSnapshot).some(
+      (widget) => widget.type === 'grading-result'
+    )
+  );
+}
+
+function sanitizeLockedWidgetSnapshot(
+  snapshot: unknown,
+  messageId: number,
+  variant: 'practicing' | 'grading'
+): LearningWidgetInstance | LearningWidgetInstance[] {
+  const widgets = widgetSnapshotToArray(snapshot);
+  if (widgets.length === 0) {
+    return makeLockWidget(messageId, variant);
+  }
+
+  const sanitized = widgets.map((widget, index) =>
+    widget.type === 'grading-result'
+      ? makeLockWidget(messageId, variant, index)
+      : widget
+  );
+  return sanitized.length === 1 ? sanitized[0] : sanitized;
+}
+
+function widgetSnapshotToArray(snapshot: unknown): LearningWidgetInstance[] {
+  if (Array.isArray(snapshot)) {
+    return snapshot.filter(isWidgetInstance);
+  }
+  return isWidgetInstance(snapshot) ? [snapshot] : [];
+}
+
+function isWidgetInstance(value: unknown): value is LearningWidgetInstance {
+  if (typeof value !== 'object' || value === null) return false;
+  const widget = value as Partial<LearningWidgetInstance>;
+  return typeof widget.id === 'string' && typeof widget.type === 'string';
+}
+
+function makeLockWidget(
+  messageId: number,
+  variant: 'practicing' | 'grading',
+  index = 0
+): LearningWidgetInstance {
+  const title =
+    variant === 'grading'
+      ? '批改中 · 历史详情暂时隐藏'
+      : '练习中 · 历史答案暂时隐藏';
+  return {
+    id: `conversation-lock-${messageId}-${index}`,
+    type: 'conversation-lock',
+    status: 'ready',
+    data: {
+      variant,
+      title,
+      description: LOCKED_GRADING_TEXT,
+    },
+    version: 1,
+  };
+}
+
 interface NormalizedChatSendInput {
   text?: string;
   action?: ChatAction;
@@ -415,10 +540,28 @@ function normalizeChatSendInput(
     };
   }
 
+  const retryDecision = createTextRetryDecision(conv, text);
+  if (retryDecision) {
+    return {
+      text,
+      decision: retryDecision,
+      userMessageContent: text,
+    };
+  }
+
   const controlAction = createTextControlAction(conv, text);
   if (controlAction) {
     return {
       action: controlAction,
+      userMessageContent: text,
+    };
+  }
+
+  const explainDecision = createTextExplainDecision(conv, text);
+  if (explainDecision) {
+    return {
+      text,
+      decision: explainDecision,
       userMessageContent: text,
     };
   }
@@ -459,6 +602,52 @@ function createTextReviewDecision(
     params: { source: 'deterministic-text' },
     confidence: 1,
     rationale: 'deterministic text route:review',
+  };
+}
+
+function createTextRetryDecision(
+  conv: ConversationDTO,
+  text: string
+): RouterDecision | null {
+  if (
+    conv.learningState !== 'awaiting_next' &&
+    conv.learningState !== 'reviewing' &&
+    conv.learningState !== 'scene_selecting' &&
+    conv.learningState !== 'practicing'
+  ) {
+    return null;
+  }
+  const targetTag = extractRetryTargetTag(text);
+  if (targetTag == null) return null;
+  return {
+    skillName: 'retry',
+    params: targetTag ? { targetTag } : {},
+    confidence: 1,
+    rationale: 'deterministic text route:retry',
+  };
+}
+
+function createTextExplainDecision(
+  conv: ConversationDTO,
+  text: string
+): RouterDecision | null {
+  if (
+    ![
+      'practicing',
+      'grading',
+      'awaiting_next',
+      'reviewing',
+      'scene_selecting',
+    ].includes(conv.learningState)
+  ) {
+    return null;
+  }
+  if (!isExplainRequestText(text)) return null;
+  return {
+    skillName: 'explain',
+    params: { source: 'deterministic-text' },
+    confidence: 1,
+    rationale: 'deterministic text route:explain',
   };
 }
 
@@ -534,6 +723,43 @@ function isReviewRequestText(text: string): boolean {
   return ['复盘', '总结', '学习报告', '报告', 'review'].includes(normalized);
 }
 
+function isExplainRequestText(text: string): boolean {
+  const normalized = normalizeControlText(text);
+  if (!normalized) return false;
+  if (
+    [
+      '为什么',
+      '为啥',
+      '解释',
+      '讲讲',
+      '怎么改',
+      '哪里错',
+      '错在哪',
+      'why',
+      'explain',
+      'howtofix',
+    ].includes(normalized)
+  ) {
+    return true;
+  }
+  return /为什么|为啥|解释|怎么改|哪里错|错在哪|why|explain/i.test(text);
+}
+
+function extractRetryTargetTag(text: string): string | null {
+  const trimmed = text.trim();
+  const normalized = normalizeControlText(trimmed);
+  if (!normalized) return null;
+  if (
+    ['重练', '重练错题', '错题重练', '开始重练', '专项重练', 'retry'].includes(
+      normalized
+    )
+  ) {
+    return '';
+  }
+  const match = trimmed.match(/^(?:重练|专项重练|retry)[:：\s]+([a-zA-Z_]+)$/i);
+  return match?.[1] ?? null;
+}
+
 function isPracticeControlText(text: string): boolean {
   const normalized = normalizeControlText(text);
   if (!normalized) return false;
@@ -555,10 +781,15 @@ function isAttemptAnswerable(db: Db, attempt: ExerciseAttemptDTO): boolean {
   return grading?.isCorrect === false;
 }
 
-function createActionDecision(action: ChatAction): RouterDecision {
+function createActionDecision(
+  action: ChatAction,
+  conv?: ConversationDTO
+): RouterDecision {
   const skillName =
     action.type === 'request-new-scenes' || action.type === 'select-scene'
       ? 'scene-select'
+      : action.type === 'next-question' && conv?.activeSkill === 'retry'
+      ? 'retry'
       : action.type === 'submit-answer'
       ? 'grade'
       : 'practice';
@@ -568,6 +799,107 @@ function createActionDecision(action: ChatAction): RouterDecision {
     confidence: 1,
     rationale: `deterministic action route:${action.type}`,
   };
+}
+
+function normalizeRouterDecision(
+  conv: ConversationDTO,
+  userText: string,
+  decision: RouterDecision
+): RouterDecision {
+  if (
+    (conv.learningState === 'practicing' ||
+      conv.learningState === 'grading') &&
+    decision.skillName === 'general-chat'
+  ) {
+    throw new HttpError(
+      400,
+      ERROR_CODES.VALIDATION_FAILED,
+      `当前状态 ${conv.learningState} 不能降级到闲聊。请先完成当前题,或输入"换场景"。`
+    );
+  }
+
+  if (
+    decision.confidence < LOW_CONFIDENCE_THRESHOLD &&
+    shouldShowIntentConfirm(conv.learningState)
+  ) {
+    return {
+      skillName: 'general-chat',
+      params: {
+        intentConfirm: buildIntentConfirmPayload(
+          conv.learningState,
+          userText,
+          decision
+        ),
+      },
+      confidence: 1,
+      rationale: `low confidence intent-confirm:${decision.rationale}`,
+    };
+  }
+
+  return decision;
+}
+
+function shouldShowIntentConfirm(state: LearningState): boolean {
+  return (
+    state === 'scene_selecting' ||
+    state === 'awaiting_next' ||
+    state === 'reviewing'
+  );
+}
+
+function buildIntentConfirmPayload(
+  state: LearningState,
+  userText: string,
+  originalDecision: RouterDecision
+): Record<string, unknown> {
+  return {
+    question: '你想让我怎么处理?',
+    prompt: userText,
+    risk: 'medium',
+    originalDecision,
+    choices: intentChoicesForState(state),
+  };
+}
+
+function intentChoicesForState(
+  state: LearningState
+): Array<{ id: string; title: string; desc: string; action: string }> {
+  if (state === 'scene_selecting') {
+    return [
+      {
+        id: 'new-scenes',
+        title: '换一批场景',
+        desc: '重新生成可练习的场景卡片',
+        action: 'action:request-new-scenes',
+      },
+      {
+        id: 'custom-topic',
+        title: '按我这句话找场景',
+        desc: '把刚才输入当作想练的主题',
+        action: 'text:换场景',
+      },
+    ];
+  }
+  return [
+    {
+      id: 'review',
+      title: '看本轮复盘',
+      desc: '查看平均分、薄弱点和下一步建议',
+      action: 'text:复盘',
+    },
+    {
+      id: 'retry',
+      title: '重练薄弱点',
+      desc: '基于最近错因生成专项题',
+      action: 'text:重练',
+    },
+    {
+      id: 'new-scenes',
+      title: '换一个场景',
+      desc: '进入新的场景练习',
+      action: 'action:request-new-scenes',
+    },
+  ];
 }
 
 function isSkillAllowedInState(

@@ -36,6 +36,25 @@ import {
 } from './_helpers/practiceFsm.js';
 import { recordGradingLearningSignals } from '../services/learningSignals.js';
 
+const RETRY_STAGE = 5;
+const RETRY_GOAL = 3;
+
+function countRetryAttempts(
+  ctx: ServerSkillContext,
+  sceneId: string | null
+): number {
+  const row = ctx.db
+    .prepare<[number, number, string | null], { c: number }>(
+      `SELECT COUNT(*) AS c
+       FROM exercise_attempts
+       WHERE conversation_id = ?
+         AND stage = ?
+         AND scene_id IS ?`
+    )
+    .get(ctx.conversationId, RETRY_STAGE, sceneId);
+  return row?.c ?? 0;
+}
+
 export const gradeSkill: Skill = {
   name: SKILL_NAMES.grade,
   description: '批改用户答案 → 落 grading_results → 推进阶段进度',
@@ -189,6 +208,30 @@ export const gradeSkill: Skill = {
         };
       }
       // 保持 practicing
+      yield { type: 'done', payload: {} };
+      return;
+    }
+
+    // 重练专项题通过 → 不推进 4 阶段主线,由 retry skill 继续出下一题
+    if (attempt.stage === RETRY_STAGE) {
+      const retryCount = countRetryAttempts(ctx, attempt.sceneId);
+      if (retryCount >= RETRY_GOAL) {
+        yield {
+          type: 'text-chunk',
+          payload: {
+            text: '这组专项重练完成了。发送"复盘"可以查看更新后的总结。',
+          },
+        };
+        yield {
+          type: 'state-transition',
+          payload: { nextLearningState: 'reviewing', activeSkill: 'review' },
+        };
+      } else {
+        yield {
+          type: 'text-chunk',
+          payload: { text: '专项题答对了,继续下一题。' },
+        };
+      }
       yield { type: 'done', payload: {} };
       return;
     }

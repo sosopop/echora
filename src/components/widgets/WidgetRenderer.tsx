@@ -9,6 +9,10 @@ import SceneCards from './SceneCards.js';
 import ExerciseCard from './ExerciseCard.js';
 import GradingResult from './GradingResult.js';
 import ProgressSummary from './ProgressSummary.js';
+import AnswerReview from './AnswerReview.js';
+import IntentConfirm from './IntentConfirm.js';
+import FollowUpSource from './FollowUpSource.js';
+import ConversationLock from './ConversationLock.js';
 import styles from './widgets.module.css';
 
 type WidgetComponent = (props: {
@@ -20,6 +24,10 @@ const REGISTRY: Record<string, WidgetComponent> = {
   'exercise-card': ExerciseCard,
   'grading-result': GradingResult,
   'progress-summary': ProgressSummary,
+  'answer-review': AnswerReview,
+  'intent-confirm': IntentConfirm,
+  'follow-up-source': FollowUpSource,
+  'conversation-lock': ConversationLock,
 };
 
 export default function WidgetRenderer({

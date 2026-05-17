@@ -60,5 +60,44 @@ function shouldRenderWidget(widget: LearningWidgetInstance): boolean {
     );
   }
 
+  if (widget.type === 'conversation-lock') {
+    const data = widget.data as
+      | { title?: unknown; description?: unknown }
+      | undefined;
+    return (
+      widget.status === 'ready' &&
+      typeof data?.title === 'string' &&
+      data.title.trim().length > 0 &&
+      typeof data?.description === 'string' &&
+      data.description.trim().length > 0
+    );
+  }
+
+  if (widget.type === 'follow-up-source') {
+    const data = widget.data as
+      | { sourceLabel?: unknown; snippet?: unknown }
+      | undefined;
+    return (
+      widget.status === 'ready' &&
+      typeof data?.sourceLabel === 'string' &&
+      data.sourceLabel.trim().length > 0 &&
+      typeof data?.snippet === 'string' &&
+      data.snippet.trim().length > 0
+    );
+  }
+
+  if (widget.type === 'intent-confirm') {
+    const data = widget.data as
+      | { question?: unknown; choices?: unknown }
+      | undefined;
+    return (
+      widget.status === 'ready' &&
+      typeof data?.question === 'string' &&
+      data.question.trim().length > 0 &&
+      Array.isArray(data?.choices) &&
+      data.choices.length >= 2
+    );
+  }
+
   return true;
 }

@@ -13,7 +13,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { connect, closeDb, type Db } from '../db/connect.js';
 import { migrate } from '../db/migrate.js';
-import { createConversation } from '../services/conversation.js';
+import {
+  createConversation,
+  getConversation,
+  updateLearningState,
+} from '../services/conversation.js';
 import { createSceneDialogue, getActiveSceneDialogue } from '../services/sceneDialogue.js';
 import {
   appendSceneHistory,
@@ -94,6 +98,29 @@ describe('sceneDialogue service', () => {
       difficulty: 'B2', roles: [], turns: [],
     });
     expect(getActiveSceneDialogue(db, conversationId)?.id).toBe(d2.id);
+  });
+});
+
+describe('conversation service lock policy', () => {
+  it('practicing / grading 会话默认 locked,解锁态恢复 open', () => {
+    expect(getConversation(db, conversationId, userId)?.lockPolicy).toBe(
+      'locked'
+    );
+
+    updateLearningState(db, conversationId, 'grading', 'grade');
+    expect(getConversation(db, conversationId, userId)?.lockPolicy).toBe(
+      'locked'
+    );
+
+    updateLearningState(db, conversationId, 'awaiting_next', null);
+    expect(getConversation(db, conversationId, userId)?.lockPolicy).toBe(
+      'open'
+    );
+
+    updateLearningState(db, conversationId, 'reviewing', 'review');
+    expect(getConversation(db, conversationId, userId)?.lockPolicy).toBe(
+      'open'
+    );
   });
 });
 

@@ -19,19 +19,19 @@
 | scene-select   | scene_selecting / awaiting_next / reviewing / practicing    | scene-cards         |
 | practice       | scene_selecting / practicing / awaiting_next                | exercise-card       |
 | grade          | practicing / grading                                        | grading-result      |
-| explain        | practicing / grading / awaiting_next / reviewing / scene_selecting | (无)        |
-| review         | awaiting_next / reviewing / scene_selecting / archived      | progress-summary    |
-| retry          | awaiting_next / reviewing / scene_selecting                 | exercise-card       |
-| general-chat   | (空数组 = 任意态)                                            | (无)                |
+| explain        | practicing / grading / awaiting_next / reviewing / scene_selecting | follow-up-source |
+| review         | awaiting_next / reviewing / scene_selecting / archived      | progress-summary / answer-review |
+| retry          | awaiting_next / reviewing / scene_selecting / practicing     | exercise-card       |
+| general-chat   | (空数组 = 任意态;practicing/grading 由 chat route 禁止降级闲聊) | intent-confirm / (无) |
 
-## Stub 行为(剩余 3 个 stub)
+## Stub 行为(剩余 1 个 stub)
 
-剩余 stub:`explain` / `retry` / `general-chat`。其余 5 个(onboarding/scene-select/practice/grade/review)已真实接入。
+剩余 stub:`general-chat` 的开放闲聊内容生成。其余 7 个(onboarding/scene-select/practice/grade/explain/review/retry)已真实接入;`general-chat` 已承担低置信度 `intent-confirm` 输出。
 
 - `StubProvider.route()` 固定返回 `{ skillName: 'general-chat', confidence: 0.6, ... }`
 - `StubProvider` 不实现 `chat()`(可选接口),onboarding / scene-select / grade 等需 LLM 的 skill 在 stub provider 下会 yield error
 - 各 stub Skill handler 产出:1-2 条 text-chunk + 必要的 mode-switch + widget-init/ready + done
-- `general-chat` 与 `explain` 不产 widget,纯文本流
+- `general-chat` 默认纯文本;当 `params.intentConfirm` 存在时输出 `intent-confirm` widget
 
 ## 真实 Provider 接入(002)
 
@@ -84,7 +84,7 @@
 - 008/010 兜底:若用户在 `practicing` 态直接输入非控制指令文本,chat route 会把当前活跃场景下最新可作答 attempt 自动包装成 `submit-answer` 并进入 grade;前端 chat/fill 输入同样优先提交最新可作答 exercise-card,但 `出题` / `下一题` / `go` 等控制指令会确定性进入 practice,避免阶段 2 chat 模式答案被当作 general chat。
 - 008 批改 prompt 会从当前 `scene_dialogue` + attempt stage/questionNo 重新推导参考答案,并要求模型优先按参考答案批改,减少错题反馈漂移。
 - 015 起批改后调用 `recordGradingLearningSignals`:根据 `corrections.tags` 写入 `error_tag_events`,并用错误 tag 或题型 fallback 更新 `mastery_records`。正确且无错误标签的题不会生成错误事件,但会更新对应题型掌握度。
-- retry:错答 `incrementRetry`,达 2 次 `markNeedsReview`(MVP 不出降难替换题,留 004)
+- 主线错题 retry:错答 `incrementRetry`,达 2 次 `markNeedsReview`;016 起用户可在复盘后触发 `retry` Skill 生成专项降难题,但单题第 2 次失败后自动替换题仍未接入。
 - 阶段判断:本题答对且 `countStagePassed >= STAGE_GOAL` 且 `stage >= MAX_STAGE_MVP(4)` → state-transition('awaiting_next');阶段 4 答对时如存在下一句对方回应,会在批改后追加自然文本展示。
 
 ## review Skill(015 已真实接入)
@@ -92,9 +92,34 @@
 - 入口:`server/skills/review.ts`
 - 数据源:当前会话最新 `scene_dialogue`、同 scene 的 `exercise_attempts + grading_results`、`error_tag_events`、`mastery_records`;不从消息正文解析。
 - 无批改记录:yield `state-transition('reviewing','review')` + 友好文本 + `done`,不初始化空 `progress-summary`。
-- 有批改记录:输出本轮题数、平均分、通过数文本,随后 `widget-init(progress-summary loading)` → `widget-ready(progress-summary ready)`。
+- 有批改记录:输出本轮题数、平均分、通过数文本,随后 `widget-init(progress-summary loading)` → `widget-ready(progress-summary ready)`,再输出 `answer-review` 逐题回看。
 - `progress-summary` data 包含:`title/sceneName/questionsCount/averageScore/averageScoreDelta/weakTagsCount/masteredScenesCount/masteries/strongPoints/weakPoints/nextSuggestions`。当前 `averageScoreDelta/mastery.delta` 尚无历史基线,固定为 0。
+- `answer-review` data 包含:`title/items[]`;item 从 `exercise_attempts + grading_results` 生成,包含顺序题号、短题干、题型、分数、状态(ok/warn/bad)和错误标签。017 起同一条 assistant 消息可保存并渲染多个 widget snapshot,所以复盘总览和逐题回看会连续出现。
 - 015 起 `/api/chat/send` 在 `awaiting_next` / `reviewing` 下识别 `复盘` / `总结` / `学习报告` / `review`,确定性路由到 `review`,不经过 AI Router。
+
+## retry Skill(016 已真实接入)
+
+- 入口:`server/skills/retry.ts`
+- 触发:`awaiting_next` / `reviewing` / `scene_selecting` / `practicing` 下输入 `重练` / `重练错题` / `开始重练` / `retry`,或 `重练 <tag>` 指定薄弱点;chat route 确定性路由到 `retry`,不新增 ChatAction。
+- 选点:优先使用 `params.targetTag`,其次按当前场景的 `error_tag_events` 聚合次数选最高频 tag,再退到用户 `mastery_records` 中低于 80 分的最低掌握度 tag。
+- 出题:生成 3 道降难专项题,使用内部 `stage=5`,写入 `exercise_attempts`;前端展示为"重练 · 第 N 题",不暴露阶段 5。
+- 批改:复用 `grade` Skill。016 起 `exercise_attempts.prompt` 可存一层轻量 JSON,记录显示题干、参考答案和目标 tag;`gradeFsm` 会解析后稳定批改。历史普通字符串 prompt 仍兼容。
+- 推进:重练第 1/2 题通过后保持 `practicing + activeSkill=retry`;`next-question` 在 activeSkill 为 retry 时继续路由 `retry`。第 3 道重练题通过或 retry 已生成 3 题后,转 `reviewing`。
+
+## explain Skill(019 已真实接入)
+
+- 入口:`server/skills/explain.ts`
+- 触发:`practicing` / `grading` / `awaiting_next` / `reviewing` / `scene_selecting` 下输入 `为什么` / `为什么错` / `解释` / `怎么改` / `why` / `explain` 等文本;chat route 确定性路由到 `explain`,不经过 AI Router,也不把这类文本误提交为答案。
+- 数据源:当前会话最近一条 `exercise_attempts`,优先携带对应 `grading_results`。不会从自然语言消息里解析答案。
+- 未批改题:输出 `follow-up-source(sourceKind='exercise')` + 提示性解释,只讲思路和题型策略,不泄露标准答案。
+- 已批改题:输出 `follow-up-source(sourceKind='grading')` + 基于用户答案、参考表达、批改解释和错误标签的中文解析。当前最小闭环仍在主消息流中展示,完整右侧 branch thread 面板未接入。
+
+## general-chat / intent-confirm(020 部分真实接入)
+
+- 默认闲聊仍是简短规则化回复,尚未接真实 LLM 多轮聊天。
+- AI Router 返回低置信度(`confidence < 0.5`)且当前状态为 `scene_selecting` / `awaiting_next` / `reviewing` 时,chat route 会把 decision 改写为 `general-chat` + `params.intentConfirm`,由 `generalChatSkill` 输出 `intent-confirm` widget。
+- `intent-confirm` choices 的 `action` 是字符串协议,前端解析 `action:request-new-scenes` / `action:next-question` 为既有 ChatAction,解析 `text:<内容>` 为普通文本发送;不新增 ChatAction。
+- `practicing` / `grading` 中若 Router 试图降级到 `general-chat`,chat route 直接返回 `400 VALIDATION_FAILED`,避免练习/批改被闲聊兜底带偏。
 
 ## AI Router 校验链
 
@@ -110,12 +135,13 @@ provider.route()
 ## 约束与失败点
 
 - handler 不直接写库**业务事件**(text-chunk / widget-* 由 chat.ts 落 messages.stream_events);**确实需要的业务表写入**(profile / scene_dialogues / scene_history / exercise_attempts / grading_results)由 skill 直接通过 service 写,因为这些是结构化业务数据,与事件流分离
+- `state-transition` 由 chat route 统一落 `conversations.learning_state / active_skill / lock_policy`;018 起 `practicing` / `grading` 自动 locked,其他状态自动 open,skill 不自行维护锁定字段
 - 前端流式消费 `widget-init` / `widget-ready` / `widget-update` 时,必须同时更新 `activeWidgets` 与当前 assistant 消息的 `widgetSnapshot`;否则 widget 只会在刷新后从数据库快照出现。
 - 任意 handler 抛错 → 路由 catch → 发 `error` 事件 → `agent_runs.status = 'failed'`
 - `practicing` / `grading` 中 router 校验失败时**直接抛错**(不再 fallback,002 patch)
 - AI Provider 抛错时 router 不 catch,直接传播到 chat 路由,返 `502 PROVIDER_ERROR`
 - POST `/api/chat/send` body `text` 与 `action` **二选一**(zod refine);action 由 chat route 确定性映射到 skill,并放入 `decision.params.action`
-- 008 起练习态直接输入答案时,chat route 可能把 `text` 规范化为 `submit-answer` action;消息历史仍保存用户原始输入文本。010 起 `awaiting_next` 下输入 `next` / `START` / `开始练习` 会确定性触发 `request-new-scenes`,减少完成一场景后的断流。012 起 `practicing` 下的换场景类文本也确定性触发 `request-new-scenes`,不再交给 AI Router。015 起 `awaiting_next` / `reviewing` 下的复盘类文本确定性触发 `review`。
+- 008 起练习态直接输入答案时,chat route 可能把 `text` 规范化为 `submit-answer` action;消息历史仍保存用户原始输入文本。010 起 `awaiting_next` 下输入 `next` / `START` / `开始练习` 会确定性触发 `request-new-scenes`,减少完成一场景后的断流。012 起 `practicing` 下的换场景类文本也确定性触发 `request-new-scenes`,不再交给 AI Router。015 起 `awaiting_next` / `reviewing` 下的复盘类文本确定性触发 `review`。016 起重练类文本确定性触发 `retry`;若 activeSkill 为 `retry`,结构化 `next-question` 继续走 `retry` 而不是主线 `practice`。019 起解释类文本确定性触发 `explain`,并在练习中优先于自由文本答案兜底,避免"为什么错"被当成答案提交。020 起非锁定态低置信度路由改为 `intent-confirm`;锁定态不允许降级到 `general-chat`。
 
 ## 测试入口
 
@@ -124,16 +150,18 @@ provider.route()
 - scene-select 单测:`server/__tests__/skill-sceneSelect.test.ts`(6 测试)
 - practice 单测:`server/__tests__/skill-practice.test.ts`(8 测试)
 - grade 单测:`server/__tests__/skill-grade.test.ts`(11 测试)
-- review 单测:`server/__tests__/skill-review.test.ts`(2 测试)
-- learning services 单测:`server/__tests__/learning-services.test.ts`(12 测试)
+- review 单测:`server/__tests__/skill-review.test.ts`(2 测试,覆盖 progress-summary + answer-review)
+- retry 单测:`server/__tests__/skill-retry.test.ts`(4 测试)
+- explain 单测:`server/__tests__/skill-explain.test.ts`(3 测试,覆盖已批改解释、未批改不泄露答案、无上下文提示)
+- general-chat 单测:`server/__tests__/skill-generalChat.test.ts`(2 测试,覆盖默认文本与 intent-confirm widget)
+- learning services 单测:`server/__tests__/learning-services.test.ts`(13 测试,含 learning_state → lock_policy)
 - onboarding 端到端:`npm run test:smoke:onboarding`(10 场景)
-- 学习闭环端到端:`npm run test:smoke:learning`(10 场景,覆盖 4 阶段完整闭环、错题重试、状态拒绝与 provider 错误路径)
+- 学习闭环端到端:`npm run test:smoke:learning`(12 场景,覆盖 4 阶段完整闭环、错题重试、explain 追问、低置信度确认、状态拒绝与 provider 错误路径)
 - 真实 Provider 接入:`npm run test:smoke:ai`(需双 key)
 
 ## Pending
 
-- explain / retry / general-chat 3 stub 待真实化(留 004+)
-- 真实 Anthropic Provider `route()` 低置信度处理(<0.5 触发 intent-confirm widget)未实现
-- Skill 取消机制:`ctx.signal` 已传入,onboarding 已消费;其他 6 stub/真实 skill 尚未消费
+- general-chat 开放闲聊内容生成待真实化(留 004+)
+- Skill 取消机制:`ctx.signal` 已传入,onboarding 已消费;其他 7 stub/真实 skill 尚未消费
 - `agent_runs.payload` 字段写入 finalSeq 与累计文本长度的细节
-- retry 降难替换题仍未真实化,当前 review 只给静态下一步建议
+- 单题第 2 次失败后自动生成降难替换题仍未接入;当前 retry 需用户从复盘/文本主动触发

@@ -358,6 +358,79 @@ describe('grade skill', () => {
     expect(getAttempt(db, attemptId)?.retryCount).toBe(1);
   });
 
+  it('重练题答对 → 不触发主线 awaiting_next,保留 practicing', async () => {
+    const attemptId = createAttempt(db, {
+      conversationId,
+      sceneId: 'test',
+      stage: 5,
+      questionNo: 1,
+      questionType: 'fill_word',
+      prompt: 'retry',
+    }).id;
+    const provider = makeProvider({
+      score: 90,
+      is_correct: true,
+      reference_answer: 'to',
+      explanation: '正确',
+      tags: [],
+    });
+    const events = await collect(
+      makeCtx(provider, {
+        type: 'submit-answer',
+        payload: { attemptId, answer: 'to' },
+      })
+    );
+    expect(events.find((e) => e.type === 'state-transition')).toBeUndefined();
+    expect(
+      events.find(
+        (e) =>
+          e.type === 'text-chunk' &&
+          (e as { payload: { text: string } }).payload.text.includes(
+            '专项题答对'
+          )
+      )
+    ).toBeDefined();
+  });
+
+  it('第 3 道重练题答对 → 转 reviewing', async () => {
+    for (let q = 1; q <= 2; q++) {
+      createAttempt(db, {
+        conversationId,
+        sceneId: 'test',
+        stage: 5,
+        questionNo: q,
+        questionType: 'fill_word',
+        prompt: 'retry',
+      });
+    }
+    const attemptId = createAttempt(db, {
+      conversationId,
+      sceneId: 'test',
+      stage: 5,
+      questionNo: 3,
+      questionType: 'fill_word',
+      prompt: 'retry',
+    }).id;
+    const provider = makeProvider({
+      score: 90,
+      is_correct: true,
+      reference_answer: 'to',
+      explanation: '正确',
+      tags: [],
+    });
+    const events = await collect(
+      makeCtx(provider, {
+        type: 'submit-answer',
+        payload: { attemptId, answer: 'to' },
+      })
+    );
+    const transition = events.find((e) => e.type === 'state-transition') as {
+      payload: { nextLearningState: string; activeSkill: string | null };
+    };
+    expect(transition.payload.nextLearningState).toBe('reviewing');
+    expect(transition.payload.activeSkill).toBe('review');
+  });
+
   it('阶段完成统计只计算当前 sceneId', async () => {
     for (let stage = 1; stage <= 2; stage++) {
       for (let q = 1; q <= 2; q++) {

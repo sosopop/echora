@@ -7,6 +7,7 @@ import type { SceneDialogueDTO } from '../../../shared/api.js';
 import type { ToolDef, AIProvider, ChatStreamEvent } from '../../ai/types.js';
 import type { GradingCorrections } from '../../services/gradingResult.js';
 import { buildQuestionFromTurn } from './practiceFsm.js';
+import { decodeAttemptPrompt } from '../../services/attemptPrompt.js';
 
 const ALLOWED_TAGS = [
   'spelling',
@@ -55,16 +56,19 @@ export function buildGradePrompt(
   const ctxLine = dialogue
     ? `场景:${dialogue.title} (${dialogue.difficulty}) · 角色:${dialogue.roles.join(' / ')}`
     : '(场景上下文缺失)';
-  const reference = dialogue
+  const promptInfo = decodeAttemptPrompt(attempt.prompt);
+  const reference = promptInfo.referenceAnswer ?? (dialogue
     ? buildQuestionFromTurn(dialogue, attempt.stage, attempt.questionNo)
         ?.referenceAnswer
-    : null;
+    : null);
   return [
     '你是 Echora 英语教练,负责批改用户的练习答案。',
     '',
     ctxLine,
     `题型:${attempt.questionType}(阶段 ${attempt.stage} 第 ${attempt.questionNo} 题)`,
-    `题目:${attempt.prompt}`,
+    promptInfo.kind ? `题目来源:${promptInfo.kind}` : null,
+    promptInfo.targetTag ? `目标薄弱点:${promptInfo.targetTag}` : null,
+    `题目:${promptInfo.prompt}`,
     reference ? `参考答案:${reference}` : null,
     `用户答案:${userAnswer}`,
     `重试次数:${attempt.retryCount}(0=首答, 1=第二次)`,

@@ -6,6 +6,7 @@
  */
 
 import type { LearningWidgetInstance } from '@shared/skill';
+import { useChatStore } from '../../stores/chat.js';
 import styles from './widgets.module.css';
 
 interface MasteryRow {
@@ -49,12 +50,23 @@ function deltaLabel(delta: number | undefined): string {
   return delta > 0 ? `提升 ${delta}` : `下降 ${Math.abs(delta)}`;
 }
 
+function suggestionCommand(action: string | undefined): string {
+  if (!action) return '重练';
+  if (action.startsWith('retry:')) {
+    return `重练 ${action.slice('retry:'.length)}`;
+  }
+  return action;
+}
+
 export default function ProgressSummary({
   widget,
 }: {
   widget: LearningWidgetInstance;
 }): JSX.Element | null {
   const data = (widget.data ?? {}) as ProgressSummaryData;
+  const sendMessage = useChatStore((s) => s.sendMessage);
+  const sendAction = useChatStore((s) => s.sendAction);
+  const streaming = useChatStore((s) => s.streamingMessageId !== null);
   if (
     widget.status !== 'ready' ||
     typeof data.questionsCount !== 'number' ||
@@ -178,6 +190,20 @@ export default function ProgressSummary({
               <div key={`${s.title}-${s.action ?? ''}`} className={styles.suggestionItem}>
                 <div className={styles.suggestionTitle}>{s.title}</div>
                 <div className={styles.suggestionDesc}>{s.desc}</div>
+                <button
+                  type="button"
+                  className={styles.suggestionButton}
+                  disabled={streaming}
+                  onClick={() => {
+                    if (s.action === 'request-new-scenes') {
+                      void sendAction({ type: 'request-new-scenes' });
+                      return;
+                    }
+                    void sendMessage(suggestionCommand(s.action));
+                  }}
+                >
+                  开始
+                </button>
               </div>
             ))}
           </div>

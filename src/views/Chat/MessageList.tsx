@@ -83,7 +83,7 @@ export default function MessageList(): JSX.Element {
           ? streamBuffer[m.id] ?? m.content ?? ''
           : m.content ?? '';
         // widget 来源:优先 activeWidgets(最新),其次 widget_snapshot(历史)
-        const widget = resolveWidget(m, activeWidgets);
+        const widgets = resolveWidgets(m, activeWidgets);
         return (
           <div key={m.id} className={styles.messageRow}>
             <MessageBubble
@@ -91,7 +91,9 @@ export default function MessageList(): JSX.Element {
               text={text}
               streaming={isStreaming}
             />
-            {widget && <WidgetSlot widget={widget} />}
+            {widgets.map((widget) => (
+              <WidgetSlot key={widget.id} widget={widget} />
+            ))}
           </div>
         );
       })}
@@ -104,12 +106,23 @@ interface MessageWithWidget {
   widgetSnapshot: unknown | null;
 }
 
-function resolveWidget(
+function resolveWidgets(
   msg: MessageWithWidget,
   active: Record<string, LearningWidgetInstance>
+): LearningWidgetInstance[] {
+  if (!msg.widgetSnapshot) return [];
+  const snaps = Array.isArray(msg.widgetSnapshot)
+    ? (msg.widgetSnapshot as Partial<LearningWidgetInstance>[])
+    : ([msg.widgetSnapshot] as Partial<LearningWidgetInstance>[]);
+  return snaps
+    .map((snap) => resolveWidget(snap, active))
+    .filter((widget): widget is LearningWidgetInstance => widget !== null);
+}
+
+function resolveWidget(
+  snap: Partial<LearningWidgetInstance>,
+  active: Record<string, LearningWidgetInstance>
 ): LearningWidgetInstance | null {
-  if (!msg.widgetSnapshot) return null;
-  const snap = msg.widgetSnapshot as Partial<LearningWidgetInstance>;
   if (!snap.id || !snap.type) return null;
   const live = active[snap.id];
   if (live) return live;

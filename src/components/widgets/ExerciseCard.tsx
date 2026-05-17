@@ -54,12 +54,11 @@ export default function ExerciseCard({
     return null;
   }
   const questionLabel = labelForQuestionType(data.questionType);
+  const stageLabel = data.stage === 5 ? '重练' : `阶段 ${data.stage ?? '?'}`;
   return (
     <div className={styles.exerciseCard}>
       <div className={styles.exerciseHead}>
-        <span className={styles.exerciseStage}>
-          阶段 {data.stage ?? '?'}
-        </span>
+        <span className={styles.exerciseStage}>{stageLabel}</span>
         <span>第 {data.questionNo ?? '?'} 题</span>
         <span>· {questionLabel}</span>
       </div>

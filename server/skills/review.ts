@@ -8,6 +8,9 @@ import type { ServerSkillContext } from './types.js';
 import { getActiveSceneDialogue } from '../services/sceneDialogue.js';
 import { listErrorTagSummaryByConversation } from '../services/errorTagEvent.js';
 import { listMasteryRecords } from '../services/masteryRecord.js';
+import type { GradingCorrections } from '../services/gradingResult.js';
+import { decodeAttemptPrompt } from '../services/attemptPrompt.js';
+import { ErrorTagSchema, QuestionTypeSchema } from '../../shared/widget.js';
 
 interface ReviewAttemptRow {
   attempt_id: number;
@@ -68,6 +71,18 @@ function listReviewAttempts(
         .all(ctx.conversationId);
 }
 
+function safeParseCorrections(v: string | null): GradingCorrections {
+  if (!v) return {};
+  try {
+    const parsed = JSON.parse(v);
+    return typeof parsed === 'object' && parsed !== null
+      ? (parsed as GradingCorrections)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
 function labelForQuestionType(questionType: string): string {
   switch (questionType) {
     case 'fill_word':
@@ -91,6 +106,45 @@ function averageScore(rows: ReviewAttemptRow[]): number {
 function compactPrompt(prompt: string): string {
   const oneLine = prompt.replace(/\s+/g, ' ').trim();
   return oneLine.length > 34 ? `${oneLine.slice(0, 34)}...` : oneLine;
+}
+
+function normalizeQuestionType(questionType: string): string {
+  return QuestionTypeSchema.safeParse(questionType).success
+    ? questionType
+    : 'fill_word';
+}
+
+function normalizeErrorTags(tags: string[] | undefined): string[] {
+  if (!Array.isArray(tags)) return [];
+  return tags.filter((tag) => ErrorTagSchema.safeParse(tag).success);
+}
+
+function statusForScore(score: number): 'ok' | 'warn' | 'bad' {
+  if (score >= 80) return 'ok';
+  if (score >= 60) return 'warn';
+  return 'bad';
+}
+
+function buildAnswerReviewItems(rows: ReviewAttemptRow[]): Array<{
+  questionNo: number;
+  promptShort: string;
+  questionType: string;
+  score: number;
+  status: 'ok' | 'warn' | 'bad';
+  tags: string[];
+}> {
+  return rows.map((row, idx) => {
+    const prompt = decodeAttemptPrompt(row.prompt).prompt;
+    const corrections = safeParseCorrections(row.corrections);
+    return {
+      questionNo: idx + 1,
+      promptShort: compactPrompt(prompt),
+      questionType: normalizeQuestionType(row.question_type),
+      score: row.score,
+      status: statusForScore(row.score),
+      tags: normalizeErrorTags(corrections.tags),
+    };
+  });
 }
 
 function buildStrongPoints(rows: ReviewAttemptRow[]): string[] {
@@ -214,6 +268,8 @@ export const reviewSkill: Skill = {
       }));
     const correctCount = attempts.filter((row) => row.is_correct === 1).length;
     const widgetId = ctx.makeWidgetId('progress-summary');
+    const answerReviewWidgetId = ctx.makeWidgetId('answer-review');
+    const answerReviewItems = buildAnswerReviewItems(attempts);
 
     yield {
       type: 'text-chunk',
@@ -252,6 +308,31 @@ export const reviewSkill: Skill = {
             strongPoints,
             weakPoints,
             nextSuggestions: buildSuggestions(sceneName, weakPoints, avg),
+          },
+        },
+      },
+    };
+    yield {
+      type: 'widget-init',
+      payload: {
+        widget: {
+          id: answerReviewWidgetId,
+          type: 'answer-review',
+          status: 'loading',
+          data: {},
+          version: 1,
+        },
+      },
+    };
+    yield {
+      type: 'widget-ready',
+      payload: {
+        widgetId: answerReviewWidgetId,
+        patch: {
+          status: 'ready',
+          data: {
+            title: `${sceneName} · ${answerReviewItems.length} 道题回看`,
+            items: answerReviewItems,
           },
         },
       },

@@ -202,5 +202,33 @@ describe('review skill', () => {
     expect(
       ready.payload.patch.data.masteries.some((m) => m.tag === 'missing_word')
     ).toBe(true);
+    const answerReady = events
+      .filter((e) => e.type === 'widget-ready')
+      .find(
+        (e) =>
+          (e as { payload: { patch: { data?: { title?: string } } } }).payload
+            .patch.data?.title === '餐厅点餐 · 8 道题回看'
+      ) as {
+      payload: {
+        patch: {
+          data: {
+            items: Array<{
+              questionNo: number;
+              promptShort: string;
+              score: number;
+              status: string;
+              tags: string[];
+            }>;
+          };
+        };
+      };
+    };
+    expect(answerReady.payload.patch.data.items).toHaveLength(8);
+    expect(answerReady.payload.patch.data.items[3]).toMatchObject({
+      questionNo: 4,
+      score: 55,
+      status: 'bad',
+      tags: ['missing_word'],
+    });
   });
 });

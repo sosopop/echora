@@ -14,7 +14,11 @@ import { createApp } from '../createApp.js';
 import { SkillRegistry } from '../skills/registry.js';
 import { signToken } from '../middleware/auth.js';
 import { createConversation } from '../services/conversation.js';
-import { appendMessage, getMessages } from '../services/message.js';
+import {
+  appendMessage,
+  appendStreamEvent,
+  getMessages,
+} from '../services/message.js';
 import {
   createAttempt,
   markGraded,
@@ -39,6 +43,7 @@ let userId: number;
 let token: string;
 let conversationId: number;
 let decideCalls: Array<{ userText: string }> = [];
+let routerDecisionOverride: RouterDecision | null = null;
 
 const config: Config = {
   port: 0,
@@ -82,6 +87,7 @@ beforeEach(() => {
   const conv = createConversation(db, userId, { learningState: 'practicing' });
   conversationId = conv.id;
   decideCalls = [];
+  routerDecisionOverride = null;
 
   const skillRegistry = new SkillRegistry();
   skillRegistry.register(fakeSkill('grade', ['practicing', 'grading']));
@@ -97,10 +103,28 @@ beforeEach(() => {
     ])
   );
   skillRegistry.register(fakeSkill('review', ['awaiting_next', 'reviewing']));
+  skillRegistry.register(
+    fakeSkill('explain', [
+      'practicing',
+      'grading',
+      'awaiting_next',
+      'reviewing',
+      'scene_selecting',
+    ])
+  );
+  skillRegistry.register(
+    fakeSkill('retry', [
+      'awaiting_next',
+      'reviewing',
+      'scene_selecting',
+      'practicing',
+    ])
+  );
+  skillRegistry.register(fakeSkill('general-chat', []));
   const aiRouter: AIRouter = {
     async decide(input): Promise<RouterDecision> {
       decideCalls.push({ userText: input.userText });
-      return {
+      return routerDecisionOverride ?? {
         skillName: 'practice',
         params: {},
         confidence: 0.95,
@@ -144,6 +168,128 @@ function seedAttempt(): number {
   });
   return attempt.id;
 }
+
+function seedGradingHistory(): {
+  userMessageId: number;
+  assistantMessageId: number;
+} {
+  const user = appendMessage(db, {
+    conversationId,
+    type: 'text',
+    role: 'user',
+    content: 'wrong answer with secret reference',
+  });
+  const assistant = appendMessage(db, {
+    conversationId,
+    type: 'text',
+    role: 'assistant',
+    skillName: 'grade',
+    content: '参考表达是: Thank you.',
+  });
+  appendStreamEvent(db, assistant.id, {
+    type: 'widget-init',
+    payload: {
+      widget: {
+        id: 'grading-result-history',
+        type: 'grading-result',
+        status: 'loading',
+        data: {},
+        version: 1,
+      },
+    },
+    seq: 1,
+    streamId: 'history-stream',
+    timestamp: 1,
+  });
+  appendStreamEvent(db, assistant.id, {
+    type: 'widget-ready',
+    payload: {
+      widgetId: 'grading-result-history',
+      patch: {
+        status: 'ready',
+        data: {
+          attemptId: 1,
+          score: 40,
+          isCorrect: false,
+          userAnswer: 'wrong answer with secret reference',
+          referenceAnswer: 'Thank you.',
+          explanation: '这里会泄露批改详情。',
+          tags: ['missing_word'],
+        },
+      },
+    },
+    seq: 2,
+    streamId: 'history-stream',
+    timestamp: 2,
+  });
+  return { userMessageId: user.id, assistantMessageId: assistant.id };
+}
+
+function widgetSnapshotToArray(snapshot: unknown): Array<{ type?: string }> {
+  return Array.isArray(snapshot)
+    ? (snapshot as Array<{ type?: string }>)
+    : snapshot
+    ? [snapshot as { type?: string }]
+    : [];
+}
+
+describe('GET /api/chat/conversations/:id/messages', () => {
+  it('locked 历史隐藏用户答案与 grading-result 详情', async () => {
+    const seeded = seedGradingHistory();
+
+    const res = await request(app)
+      .get(`/api/chat/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    const messages = res.body.data as Array<{
+      id: number;
+      content: string | null;
+      widgetSnapshot: unknown;
+    }>;
+    expect(messages.find((m) => m.id === seeded.userMessageId)?.content).toBe(
+      '完成当前题后查看完整答案'
+    );
+    const assistant = messages.find(
+      (m) => m.id === seeded.assistantMessageId
+    );
+    expect(assistant?.content).toBe('');
+    expect(widgetSnapshotToArray(assistant?.widgetSnapshot)[0]?.type).toBe(
+      'conversation-lock'
+    );
+    expect(JSON.stringify(res.body.data)).not.toContain(
+      'wrong answer with secret reference'
+    );
+    expect(JSON.stringify(res.body.data)).not.toContain('Thank you.');
+    expect(JSON.stringify(res.body.data)).not.toContain('这里会泄露批改详情');
+  });
+
+  it('awaiting_next 解锁后历史消息恢复原始答案和批改详情', async () => {
+    const seeded = seedGradingHistory();
+    updateLearningState(db, conversationId, 'awaiting_next', null);
+
+    const res = await request(app)
+      .get(`/api/chat/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    const messages = res.body.data as Array<{
+      id: number;
+      content: string | null;
+      widgetSnapshot: unknown;
+    }>;
+    expect(messages.find((m) => m.id === seeded.userMessageId)?.content).toBe(
+      'wrong answer with secret reference'
+    );
+    const assistant = messages.find(
+      (m) => m.id === seeded.assistantMessageId
+    );
+    expect(assistant?.content).toBe('参考表达是: Thank you.');
+    expect(widgetSnapshotToArray(assistant?.widgetSnapshot)[0]?.type).toBe(
+      'grading-result'
+    );
+  });
+});
 
 describe('POST /api/chat/send', () => {
   it('practicing 中自由文本绑定最新未批改 attempt 并走 grade', async () => {
@@ -256,6 +402,103 @@ describe('POST /api/chat/send', () => {
     expect(decideCalls).toHaveLength(0);
     const user = getMessages(db, conversationId).find((m) => m.role === 'user');
     expect(user?.content).toBe('复盘');
+  });
+
+  it('reviewing 中重练薄弱点直接走 retry,不绕 AI Router', async () => {
+    updateLearningState(db, conversationId, 'reviewing', 'review');
+
+    const res = await request(app)
+      .post('/api/chat/send')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ conversationId, text: '重练 missing_word' });
+
+    expect(res.status).toBe(202);
+    expect(res.body.data.decision).toMatchObject({
+      skillName: 'retry',
+      params: { targetTag: 'missing_word' },
+    });
+    expect(decideCalls).toHaveLength(0);
+  });
+
+  it('practicing 中为什么类追问直接走 explain,不误提交为答案', async () => {
+    seedAttempt();
+
+    const res = await request(app)
+      .post('/api/chat/send')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ conversationId, text: '为什么这里错了' });
+
+    expect(res.status).toBe(202);
+    expect(res.body.data.decision).toMatchObject({
+      skillName: 'explain',
+      params: { source: 'deterministic-text' },
+    });
+    expect(decideCalls).toHaveLength(0);
+  });
+
+  it('activeSkill=retry 时 next-question 继续走 retry', async () => {
+    updateLearningState(db, conversationId, 'practicing', 'retry');
+
+    const res = await request(app)
+      .post('/api/chat/send')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ conversationId, action: { type: 'next-question' } });
+
+    expect(res.status).toBe(202);
+    expect(res.body.data.decision).toMatchObject({
+      skillName: 'retry',
+      params: { action: { type: 'next-question' } },
+    });
+    expect(decideCalls).toHaveLength(0);
+  });
+
+  it('非锁定态 AI Router 低置信度时改走 intent-confirm', async () => {
+    updateLearningState(db, conversationId, 'awaiting_next', null);
+    routerDecisionOverride = {
+      skillName: 'review',
+      params: {},
+      confidence: 0.3,
+      rationale: 'ambiguous',
+    };
+
+    const res = await request(app)
+      .post('/api/chat/send')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ conversationId, text: '看一下之前的' });
+
+    expect(res.status).toBe(202);
+    expect(res.body.data.decision).toMatchObject({
+      skillName: 'general-chat',
+      params: {
+        intentConfirm: {
+          prompt: '看一下之前的',
+          choices: expect.arrayContaining([
+            expect.objectContaining({ id: 'review', action: 'text:复盘' }),
+          ]),
+        },
+      },
+    });
+    expect(decideCalls).toEqual([{ userText: '看一下之前的' }]);
+  });
+
+  it('practicing 中 AI Router 不能降级到 general-chat', async () => {
+    routerDecisionOverride = {
+      skillName: 'general-chat',
+      params: {},
+      confidence: 0.4,
+      rationale: 'low confidence fallback',
+    };
+
+    const res = await request(app)
+      .post('/api/chat/send')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ conversationId, text: '随便聊聊' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatchObject({
+      code: 'VALIDATION_FAILED',
+    });
+    expect(res.body.error.message).toContain('不能降级到闲聊');
   });
 
   it('直接输入答案只绑定当前活跃场景 attempt', async () => {

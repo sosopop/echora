@@ -40,19 +40,27 @@ function toDTO(row: ConversationRow): ConversationDTO {
   };
 }
 
+export function lockPolicyForLearningState(
+  state: LearningState
+): 'open' | 'locked' {
+  return state === 'practicing' || state === 'grading' ? 'locked' : 'open';
+}
+
 export function createConversation(
   db: Db,
   userId: number,
   opts?: { title?: string; learningState?: LearningState }
 ): ConversationDTO {
+  const learningState = opts?.learningState ?? 'onboarding';
   const stmt = db.prepare(
-    `INSERT INTO conversations (user_id, title, learning_state)
-     VALUES (?, ?, ?)`
+    `INSERT INTO conversations (user_id, title, learning_state, lock_policy)
+     VALUES (?, ?, ?, ?)`
   );
   const result = stmt.run(
     userId,
     opts?.title ?? null,
-    opts?.learningState ?? 'onboarding'
+    learningState,
+    lockPolicyForLearningState(learningState)
   );
   const row = db
     .prepare<[number], ConversationRow>(
@@ -100,9 +108,9 @@ export function updateLearningState(
 ): void {
   db.prepare(
     `UPDATE conversations
-     SET learning_state = ?, active_skill = ?, updated_at = datetime('now')
+     SET learning_state = ?, active_skill = ?, lock_policy = ?, updated_at = datetime('now')
      WHERE id = ?`
-  ).run(next, activeSkill ?? null, id);
+  ).run(next, activeSkill ?? null, lockPolicyForLearningState(next), id);
 }
 
 export function updateInputMode(
@@ -120,7 +128,12 @@ export function updateInputMode(
 export function archiveConversation(db: Db, id: number): void {
   db.prepare(
     `UPDATE conversations
-     SET status = 'archived', archived_at = datetime('now'), updated_at = datetime('now')
+     SET status = 'archived',
+         learning_state = 'archived',
+         active_skill = NULL,
+         lock_policy = 'open',
+         archived_at = datetime('now'),
+         updated_at = datetime('now')
      WHERE id = ?`
   ).run(id);
 }

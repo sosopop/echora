@@ -250,7 +250,9 @@ function handleStreamEvent(
     set((s) => ({
       activeWidgets: { ...s.activeWidgets, [widget.id]: widget },
       messages: s.messages.map((m) =>
-        m.id === messageId ? { ...m, widgetSnapshot: widget } : m
+        m.id === messageId
+          ? { ...m, widgetSnapshot: mergeWidgetSnapshot(m.widgetSnapshot, widget) }
+          : m
       ),
     }));
   } else if (evt.type === 'widget-update') {
@@ -265,7 +267,9 @@ function handleStreamEvent(
     set((s) => ({
       activeWidgets: { ...s.activeWidgets, [merged.id]: merged },
       messages: s.messages.map((m) =>
-        m.id === messageId ? { ...m, widgetSnapshot: merged } : m
+        m.id === messageId
+          ? { ...m, widgetSnapshot: mergeWidgetSnapshot(m.widgetSnapshot, merged) }
+          : m
       ),
     }));
   } else if (evt.type === 'mode-switch') {
@@ -284,7 +288,9 @@ function findMessageWidget(
   widgetId: string
 ): LearningWidgetInstance | null {
   const msg = messages.find((m) => m.id === messageId);
-  const snap = msg?.widgetSnapshot as Partial<LearningWidgetInstance> | null;
+  const snap = widgetSnapshotToArray(msg?.widgetSnapshot).find(
+    (w) => w.id === widgetId
+  );
   if (!snap?.id || snap.id !== widgetId || !snap.type) return null;
   return {
     id: snap.id,
@@ -293,6 +299,35 @@ function findMessageWidget(
     data: snap.data ?? {},
     version: snap.version ?? 1,
   };
+}
+
+function widgetSnapshotToArray(
+  snapshot: unknown
+): Partial<LearningWidgetInstance>[] {
+  if (Array.isArray(snapshot)) {
+    return snapshot.filter(
+      (w): w is Partial<LearningWidgetInstance> =>
+        typeof w === 'object' && w !== null
+    );
+  }
+  if (typeof snapshot === 'object' && snapshot !== null) {
+    return [snapshot as Partial<LearningWidgetInstance>];
+  }
+  return [];
+}
+
+function mergeWidgetSnapshot(
+  snapshot: unknown,
+  widget: LearningWidgetInstance
+): LearningWidgetInstance | LearningWidgetInstance[] {
+  const widgets = widgetSnapshotToArray(snapshot).filter(
+    (w): w is LearningWidgetInstance =>
+      typeof w.id === 'string' &&
+      typeof w.type === 'string' &&
+      w.id !== widget.id
+  );
+  widgets.push(widget);
+  return widgets.length === 1 ? widgets[0] : widgets;
 }
 
 function clearStreamBuffer(

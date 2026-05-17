@@ -44,6 +44,47 @@ function safeParse(s: string): unknown {
   }
 }
 
+function snapshotToWidgets(
+  snapshot: string | null
+): Record<string, unknown>[] {
+  if (!snapshot) return [];
+  const parsed = safeParse(snapshot);
+  if (Array.isArray(parsed)) {
+    return parsed.filter(
+      (w): w is Record<string, unknown> =>
+        typeof w === 'object' && w !== null && typeof w.id === 'string'
+    );
+  }
+  if (
+    typeof parsed === 'object' &&
+    parsed !== null &&
+    typeof (parsed as { id?: unknown }).id === 'string'
+  ) {
+    return [parsed as Record<string, unknown>];
+  }
+  return [];
+}
+
+function serializeWidgets(widgets: Record<string, unknown>[]): string | null {
+  if (widgets.length === 0) return null;
+  return JSON.stringify(widgets.length === 1 ? widgets[0] : widgets);
+}
+
+function upsertWidgetSnapshot(
+  snapshot: string | null,
+  widgetId: string,
+  patch: Record<string, unknown>
+): string | null {
+  const widgets = snapshotToWidgets(snapshot);
+  const idx = widgets.findIndex((w) => w.id === widgetId);
+  if (idx >= 0) {
+    widgets[idx] = { ...widgets[idx], ...patch, id: widgetId };
+  } else {
+    widgets.push({ ...patch, id: widgetId });
+  }
+  return serializeWidgets(widgets);
+}
+
 function nextSeq(db: Db, conversationId: number): number {
   const row = db
     .prepare<[number], { max_seq: number | null }>(
@@ -124,13 +165,17 @@ export function appendStreamEvent(
   if (event.type === 'text-chunk') {
     nextContent = (nextContent ?? '') + event.payload.text;
   } else if (event.type === 'widget-init') {
-    nextWidgetSnapshot = JSON.stringify(event.payload.widget);
+    nextWidgetSnapshot = upsertWidgetSnapshot(
+      nextWidgetSnapshot,
+      event.payload.widget.id,
+      event.payload.widget as unknown as Record<string, unknown>
+    );
   } else if (event.type === 'widget-update' || event.type === 'widget-ready') {
-    const prev = nextWidgetSnapshot
-      ? (safeParse(nextWidgetSnapshot) as Record<string, unknown>)
-      : {};
-    const merged = { ...prev, ...event.payload.patch };
-    nextWidgetSnapshot = JSON.stringify(merged);
+    nextWidgetSnapshot = upsertWidgetSnapshot(
+      nextWidgetSnapshot,
+      event.payload.widgetId,
+      event.payload.patch as Record<string, unknown>
+    );
   }
 
   db.prepare(

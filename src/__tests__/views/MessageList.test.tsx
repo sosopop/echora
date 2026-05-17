@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import MessageList from '../../views/Chat/MessageList';
 import { useChatStore } from '../../stores/chat';
 
@@ -93,5 +93,61 @@ describe('MessageList scrolling', () => {
         expect.objectContaining({ top: 2400 })
       );
     });
+  });
+
+  it('同一条消息可渲染多个 widget snapshot', () => {
+    useChatStore.setState({
+      streamingMessageId: null,
+      messages: [
+        {
+          id: 2,
+          conversationId: 1,
+          type: 'text',
+          role: 'assistant',
+          skillName: 'review',
+          content: '本轮复盘来了',
+          widgetSnapshot: [
+            {
+              id: 'summary-1',
+              type: 'progress-summary',
+              status: 'ready',
+              data: {
+                title: '餐厅点餐 · 已经达标',
+                sceneName: '餐厅点餐',
+                questionsCount: 2,
+                averageScore: 86,
+              },
+              version: 1,
+            },
+            {
+              id: 'answer-review-1',
+              type: 'answer-review',
+              status: 'ready',
+              data: {
+                title: '餐厅点餐 · 2 道题回看',
+                items: [
+                  {
+                    questionNo: 1,
+                    promptShort: 'Fill the blank.',
+                    questionType: 'fill_word',
+                    score: 90,
+                    status: 'ok',
+                    tags: [],
+                  },
+                ],
+              },
+              version: 1,
+            },
+          ],
+          seq: 1,
+          createdAt: new Date().toISOString(),
+        },
+      ],
+    });
+
+    render(<MessageList />);
+
+    expect(screen.getByText('餐厅点餐 · 已经达标')).toBeInTheDocument();
+    expect(screen.getByText('餐厅点餐 · 2 道题回看')).toBeInTheDocument();
   });
 });

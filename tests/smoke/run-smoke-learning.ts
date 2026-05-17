@@ -1,8 +1,8 @@
 /**
  * smoke:learning — 学习闭环 E2E 烟雾测试(确定性 ScriptedProvider)
  *
- * 覆盖 PRD §5.1 + §5.2 验收点。10 场景:
- *   A · 完整闭环(register → onboarding → scene-select → 阶段 1*2 → 阶段 2*2 → 阶段 3*2 → 阶段 4*2 → awaiting_next → review)
+ * 覆盖 PRD §5.1 + §5.2 验收点。12 场景:
+ *   A · 完整闭环(register → onboarding → scene-select → 阶段 1*2 → 阶段 2*2 → 阶段 3*2 → 阶段 4*2 → awaiting_next → review → retry)
  *   B · 换一批 → 候选过滤已用
  *   C · scene_history 累计 10 → 第 11 次 prune
  *   D · 答错 → retry_count=1 保持 practicing
@@ -12,6 +12,8 @@
  *   H · /send 同时传 text + action → zod 拒
  *   I · provider chat 抛 → SkillEvent error,无 fallback
  *   J · grade 后续 → 阶段 1 全过自动进阶段 2
+ *   K · explain 追问 → follow-up-source + 基于最近批改解释
+ *   L · 低置信度路由 → intent-confirm
  */
 
 import { setTimeout as delay } from 'node:timers/promises';
@@ -280,7 +282,7 @@ function scenario(id: string, title: string, run: () => Promise<void>): void {
 }
 
 /* ------- A · 完整闭环 ------- */
-scenario('A', '完整闭环(scene → 阶段 1-4 各 2 题 → awaiting_next → review)', async () => {
+scenario('A', '完整闭环(scene → 阶段 1-4 各 2 题 → awaiting_next → review → retry)', async () => {
   const provider = buildLearningProvider();
   const app = await startTestApp({ provider });
   try {
@@ -374,6 +376,41 @@ scenario('A', '完整闭环(scene → 阶段 1-4 各 2 题 → awaiting_next →
     assertEq(summaryReady.payload.patch.data.averageScore, 90, '复盘平均分');
     assertTrue(summaryReady.payload.patch.data.masteries.length > 0, '复盘包含掌握度');
     assertTrue(summaryReady.payload.patch.data.nextSuggestions.length > 0, '复盘包含下一步建议');
+
+    // 12. 从复盘进入重练 → stage=5 exercise-card,下一题仍回 retry
+    s = await httpJson<{ data: { streamId: string; decision: RouterDecision } }>(
+      app.baseUrl, 'POST', '/api/chat/send',
+      { token, body: { conversationId: convId, text: '重练 missing_word' } }
+    );
+    assertEq(s.body.data.decision.skillName, 'retry', '重练确定性路由 retry');
+    await delay(80);
+    e = await collectSseEvents(app.baseUrl, s.body.data.streamId, token);
+    const retryReady = eventsByType(e, 'widget-ready')[0] as {
+      payload: { patch: { data: { attemptId: number; stage: number; questionNo: number } } };
+    };
+    assertEq(retryReady.payload.patch.data.stage, 5, '重练题使用 stage=5');
+    assertEq(retryReady.payload.patch.data.questionNo, 1, '重练第 1 题');
+    const retryAttemptId = retryReady.payload.patch.data.attemptId;
+
+    s = await httpJson<{ data: { streamId: string } }>(
+      app.baseUrl, 'POST', '/api/chat/send',
+      {
+        token,
+        body: {
+          conversationId: convId,
+          action: { type: 'submit-answer', payload: { attemptId: retryAttemptId, answer: '正确答案' } },
+        },
+      }
+    );
+    await delay(80);
+    e = await collectSseEvents(app.baseUrl, s.body.data.streamId, token);
+    assertEq(eventsByType(e, 'state-transition').length, 0, '重练第 1 题通过不结束专项');
+
+    s = await httpJson<{ data: { streamId: string; decision: RouterDecision } }>(
+      app.baseUrl, 'POST', '/api/chat/send',
+      { token, body: { conversationId: convId, action: { type: 'next-question' } } }
+    );
+    assertEq(s.body.data.decision.skillName, 'retry', '重练下一题继续 retry');
   } finally {
     await app.cleanup();
   }
@@ -715,6 +752,118 @@ scenario('J', '阶段 1 两题全过后下题为阶段 2(mode=chat)', async () =
       payload: { mode: string };
     };
     assertEq(mode.payload.mode, 'chat', '阶段 2 模式 chat');
+  } finally {
+    await app.cleanup();
+  }
+});
+
+/* ------- K · explain 追问最近批改 ------- */
+scenario('K', 'explain 追问最近批改 → follow-up-source + 错因解释', async () => {
+  const provider = buildLearningProvider();
+  const app = await startTestApp({ provider });
+  try {
+    const { token } = await registerUser(app.baseUrl);
+    await setProfileComplete(app.baseUrl, token);
+    const convId = await createConv(app.baseUrl, token, 'scene_selecting');
+    await httpJson(app.baseUrl, 'POST', '/api/chat/send', {
+      token,
+      body: {
+        conversationId: convId,
+        action: { type: 'select-scene', payload: { sceneId: 'cafe' } },
+      },
+    });
+    await delay(80);
+
+    let s = await httpJson<{ data: { streamId: string } }>(
+      app.baseUrl, 'POST', '/api/chat/send',
+      { token, body: { conversationId: convId, text: '出题' } }
+    );
+    await delay(80);
+    let e = await collectSseEvents(app.baseUrl, s.body.data.streamId, token);
+    const ready = eventsByType(e, 'widget-ready')[0] as {
+      payload: { patch: { data: { attemptId: number } } };
+    };
+    const attemptId = ready.payload.patch.data.attemptId;
+
+    s = await httpJson<{ data: { streamId: string } }>(
+      app.baseUrl, 'POST', '/api/chat/send',
+      {
+        token,
+        body: {
+          conversationId: convId,
+          action: {
+            type: 'submit-answer',
+            payload: { attemptId, answer: '错误答案' },
+          },
+        },
+      }
+    );
+    await delay(80);
+    await collectSseEvents(app.baseUrl, s.body.data.streamId, token);
+
+    s = await httpJson<{ data: { streamId: string; decision: RouterDecision } }>(
+      app.baseUrl, 'POST', '/api/chat/send',
+      { token, body: { conversationId: convId, text: '为什么错' } }
+    );
+    assertEq(s.body.data.decision.skillName, 'explain', '为什么错确定性路由 explain');
+    await delay(80);
+    e = await collectSseEvents(app.baseUrl, s.body.data.streamId, token);
+    const sourceReady = eventsByType(e, 'widget-ready')[0] as {
+      payload: { patch: { data: { sourceKind: string; sourceLabel: string } } };
+    };
+    assertEq(sourceReady.payload.patch.data.sourceKind, 'grading', 'explain 来源为 grading');
+    assertTrue(
+      sourceReady.payload.patch.data.sourceLabel.includes('30 分'),
+      'explain 来源含最近批改分数'
+    );
+    const text = eventsByType(e, 'text-chunk')
+      .map((ev) => (ev as { payload: { text: string } }).payload.text)
+      .join('');
+    assertTrue(text.includes('preposition'), 'explain 文本含错误标签');
+    assertTrue(text.includes('我按最近一次批改来讲'), 'explain 文本基于最近批改');
+  } finally {
+    await app.cleanup();
+  }
+});
+
+/* ------- L · 低置信度 → intent-confirm ------- */
+scenario('L', '低置信度路由 → intent-confirm', async () => {
+  const provider = buildLearningProvider({
+    routeFn: () => ({
+      skillName: 'review',
+      params: {},
+      confidence: 0.3,
+      rationale: 'ambiguous',
+    }),
+  });
+  const app = await startTestApp({ provider });
+  try {
+    const { token } = await registerUser(app.baseUrl);
+    await setProfileComplete(app.baseUrl, token);
+    const convId = await createConv(app.baseUrl, token, 'scene_selecting');
+    app.db
+      .prepare('UPDATE conversations SET learning_state = ?, lock_policy = ? WHERE id = ?')
+      .run('awaiting_next', 'open', convId);
+
+    const s = await httpJson<{ data: { streamId: string; decision: RouterDecision } }>(
+      app.baseUrl, 'POST', '/api/chat/send',
+      { token, body: { conversationId: convId, text: '看一下之前的' } }
+    );
+    assertEq(s.body.data.decision.skillName, 'general-chat', '低置信度转 general-chat intent-confirm');
+    assertTrue(
+      Boolean((s.body.data.decision.params as { intentConfirm?: unknown }).intentConfirm),
+      'decision params 带 intentConfirm'
+    );
+    await delay(80);
+    const e = await collectSseEvents(app.baseUrl, s.body.data.streamId, token);
+    const ready = eventsByType(e, 'widget-ready')[0] as {
+      payload: { patch: { data: { question: string; choices: Array<{ id: string }> } } };
+    };
+    assertEq(ready.payload.patch.data.question, '你想让我怎么处理?', 'intent-confirm question');
+    assertTrue(
+      ready.payload.patch.data.choices.some((choice) => choice.id === 'review'),
+      'intent-confirm 包含复盘选项'
+    );
   } finally {
     await app.cleanup();
   }

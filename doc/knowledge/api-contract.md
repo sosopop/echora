@@ -67,6 +67,55 @@ type ChatAction =
 
 `review` 返回的 `progress-summary` widget 继续使用 `shared/widget.ts` 既有 schema。批改后服务端会把 `grading_results.corrections.tags` 写入 `error_tag_events`,并更新 `mastery_records`;正确且无 tag 的题不会写错误事件,但会以题型作为 fallback tag 更新掌握度。
 
+017 起,`review` 同一条 assistant 消息会连续返回 `progress-summary` 与 `answer-review` 两个 widget。`messages.widget_snapshot` 兼容两种形态:历史单 widget object,以及多 widget array。前端 `MessageList` 会按数组顺序渲染多个 `WidgetSlot`;后端 `appendStreamEvent` 也会按 widget id upsert,避免后一个 widget 覆盖前一个 widget。
+
+016 起,`awaiting_next` / `reviewing` / `scene_selecting` / `practicing` 下的 `重练` / `重练错题` / `开始重练` / `retry` 会确定性形成 `RouterDecision { skillName: 'retry' }`;`重练 <tag>` 会把 `<tag>` 写入 `decision.params.targetTag`。不新增 ChatAction。若会话 `activeSkill='retry'`,结构化 `{ type: 'next-question' }` 会继续路由 `retry`,否则仍路由 `practice`。
+
+018 起,`conversations.lock_policy` 由 `learning_state` 自动维护:`practicing` / `grading` 写为 `locked`,其余学习态写为 `open`。`GET /api/chat/conversations/:id/messages` 在 locked 状态下会对历史消息做服务端脱敏:
+
+- 用户答题消息替换为 `"完成当前题后查看完整答案"`
+- `grade` assistant 消息正文清空,`grading-result` widget 替换为 `conversation-lock`
+- 解锁态(`awaiting_next` / `reviewing` 等)返回原始历史消息和原始 widget snapshot
+
+019 起,`practicing` / `grading` / `awaiting_next` / `reviewing` / `scene_selecting` 下的 `为什么` / `为什么错` / `解释` / `怎么改` / `why` / `explain` 等文本会确定性形成 `RouterDecision { skillName: 'explain' }`;该判断发生在自由文本答案兜底之前,避免解释追问被误提交为答案。不新增 ChatAction。
+
+`explain` 返回 `follow-up-source` widget + 文本解释:
+
+- 未批改题:`sourceKind='exercise'`,只给提示,不返回参考答案
+- 已批改题:`sourceKind='grading'`,可使用 `user_answer`、`referenceAnswer`、`explanation`、`tags` 解释错因
+
+020 起,自由文本交给 AI Router 后,若返回 `confidence < 0.5` 且当前学习态为 `scene_selecting` / `awaiting_next` / `reviewing`,chat route 不直接执行低置信度目标 Skill,而是改写为:
+
+```ts
+{
+  skillName: 'general-chat',
+  params: { intentConfirm: { question, prompt, choices, risk, originalDecision } },
+  confidence: 1
+}
+```
+
+`general-chat` 会返回 `intent-confirm` widget。`choices[].action` 是前端解析的字符串协议:
+
+- `action:request-new-scenes` → `sendAction({ type: 'request-new-scenes' })`
+- `action:next-question` → `sendAction({ type: 'next-question' })`
+- `text:<内容>` → `sendMessage(<内容>)`
+
+`practicing` / `grading` 中若 Router 试图降级到 `general-chat`,后端返回 `400 VALIDATION_FAILED`,避免练习或批改中被低置信闲聊兜底带偏。
+
+016 起,重练题的 `exercise_attempts.prompt` 允许存储兼容 JSON 包装:
+
+```json
+{
+  "__echoraPrompt": 1,
+  "kind": "retry",
+  "prompt": "Fill the blank: ...",
+  "referenceAnswer": "to",
+  "targetTag": "missing_word"
+}
+```
+
+旧数据的纯字符串 prompt 仍按原逻辑处理。
+
 006 起,结构化 `action` 在消息历史中显示为自然文案,不再暴露 `[action] {...}` 原始 JSON。008 起 `submit-answer` 显示用户真实答案,其他映射保持:`request-new-scenes` → "换一批场景",`select-scene` → "选择场景:<sceneId>",`skip-question` → "跳过本题",`next-question` → "下一题"。前端仍兼容历史 raw action 消息,渲染时会转为同一套文案。
 
 ## SSE 协议
