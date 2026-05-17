@@ -2,32 +2,70 @@
  * GradingResult Widget — 批改结果卡片
  *
  * 数据来源:grade skill widget-ready 落到 data
- *   - score / isCorrect / userAnswer / referenceAnswer / explanation / tags / attemptId
- * 交互:底部「下一题」按钮 → sendAction({ type: 'next-question' })
+ *   - category / isCorrect / userAnswer / referenceAnswer / explanation / tags / attemptId
+ * 正确或相近答案由后端自动串接下一题,这里不再显示分数和下一题按钮。
  */
 
 import type { LearningWidgetInstance } from '@shared/skill';
-import { useChatStore } from '../../stores/chat.js';
 import styles from './widgets.module.css';
+
+type GradingCategory = 'exact' | 'similar' | 'incorrect';
 
 interface GradingResultData {
   attemptId?: number;
   score?: number;
   isCorrect?: boolean;
+  category?: GradingCategory;
   userAnswer?: string;
   referenceAnswer?: string;
   explanation?: string;
   tags?: string[];
 }
 
-function bandFor(score: number, isCorrect: boolean): 'correct' | 'warn' | 'wrong' {
-  if (isCorrect || score >= 80) return 'correct';
-  if (score >= 60) return 'warn';
-  return 'wrong';
+function categoryFromData(data: GradingResultData): GradingCategory | null {
+  if (
+    data.category === 'exact' ||
+    data.category === 'similar' ||
+    data.category === 'incorrect'
+  ) {
+    return data.category;
+  }
+  if (typeof data.isCorrect !== 'boolean') return null;
+  return data.isCorrect
+    ? (data.score ?? 0) >= 95
+      ? 'exact'
+      : 'similar'
+    : 'incorrect';
 }
 
-function labelFor(band: 'correct' | 'warn' | 'wrong'): string {
-  return band === 'correct' ? '通过' : band === 'warn' ? '部分对' : '未通过';
+function bandFor(category: GradingCategory): 'correct' | 'warn' | 'wrong' {
+  return category === 'exact'
+    ? 'correct'
+    : category === 'similar'
+    ? 'warn'
+    : 'wrong';
+}
+
+function labelFor(category: GradingCategory): string {
+  switch (category) {
+    case 'exact':
+      return '完全正确';
+    case 'similar':
+      return '还不错';
+    case 'incorrect':
+      return '错误';
+  }
+}
+
+function descFor(category: GradingCategory): string {
+  switch (category) {
+    case 'exact':
+      return '和参考表达完全匹配,已自动继续练习。';
+    case 'similar':
+      return '意思相近,表达可以接受,已自动继续练习。';
+    case 'incorrect':
+      return '语法、拼写或意思还不一致,可以在底部改一句再提交。';
+  }
 }
 
 export default function GradingResult({
@@ -35,29 +73,23 @@ export default function GradingResult({
 }: {
   widget: LearningWidgetInstance;
 }): JSX.Element | null {
-  const sendAction = useChatStore((s) => s.sendAction);
-  const streaming = useChatStore((s) => s.streamingMessageId !== null);
   const data = (widget.data ?? {}) as GradingResultData;
-  if (
-    widget.status !== 'ready' ||
-    typeof data.score !== 'number' ||
-    typeof data.isCorrect !== 'boolean'
-  ) {
+  const category = categoryFromData(data);
+  if (widget.status !== 'ready' || !category) {
     return null;
   }
-  const score = data.score;
-  const band = bandFor(score, data.isCorrect);
-  const bandLabel = labelFor(band);
+  const band = bandFor(category);
+  const bandLabel = labelFor(category);
 
   return (
     <div className={styles.gradingCard}>
       <div className={`${styles.gradingBar} ${styles[band]}`} />
       <div className={styles.gradingBody}>
-        <div className={styles.gradingScoreRow}>
-          <span className={styles.gradingScore}>{score}</span>
+        <div className={styles.gradingStatusRow}>
           <span className={`${styles.gradingBadge} ${styles[band]}`}>
             {bandLabel}
           </span>
+          <span className={styles.gradingStatusDesc}>{descFor(category)}</span>
         </div>
         <div className={styles.gradingCompare}>
           <div className={styles.gradingAnswerBlock}>
@@ -87,21 +119,11 @@ export default function GradingResult({
             ))}
           </div>
         )}
-        <div className={styles.gradingActions}>
-          {!data.isCorrect && (
-            <span className={styles.gradingRetryHint}>
-              可以在底部改一句再提交
-            </span>
-          )}
-          <button
-            type="button"
-            className={styles.btnPrimary}
-            disabled={streaming}
-            onClick={() => void sendAction({ type: 'next-question' })}
-          >
-            {data.isCorrect ? '下一题 →' : '跳过到下一题 →'}
-          </button>
-        </div>
+        {category === 'incorrect' && (
+          <div className={styles.gradingRetryHint}>
+            可以在底部改一句再提交。
+          </div>
+        )}
       </div>
     </div>
   );

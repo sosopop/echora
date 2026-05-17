@@ -80,12 +80,13 @@
 ## grade Skill(003 已真实接入)
 
 - 入口:`server/skills/grade.ts` + `server/skills/_helpers/gradeFsm.ts`
-- 流程:从 `ctx.params.action(submit-answer)` 拿 attemptId + answer → 锁定检查 → `markSubmitted` → `runGrading`(LLM tool `grade_answer`,12 错误标签 enum)→ `createGrading`(UPSERT 支持重批改)→ `markGraded`
+- 流程:从 `ctx.params.action(submit-answer)` 拿 attemptId + answer → 锁定检查 → `markSubmitted` → `runGrading`(LLM tool `grade_answer`,三档 `category` + 12 错误标签 enum)→ `createGrading`(UPSERT 支持重批改)→ `markGraded`
 - 008/010 兜底:若用户在 `practicing` 态直接输入非控制指令文本,chat route 会把当前活跃场景下最新可作答 attempt 自动包装成 `submit-answer` 并进入 grade;前端 chat/fill 输入同样优先提交最新可作答 exercise-card,但 `出题` / `下一题` / `go` 等控制指令会确定性进入 practice,避免阶段 2 chat 模式答案被当作 general chat。
 - 008 批改 prompt 会从当前 `scene_dialogue` + attempt stage/questionNo 重新推导参考答案,并要求模型优先按参考答案批改,减少错题反馈漂移。
 - 015 起批改后调用 `recordGradingLearningSignals`:根据 `corrections.tags` 写入 `error_tag_events`,并用错误 tag 或题型 fallback 更新 `mastery_records`。正确且无错误标签的题不会生成错误事件,但会更新对应题型掌握度。
 - 主线错题 retry:错答 `incrementRetry`,达 2 次 `markNeedsReview`;016 起用户可在复盘后触发 `retry` Skill 生成专项降难题,但单题第 2 次失败后自动替换题仍未接入。
-- 阶段判断:本题答对且 `countStagePassed >= STAGE_GOAL` 且 `stage >= MAX_STAGE_MVP(4)` → state-transition('awaiting_next');阶段 4 答对时如存在下一句对方回应,会在批改后追加自然文本展示。
+- 批改分档:021 起 `grade_answer` 输出 `category=exact/similar/incorrect`;`exact` 表示与参考表达完全匹配(忽略大小写、首尾空格、句末标点),`similar` 表示意思相近且语法可接受,`incorrect` 表示语法、拼写或意思不一致。`isCorrect` 仍保留给数据闭环,规则为 `exact/similar=true`,`incorrect=false`;百分制 `score` 只用于内部统计,前端批改卡不展示。
+- 阶段判断:本题为 `exact/similar` 后,若本阶段未完成会立即调用 `practice` 自动出下一题;若本阶段完成但未到阶段 4,自动进入下一阶段第一题;若 `countStagePassed >= STAGE_GOAL` 且 `stage >= MAX_STAGE_MVP(4)` → state-transition('awaiting_next')。阶段 4 答对时如存在下一句对方回应,会在批改后追加自然文本展示。
 
 ## review Skill(015 已真实接入)
 
@@ -104,7 +105,7 @@
 - 选点:优先使用 `params.targetTag`,其次按当前场景的 `error_tag_events` 聚合次数选最高频 tag,再退到用户 `mastery_records` 中低于 80 分的最低掌握度 tag。
 - 出题:生成 3 道降难专项题,使用内部 `stage=5`,写入 `exercise_attempts`;前端展示为"重练 · 第 N 题",不暴露阶段 5。
 - 批改:复用 `grade` Skill。016 起 `exercise_attempts.prompt` 可存一层轻量 JSON,记录显示题干、参考答案和目标 tag;`gradeFsm` 会解析后稳定批改。历史普通字符串 prompt 仍兼容。
-- 推进:重练第 1/2 题通过后保持 `practicing + activeSkill=retry`;`next-question` 在 activeSkill 为 retry 时继续路由 `retry`。第 3 道重练题通过或 retry 已生成 3 题后,转 `reviewing`。
+- 推进:021 起重练第 1/2 题通过后由 `grade` 自动调用 `retry` 生成下一道专项题,并保持 `practicing + activeSkill=retry`;`next-question` 在 activeSkill 为 retry 时仍可继续路由 `retry` 作为兼容。第 3 道重练题通过或 retry 已生成 3 题后,转 `reviewing`。
 
 ## explain Skill(019 已真实接入)
 

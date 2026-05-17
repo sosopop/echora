@@ -30,12 +30,16 @@ function shouldRenderWidget(widget: LearningWidgetInstance): boolean {
 
   if (widget.type === 'grading-result') {
     const data = widget.data as
-      | { score?: unknown; isCorrect?: unknown }
+      | { category?: unknown; score?: unknown; isCorrect?: unknown }
       | undefined;
+    const hasCategory =
+      data?.category === 'exact' ||
+      data?.category === 'similar' ||
+      data?.category === 'incorrect';
+    const hasLegacyResult = typeof data?.isCorrect === 'boolean';
     return (
       widget.status === 'ready' &&
-      typeof data?.score === 'number' &&
-      typeof data?.isCorrect === 'boolean'
+      (hasCategory || hasLegacyResult)
     );
   }
 

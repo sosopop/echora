@@ -209,6 +209,20 @@
   line-height: 1;
 }
 
+.gradingStatusRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.gradingStatusDesc {
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .gradingBadge {
   padding: 4px 12px;
   border-radius: var(--radius-pill);

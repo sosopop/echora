@@ -9,9 +9,9 @@
  *   5. runGrading → LLM tool='grade_answer' → 落 grading_results + markGraded
  *   6. yield text-chunk + widget-init/ready(grading-result)
  *   7. 错答 → incrementRetry,若达 2 次 → markNeedsReview;保持 practicing
- *   8. 对答 → 阶段完成判断:
+ *   8. 对答/相近 → 阶段完成判断并自动串接下一题:
  *      - 阶段 1-4 全部 STAGE_GOAL 满足 → state-transition('awaiting_next')
- *      - 否则保持 practicing,前端发 next-question 拿下一题
+ *      - 否则继续调用 practice/retry 出下一题,不需要用户点击
  */
 
 import type { Skill, SkillEventInput } from '../../shared/skill.js';
@@ -35,6 +35,10 @@ import {
   buildQuestionFromTurn,
 } from './_helpers/practiceFsm.js';
 import { recordGradingLearningSignals } from '../services/learningSignals.js';
+import { practiceSkill } from './practice.js';
+import { retrySkill } from './retry.js';
+import { decodeAttemptPrompt } from '../services/attemptPrompt.js';
+import type { GradingCategory } from './_helpers/gradeFsm.js';
 
 const RETRY_STAGE = 5;
 const RETRY_GOAL = 3;
@@ -53,6 +57,17 @@ function countRetryAttempts(
     )
     .get(ctx.conversationId, RETRY_STAGE, sceneId);
   return row?.c ?? 0;
+}
+
+function categoryLabel(category: GradingCategory): string {
+  switch (category) {
+    case 'exact':
+      return '完全正确';
+    case 'similar':
+      return '还不错';
+    case 'incorrect':
+      return '错误';
+  }
 }
 
 export const gradeSkill: Skill = {
@@ -183,6 +198,7 @@ export const gradeSkill: Skill = {
             attemptId,
             score: result.score,
             isCorrect: result.isCorrect,
+            category: result.category,
             userAnswer: answer,
             referenceAnswer: result.corrections.referenceAnswer,
             explanation: result.corrections.explanation,
@@ -212,6 +228,11 @@ export const gradeSkill: Skill = {
       return;
     }
 
+    yield {
+      type: 'text-chunk',
+      payload: { text: `${categoryLabel(result.category)}。` },
+    };
+
     // 重练专项题通过 → 不推进 4 阶段主线,由 retry skill 继续出下一题
     if (attempt.stage === RETRY_STAGE) {
       const retryCount = countRetryAttempts(ctx, attempt.sceneId);
@@ -231,8 +252,17 @@ export const gradeSkill: Skill = {
           type: 'text-chunk',
           payload: { text: '专项题答对了,继续下一题。' },
         };
+        const retryPrompt = decodeAttemptPrompt(attempt.prompt);
+        for await (const ev of retrySkill.handler({
+          ...ctx,
+          learningState: 'practicing',
+          params: {
+            targetTag: retryPrompt.targetTag,
+          },
+        })) {
+          yield ev;
+        }
       }
-      yield { type: 'done', payload: {} };
       return;
     }
 
@@ -274,14 +304,25 @@ export const gradeSkill: Skill = {
     } else if (stageComplete) {
       yield {
         type: 'text-chunk',
-        payload: { text: `阶段 ${attempt.stage} 完成,可以进入下一阶段。` },
+        payload: { text: `阶段 ${attempt.stage} 完成,进入下一阶段。` },
       };
-      // 保持 practicing,前端发 next-question 触发 practice skill 出下一题
+      for await (const ev of practiceSkill.handler({
+        ...ctx,
+        learningState: 'practicing',
+        params: {},
+      })) {
+        yield ev;
+      }
+      return;
     } else {
-      yield {
-        type: 'text-chunk',
-        payload: { text: '答得不错,继续下一题。' },
-      };
+      for await (const ev of practiceSkill.handler({
+        ...ctx,
+        learningState: 'practicing',
+        params: {},
+      })) {
+        yield ev;
+      }
+      return;
     }
 
     yield { type: 'done', payload: {} };

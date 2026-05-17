@@ -148,6 +148,39 @@ function assertTrue(cond: boolean, msg: string): void {
 function eventsByType(events: SkillEvent[], type: SkillEvent['type']): SkillEvent[] {
   return events.filter((e) => e.type === type);
 }
+function widgetReadyDataByType<T>(
+  events: SkillEvent[],
+  type: string
+): T | null {
+  const widgetTypes = new Map<string, string>();
+  for (const event of events) {
+    if (event.type !== 'widget-init') continue;
+    const payload = event.payload as { widget?: { id?: string; type?: string } };
+    if (payload.widget?.id && payload.widget.type) {
+      widgetTypes.set(payload.widget.id, payload.widget.type);
+    }
+  }
+  for (const event of events) {
+    if (event.type !== 'widget-ready') continue;
+    const payload = event.payload as {
+      widgetId?: string;
+      patch?: { data?: unknown };
+    };
+    if (payload.widgetId && widgetTypes.get(payload.widgetId) === type) {
+      return payload.patch?.data as T;
+    }
+  }
+  return null;
+}
+function requireWidgetReadyDataByType<T>(
+  events: SkillEvent[],
+  type: string,
+  label: string
+): T {
+  const data = widgetReadyDataByType<T>(events, type);
+  if (!data) throw new Error(`missing ${type} widget-ready: ${label}`);
+  return data;
+}
 
 /* ============================================================
  * 测试脚本工厂 — 共用 provider 配置
@@ -309,23 +342,16 @@ scenario('A', '完整闭环(scene → 阶段 1-4 各 2 题 → awaiting_next →
     const t1 = eventsByType(e, 'state-transition');
     assertEq(t1.length, 1, 'select-scene transition');
     assertEq((t1[0] as { payload: { nextLearningState: string } }).payload.nextLearningState, 'practicing', 'to practicing');
+    let currentAttemptId = requireWidgetReadyDataByType<{ attemptId: number }>(
+      e,
+      'exercise-card',
+      'select-scene first exercise'
+    ).attemptId;
+    assertTrue(currentAttemptId > 0, 'select-scene got first attemptId');
 
-    // 3-10. 阶段 1-4 各两题(各发 practice/grade 循环)
+    // 3-10. 阶段 1-4 各两题;答对后同一条 grade 流自动带出下一题
     let lastTransition: string | null = null;
     for (let i = 0; i < 8; i++) {
-      // 触发 practice:发空内容不行,发"出题"文本
-      s = await httpJson<{ data: { streamId: string } }>(
-        app.baseUrl, 'POST', '/api/chat/send',
-        { token, body: { conversationId: convId, text: '出题' } }
-      );
-      await delay(80);
-      e = await collectSseEvents(app.baseUrl, s.body.data.streamId, token);
-      const ready = eventsByType(e, 'widget-ready')[0] as {
-        payload: { patch: { data: { attemptId: number } } };
-      };
-      const attemptId = ready.payload.patch.data.attemptId;
-      assertTrue(attemptId > 0, `q${i} got attemptId`);
-
       // 提交正确答案
       s = await httpJson<{ data: { streamId: string } }>(
         app.baseUrl, 'POST', '/api/chat/send',
@@ -333,7 +359,10 @@ scenario('A', '完整闭环(scene → 阶段 1-4 各 2 题 → awaiting_next →
           token,
           body: {
             conversationId: convId,
-            action: { type: 'submit-answer', payload: { attemptId, answer: '正确答案' } },
+            action: {
+              type: 'submit-answer',
+              payload: { attemptId: currentAttemptId, answer: '正确答案' },
+            },
           },
         }
       );
@@ -342,6 +371,14 @@ scenario('A', '完整闭环(scene → 阶段 1-4 各 2 题 → awaiting_next →
       const tr = eventsByType(e, 'state-transition');
       if (tr.length > 0) {
         lastTransition = (tr[0] as { payload: { nextLearningState: string } }).payload.nextLearningState;
+      }
+      if (i < 7) {
+        currentAttemptId = requireWidgetReadyDataByType<{ attemptId: number }>(
+          e,
+          'exercise-card',
+          `q${i + 2} auto next exercise`
+        ).attemptId;
+        assertTrue(currentAttemptId > 0, `q${i + 2} got attemptId`);
       }
     }
     assertEq(lastTransition, 'awaiting_next', '完成 4 阶段后转 awaiting_next');
@@ -404,13 +441,23 @@ scenario('A', '完整闭环(scene → 阶段 1-4 各 2 题 → awaiting_next →
     );
     await delay(80);
     e = await collectSseEvents(app.baseUrl, s.body.data.streamId, token);
-    assertEq(eventsByType(e, 'state-transition').length, 0, '重练第 1 题通过不结束专项');
-
-    s = await httpJson<{ data: { streamId: string; decision: RouterDecision } }>(
-      app.baseUrl, 'POST', '/api/chat/send',
-      { token, body: { conversationId: convId, action: { type: 'next-question' } } }
+    const retryTransitions = eventsByType(e, 'state-transition') as Array<{
+      payload: { nextLearningState: string; activeSkill: string | null };
+    }>;
+    assertTrue(
+      !retryTransitions.some((tr) => tr.payload.nextLearningState === 'reviewing'),
+      '重练第 1 题通过不结束专项'
     );
-    assertEq(s.body.data.decision.skillName, 'retry', '重练下一题继续 retry');
+    assertTrue(
+      retryTransitions.some((tr) => tr.payload.activeSkill === 'retry'),
+      '重练第 1 题通过后继续 retry'
+    );
+    const nextRetry = requireWidgetReadyDataByType<{
+      stage: number;
+      questionNo: number;
+    }>(e, 'exercise-card', 'retry auto next');
+    assertEq(nextRetry.stage, 5, '重练自动下一题仍 stage=5');
+    assertEq(nextRetry.questionNo, 2, '重练自动进入第 2 题');
   } finally {
     await app.cleanup();
   }
@@ -713,45 +760,57 @@ scenario('J', '阶段 1 两题全过后下题为阶段 2(mode=chat)', async () =
     await setProfileComplete(app.baseUrl, token);
     const convId = await createConv(app.baseUrl, token, 'scene_selecting');
     // 选场景
-    await httpJson(app.baseUrl, 'POST', '/api/chat/send', {
+    let s = await httpJson<{ data: { streamId: string } }>(
+      app.baseUrl,
+      'POST',
+      '/api/chat/send',
+      {
       token, body: { conversationId: convId, action: { type: 'select-scene', payload: { sceneId: 'cafe' } } },
-    });
-    await delay(80);
-    // 阶段 1 两题(出 → 答对 × 2)
-    for (let i = 0; i < 2; i++) {
-      let s = await httpJson<{ data: { streamId: string } }>(
-        app.baseUrl, 'POST', '/api/chat/send',
-        { token, body: { conversationId: convId, text: '出题' } }
-      );
-      await delay(80);
-      let e = await collectSseEvents(app.baseUrl, s.body.data.streamId, token);
-      const ready = eventsByType(e, 'widget-ready')[0] as {
-        payload: { patch: { data: { attemptId: number; stage: number } } };
-      };
-      assertEq(ready.payload.patch.data.stage, 1, `i=${i} stage=1`);
-      const attemptId = ready.payload.patch.data.attemptId;
-      s = await httpJson<{ data: { streamId: string } }>(
-        app.baseUrl, 'POST', '/api/chat/send',
-        { token, body: { conversationId: convId, action: { type: 'submit-answer', payload: { attemptId, answer: '正确' } } } }
-      );
-      await delay(80);
-      await collectSseEvents(app.baseUrl, s.body.data.streamId, token);
-    }
-    // 阶段 2 第 1 题
-    const s = await httpJson<{ data: { streamId: string } }>(
-      app.baseUrl, 'POST', '/api/chat/send',
-      { token, body: { conversationId: convId, text: '出题' } }
+      }
     );
     await delay(80);
-    const e = await collectSseEvents(app.baseUrl, s.body.data.streamId, token);
-    const ready = eventsByType(e, 'widget-ready')[0] as {
-      payload: { patch: { data: { stage: number } } };
-    };
-    assertEq(ready.payload.patch.data.stage, 2, '已进阶段 2');
-    const mode = eventsByType(e, 'mode-switch')[0] as {
-      payload: { mode: string };
-    };
-    assertEq(mode.payload.mode, 'chat', '阶段 2 模式 chat');
+    let e = await collectSseEvents(app.baseUrl, s.body.data.streamId, token);
+    let currentAttemptId = requireWidgetReadyDataByType<{
+      attemptId: number;
+      stage: number;
+    }>(e, 'exercise-card', 'J first exercise').attemptId;
+
+    // 阶段 1 两题(答对后自动接下一题)
+    let stage2Ready: { stage: number } | null = null;
+    let stage2Mode: string | null = null;
+    for (let i = 0; i < 2; i++) {
+      s = await httpJson<{ data: { streamId: string } }>(
+        app.baseUrl, 'POST', '/api/chat/send',
+        {
+          token,
+          body: {
+            conversationId: convId,
+            action: {
+              type: 'submit-answer',
+              payload: { attemptId: currentAttemptId, answer: '正确' },
+            },
+          },
+        }
+      );
+      await delay(80);
+      e = await collectSseEvents(app.baseUrl, s.body.data.streamId, token);
+      const next = requireWidgetReadyDataByType<{
+        attemptId: number;
+        stage: number;
+      }>(e, 'exercise-card', `J auto next ${i}`);
+      if (i === 0) {
+        assertEq(next.stage, 1, '第 1 题后仍为阶段 1');
+        currentAttemptId = next.attemptId;
+      } else {
+        stage2Ready = next;
+        const mode = eventsByType(e, 'mode-switch').at(-1) as
+          | { payload: { mode: string } }
+          | undefined;
+        stage2Mode = mode?.payload.mode ?? null;
+      }
+    }
+    assertEq(stage2Ready?.stage, 2, '已进阶段 2');
+    assertEq(stage2Mode, 'chat', '阶段 2 模式 chat');
   } finally {
     await app.cleanup();
   }

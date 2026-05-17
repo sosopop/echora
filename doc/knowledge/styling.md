@@ -34,10 +34,10 @@
 - **Chat 滚动锚定(008)**:`src/views/Chat/MessageList.tsx` 不使用 `scrollIntoView` 锚点,而是滚到 `document.scrollingElement.scrollHeight`;同时监听 message list 的 `ResizeObserver`,在 widget 从 loading 展开成 ready 后补滚。固定输入栏下方空间由 `src/views/Chat/index.module.css` 的 `.main` / `.messageList` padding 预留。
 - **Chat 思考占位(008)**:`src/views/Chat/MessageBubble.tsx` 在 assistant 流式消息内容为空时显示 "Echo 正在思考中...",配合 store 的临时 assistant 消息形成「用户消息 → 思考中 → 小部件/结果」顺序。
 - **Chat 输入焦点(014)**:`src/views/Chat/ChatInput.tsx` 在提交文本/答案后设置恢复焦点标记;若此时 textarea 因 streaming 被禁用,等 `streamingMessageId` 清空且输入区可用后再把焦点放回 textarea,减少连续作答时反复点击输入框。
-- **批改卡片 loading(009)**:`grading-result` 在 `status='ready'` 且 `score/isCorrect` 都存在前不渲染结果卡,避免先出现 0 分再跳到真实分数;等待态由 assistant 文本承载。
+- **批改卡片 loading 与三档结果(009/021)**:`grading-result` 在 `status='ready'` 且有 `category(exact/similar/incorrect)` 或历史 `isCorrect` 前不渲染结果卡,避免先出现占位结果;等待态由 assistant 文本承载。021 起批改卡不展示百分制分数,只展示"完全正确 / 还不错 / 错误"三档,且正确或相近时不再显示"下一题"按钮,由后端自动串接下一题。
 - **场景卡片 loading(011)**:`scene-cards` 在 `status='loading'` 时不渲染空候选小部件,只保留 assistant 文本;`ready` 后一次性出现卡片,`error` 时才显示恢复提示。
 - **Chat widget 间距(011)**:`src/views/Chat/index.module.css` 的 `.messageRow` gap 为 16px,让 AI 文本和其下方 widget 有更清楚的呼吸感。
-- **Widget loading 总防线(012)**:`src/views/Chat/WidgetSlot.tsx` 统一过滤 `status='loading'` 的 widget,并对 `exercise-card` / `grading-result` 做必填数据校验后才占用 widget 槽位;`ExerciseCard` 自身也在 `ready + attemptId/stage/questionNo/questionType/contextZh` 完整前返回 `null`,避免显示"阶段 ? / 第 ? 题"半成品。
+- **Widget loading 总防线(012/021)**:`src/views/Chat/WidgetSlot.tsx` 统一过滤 `status='loading'` 的 widget,并对 `exercise-card` / `grading-result` 做必填数据校验后才占用 widget 槽位;`grading-result` 优先校验 `category`,保留 `isCorrect` 历史兼容;`ExerciseCard` 自身也在 `ready + attemptId/stage/questionNo/questionType/contextZh` 完整前返回 `null`,避免显示"阶段 ? / 第 ? 题"半成品。
 - **ProgressSummary 组件(015/016)**:`src/components/widgets/ProgressSummary.tsx` 正式渲染 `progress-summary`,展示题数/平均分/薄弱点/达标项、掌握度条、强弱项与建议。016 起建议卡片有"开始"按钮:`retry:<tag>` 转成文本 `重练 <tag>`,`request-new-scenes` 继续走结构化 action。`status='loading'` 或缺少 `questionsCount/averageScore` 时返回 `null`,不走 fallback JSON。
 - **重练题卡标签(016)**:`ExerciseCard` 收到内部 `stage=5` 时显示为"重练",避免把系统内部阶段编号暴露给用户。
 - **AnswerReview 组件(017)**:`src/components/widgets/AnswerReview.tsx` 正式渲染 `answer-review`,展示逐题短题干、分数 badge、题型和错误标签。`status='loading'` 或 items 为空时返回 `null`。017 起 `MessageList` 支持同一 assistant 消息多个 widget snapshot,用于复盘总览 + 单题回看连续呈现。

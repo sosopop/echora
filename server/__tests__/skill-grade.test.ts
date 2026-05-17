@@ -32,6 +32,7 @@ import {
 } from '../services/exerciseAttempt.js';
 import { createGrading } from '../services/gradingResult.js';
 import { getMasteryRecord } from '../services/masteryRecord.js';
+import { encodeRetryAttemptPrompt } from '../services/attemptPrompt.js';
 import type { SkillEventInput } from '../../shared/skill.js';
 
 let db: Db;
@@ -76,7 +77,7 @@ afterEach(() => {
 
 function makeProvider(gradeReturn: {
   score: number; is_correct: boolean; reference_answer: string;
-  explanation: string; tags: string[];
+  explanation: string; tags: string[]; category?: string;
 }): AIProvider {
   return {
     name: 'mock-grade',
@@ -118,6 +119,29 @@ function seedAttempt(stage: number, questionNo: number): number {
   return a.id;
 }
 
+function widgetReadyData<T>(
+  events: SkillEventInput[],
+  widgetType: string
+): T {
+  const ready = events.find(
+    (e) =>
+      e.type === 'widget-ready' &&
+      (e as { payload: { patch: { data?: { stage?: number } } } }).payload
+        .patch.data !== undefined &&
+      events.some(
+        (candidate) =>
+          candidate.type === 'widget-init' &&
+          (candidate as { payload: { widget: { type: string; id: string } } })
+            .payload.widget.type === widgetType &&
+          (candidate as { payload: { widget: { id: string } } }).payload
+            .widget.id ===
+            (e as { payload: { widgetId: string } }).payload.widgetId
+      )
+  ) as { payload: { patch: { data: T } } } | undefined;
+  if (!ready) throw new Error(`missing widget-ready for ${widgetType}`);
+  return ready.payload.patch.data;
+}
+
 describe('grade skill', () => {
   it('无 action → error GRADE_NO_ANSWER', async () => {
     const ctx = makeCtx(makeProvider({
@@ -139,7 +163,7 @@ describe('grade skill', () => {
     expect(err.payload.code).toBe('ATTEMPT_NOT_FOUND');
   });
 
-  it('正确答案 → 落库 + 阶段未完保持 practicing', async () => {
+  it('完全正确 → 落库 + 自动进入下一题', async () => {
     const attemptId = seedAttempt(1, 1);
     const provider = makeProvider({
       score: 90, is_correct: true, reference_answer: 'order',
@@ -150,14 +174,44 @@ describe('grade skill', () => {
         type: 'submit-answer', payload: { attemptId, answer: 'order' },
       })
     );
-    const ready = events.find((e) => e.type === 'widget-ready') as {
-      payload: { patch: { data: { score: number; isCorrect: boolean } } };
-    };
-    expect(ready.payload.patch.data.score).toBe(90);
-    expect(ready.payload.patch.data.isCorrect).toBe(true);
-    // 阶段未完(只通过 1/2),无 state-transition
-    expect(events.find((e) => e.type === 'state-transition')).toBeUndefined();
+    const grading = widgetReadyData<{
+      category: string;
+      isCorrect: boolean;
+    }>(events, 'grading-result');
+    expect(grading.category).toBe('exact');
+    expect(grading.isCorrect).toBe(true);
+    const nextExercise = widgetReadyData<{
+      stage: number;
+      questionNo: number;
+    }>(events, 'exercise-card');
+    expect(nextExercise.stage).toBe(1);
+    expect(nextExercise.questionNo).toBe(2);
     expect(getAttempt(db, attemptId)?.status).toBe('graded');
+  });
+
+  it('意思相近 → 标记 similar 并自动进入下一题', async () => {
+    const attemptId = seedAttempt(1, 1);
+    const provider = makeProvider({
+      score: 86,
+      is_correct: true,
+      category: 'similar',
+      reference_answer: 'order',
+      explanation: '意思接近',
+      tags: [],
+    });
+    const events = await collect(
+      makeCtx(provider, {
+        type: 'submit-answer',
+        payload: { attemptId, answer: 'buy' },
+      })
+    );
+    const grading = widgetReadyData<{
+      category: string;
+      isCorrect: boolean;
+    }>(events, 'grading-result');
+    expect(grading.category).toBe('similar');
+    expect(grading.isCorrect).toBe(true);
+    expect(widgetReadyData<{ questionNo: number }>(events, 'exercise-card').questionNo).toBe(2);
   });
 
   it('错误答案 → retry_count=1, 保持 practicing', async () => {
@@ -171,6 +225,12 @@ describe('grade skill', () => {
         type: 'submit-answer', payload: { attemptId, answer: 'ordering' },
       })
     );
+    const grading = widgetReadyData<{ category: string; isCorrect: boolean }>(
+      events,
+      'grading-result'
+    );
+    expect(grading.category).toBe('incorrect');
+    expect(grading.isCorrect).toBe(false);
     expect(events.find((e) => e.type === 'state-transition')).toBeUndefined();
     expect(getAttempt(db, attemptId)?.retryCount).toBe(1);
   });
@@ -242,7 +302,7 @@ describe('grade skill', () => {
     expect(mastery?.masteryScore).toBeGreaterThan(50);
   });
 
-  it('阶段 2 最后一题正确 → 不结束整场', async () => {
+  it('阶段 2 最后一题正确 → 自动进入阶段 3,不结束整场', async () => {
     // 阶段 1 已 2 题全过(在 DB seed 中)
     for (let q = 1; q <= 2; q++) {
       const a = createAttempt(db, {
@@ -271,7 +331,18 @@ describe('grade skill', () => {
         type: 'submit-answer', payload: { attemptId: s2q2.id, answer: 'Hello.' },
       })
     );
-    expect(events.find((e) => e.type === 'state-transition')).toBeUndefined();
+    const transitions = events.filter((e) => e.type === 'state-transition') as Array<{
+      payload: { nextLearningState: string };
+    }>;
+    expect(
+      transitions.some((e) => e.payload.nextLearningState === 'awaiting_next')
+    ).toBe(false);
+    const nextExercise = widgetReadyData<{ stage: number; questionNo: number }>(
+      events,
+      'exercise-card'
+    );
+    expect(nextExercise.stage).toBe(3);
+    expect(nextExercise.questionNo).toBe(1);
     expect(
       events.find(
         (e) =>
@@ -358,14 +429,18 @@ describe('grade skill', () => {
     expect(getAttempt(db, attemptId)?.retryCount).toBe(1);
   });
 
-  it('重练题答对 → 不触发主线 awaiting_next,保留 practicing', async () => {
+  it('重练题答对 → 自动进入下一道重练题', async () => {
     const attemptId = createAttempt(db, {
       conversationId,
       sceneId: 'test',
       stage: 5,
       questionNo: 1,
       questionType: 'fill_word',
-      prompt: 'retry',
+      prompt: encodeRetryAttemptPrompt({
+        prompt: 'retry',
+        referenceAnswer: 'to',
+        targetTag: 'missing_word',
+      }),
     }).id;
     const provider = makeProvider({
       score: 90,
@@ -380,7 +455,21 @@ describe('grade skill', () => {
         payload: { attemptId, answer: 'to' },
       })
     );
-    expect(events.find((e) => e.type === 'state-transition')).toBeUndefined();
+    const transitions = events.filter((e) => e.type === 'state-transition') as Array<{
+      payload: { nextLearningState: string; activeSkill: string | null };
+    }>;
+    expect(
+      transitions.some((e) => e.payload.nextLearningState === 'awaiting_next')
+    ).toBe(false);
+    expect(
+      transitions.some((e) => e.payload.activeSkill === 'retry')
+    ).toBe(true);
+    const nextRetry = widgetReadyData<{
+      stage: number;
+      questionNo: number;
+    }>(events, 'exercise-card');
+    expect(nextRetry.stage).toBe(5);
+    expect(nextRetry.questionNo).toBe(2);
     expect(
       events.find(
         (e) =>
@@ -485,7 +574,18 @@ describe('grade skill', () => {
       })
     );
 
-    expect(events.find((e) => e.type === 'state-transition')).toBeUndefined();
+    const transitions = events.filter((e) => e.type === 'state-transition') as Array<{
+      payload: { nextLearningState: string };
+    }>;
+    expect(
+      transitions.some((e) => e.payload.nextLearningState === 'awaiting_next')
+    ).toBe(false);
+    const nextExercise = widgetReadyData<{
+      stage: number;
+      questionNo: number;
+    }>(events, 'exercise-card');
+    expect(nextExercise.stage).toBe(1);
+    expect(nextExercise.questionNo).toBe(2);
   });
 
   it('已 needs_review 的 attempt 再 submit → error ATTEMPT_LOCKED', async () => {

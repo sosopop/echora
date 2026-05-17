@@ -34,7 +34,7 @@ practicing
   → awaiting_next
 ```
 
-阶段内答错保持 `practicing`;同题第 2 次未通过会标记 `needs_review`,后续通过 `next-question` 继续推进。
+021 起,阶段内答对不再等待用户点击"下一题":`grade` 会在同一条 assistant 流里先返回批改结果,再自动串接下一张 `exercise-card`。阶段 1-3 达标后自动进入下一阶段第一题;阶段 4 达标后才转 `awaiting_next`。阶段内答错保持 `practicing`;同题第 2 次未通过会标记 `needs_review`,后续通过 `next-question` 继续推进。
 
 复盘主线(015):
 
@@ -59,6 +59,7 @@ reviewing / awaiting_next
 ```
 
 `stage=5` 是系统内部用于区分专项重练的练习阶段,不属于 PRD §2.6 的四阶段主线。前端展示为"重练";批改通过时不会触发四阶段 `awaiting_next` 完成判断。`activeSkill=retry` 时,结构化 `next-question` 会继续路由到 `retry`。
+021 起,重练第 1/2 题通过后也由 `grade` 自动串接下一道重练题;第 3 题通过后转回 `reviewing`。
 
 ## 约束与失败点
 
@@ -75,6 +76,7 @@ reviewing / awaiting_next
 - 复盘状态转移:`server/__tests__/skill-review.test.ts` + `server/__tests__/chat-route.test.ts`
 - 重练状态转移:`server/__tests__/skill-retry.test.ts` + `server/__tests__/skill-grade.test.ts` + `server/__tests__/chat-route.test.ts`
 - 锁定行为测试:`server/__tests__/chat-route.test.ts`(历史消息脱敏/解锁恢复) + `server/__tests__/learning-services.test.ts`(state → lock_policy)
+- 正确后自动下一题:`server/__tests__/skill-grade.test.ts` + `tests/smoke/run-smoke-learning.ts`
 
 ## Pending
 

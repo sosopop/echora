@@ -149,6 +149,13 @@ export const ErrorTagSchema = z.enum([
 ]);
 export type ErrorTag = z.infer<typeof ErrorTagSchema>;
 
+export const GradingCategorySchema = z.enum([
+  'exact',
+  'similar',
+  'incorrect',
+]);
+export type GradingCategory = z.infer<typeof GradingCategorySchema>;
+
 export const GradingResultWidgetSchema = z.object({
   ...widgetBase,
   type: z.literal('grading-result'),
@@ -156,6 +163,7 @@ export const GradingResultWidgetSchema = z.object({
     attemptId: z.number().int().positive().optional(),
     score: z.number().int().min(0).max(100),
     isCorrect: z.boolean(),
+    category: GradingCategorySchema.optional(),
     userAnswer: z.string(),
     referenceAnswer: z.string(),
     explanation: z.string(),

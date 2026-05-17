@@ -265,9 +265,7 @@ describe('GradingResult widget', () => {
     expect(screen.queryByText('0')).not.toBeInTheDocument();
   });
 
-  it('correct 状态渲染分数 + badge + 参考答案 + 下一题按钮', () => {
-    const sendAction = vi.fn();
-    useChatStore.setState({ sendAction });
+  it('exact 状态渲染完全正确,不显示分数和下一题按钮', () => {
     const widget: LearningWidgetInstance = {
       id: 'g1',
       type: 'grading-result',
@@ -276,6 +274,7 @@ describe('GradingResult widget', () => {
         attemptId: 42,
         score: 92,
         isCorrect: true,
+        category: 'exact',
         userAnswer: 'I would like a steak.',
         referenceAnswer: "I'd like to order a steak.",
         explanation: '答得很好,可以再自然些。',
@@ -284,16 +283,38 @@ describe('GradingResult widget', () => {
       version: 1,
     };
     render(<GradingResult widget={widget} />);
-    expect(screen.getByText('92')).toBeInTheDocument();
-    expect(screen.getByText('通过')).toBeInTheDocument();
+    expect(screen.queryByText('92')).not.toBeInTheDocument();
+    expect(screen.getByText('完全正确')).toBeInTheDocument();
+    expect(screen.getByText(/已自动继续练习/)).toBeInTheDocument();
     expect(screen.getByText('I would like a steak.')).toBeInTheDocument();
     expect(screen.getByText("I'd like to order a steak.")).toBeInTheDocument();
-    fireEvent.click(screen.getByText(/下一题/));
-    expect(sendAction).toHaveBeenCalledWith({ type: 'next-question' });
+    expect(screen.queryByText(/下一题/)).not.toBeInTheDocument();
+  });
+
+  it('similar 状态渲染还不错,不显示分数', () => {
+    const widget: LearningWidgetInstance = {
+      id: 'g-similar',
+      type: 'grading-result',
+      status: 'ready',
+      data: {
+        attemptId: 44,
+        score: 86,
+        isCorrect: true,
+        category: 'similar',
+        userAnswer: 'I want one steak.',
+        referenceAnswer: "I'd like to order a steak.",
+        explanation: '意思接近,但礼貌度和自然度还可以再调整。',
+        tags: [],
+      },
+      version: 1,
+    };
+    render(<GradingResult widget={widget} />);
+    expect(screen.queryByText('86')).not.toBeInTheDocument();
+    expect(screen.getByText('还不错')).toBeInTheDocument();
+    expect(screen.getByText(/意思相近/)).toBeInTheDocument();
   });
 
   it('wrong 状态渲染错误标签 chips', () => {
-    useChatStore.setState({ sendAction: vi.fn() });
     const widget: LearningWidgetInstance = {
       id: 'g2',
       type: 'grading-result',
@@ -302,6 +323,7 @@ describe('GradingResult widget', () => {
         attemptId: 43,
         score: 40,
         isCorrect: false,
+        category: 'incorrect',
         userAnswer: 'wrong answer',
         explanation: '动词错',
         tags: ['tense', 'preposition'],
@@ -309,12 +331,12 @@ describe('GradingResult widget', () => {
       version: 1,
     };
     render(<GradingResult widget={widget} />);
-    expect(screen.getByText('40')).toBeInTheDocument();
-    expect(screen.getByText('未通过')).toBeInTheDocument();
+    expect(screen.queryByText('40')).not.toBeInTheDocument();
+    expect(screen.getByText('错误')).toBeInTheDocument();
     expect(screen.getByText('tense')).toBeInTheDocument();
     expect(screen.getByText('preposition')).toBeInTheDocument();
-    expect(screen.getByText(/改一句再提交/)).toBeInTheDocument();
-    expect(screen.getByText(/跳过到下一题/)).toBeInTheDocument();
+    expect(screen.getAllByText(/改一句再提交/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/跳过到下一题/)).not.toBeInTheDocument();
   });
 });
 

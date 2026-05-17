@@ -67,6 +67,8 @@ type ChatAction =
 
 `review` 返回的 `progress-summary` widget 继续使用 `shared/widget.ts` 既有 schema。批改后服务端会把 `grading_results.corrections.tags` 写入 `error_tag_events`,并更新 `mastery_records`;正确且无 tag 的题不会写错误事件,但会以题型作为 fallback tag 更新掌握度。
 
+021 起,`grading-result` widget 的 `data` 增加 `category?: 'exact' | 'similar' | 'incorrect'`。`score/isCorrect` 为兼容历史与统计仍保留,但前端正式卡片只展示三档文案:"完全正确"(exact,与参考表达完全匹配)、"还不错"(similar,意思相近可通过)、"错误"(incorrect,语法/拼写/意思不一致)。`submit-answer` 批改为 exact/similar 后,同一条 SkillEvent 流会继续输出下一题的 `exercise-card`;调用方不需要再触发 `next-question`。
+
 017 起,`review` 同一条 assistant 消息会连续返回 `progress-summary` 与 `answer-review` 两个 widget。`messages.widget_snapshot` 兼容两种形态:历史单 widget object,以及多 widget array。前端 `MessageList` 会按数组顺序渲染多个 `WidgetSlot`;后端 `appendStreamEvent` 也会按 widget id upsert,避免后一个 widget 覆盖前一个 widget。
 
 016 起,`awaiting_next` / `reviewing` / `scene_selecting` / `practicing` 下的 `重练` / `重练错题` / `开始重练` / `retry` 会确定性形成 `RouterDecision { skillName: 'retry' }`;`重练 <tag>` 会把 `<tag>` 写入 `decision.params.targetTag`。不新增 ChatAction。若会话 `activeSkill='retry'`,结构化 `{ type: 'next-question' }` 会继续路由 `retry`,否则仍路由 `practice`。

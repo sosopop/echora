@@ -24,17 +24,25 @@ const ALLOWED_TAGS = [
   'extra_word',
 ];
 
+export type GradingCategory = 'exact' | 'similar' | 'incorrect';
+
 export const gradeAnswerTool: ToolDef = {
   name: 'grade_answer',
   description:
     '批改用户对当前题目的英文答案。' +
     '接受同义表达;严宽尺度按 CEFR 等级。' +
-    '返回 score(0-100)+ is_correct(>=80 即视为通过)+ corrections(参考答案+解释+12 类错误标签)。',
+    '返回三档 category(exact/similar/incorrect)+ 内部 score + corrections(参考答案+解释+12 类错误标签)。',
   inputSchema: {
     type: 'object',
     properties: {
       score: { type: 'integer', minimum: 0, maximum: 100 },
       is_correct: { type: 'boolean' },
+      category: {
+        type: 'string',
+        enum: ['exact', 'similar', 'incorrect'],
+        description:
+          'exact=与参考答案完全匹配;similar=意思相近可通过;incorrect=语法/拼写/意思不一致',
+      },
       reference_answer: { type: 'string', description: '参考答案(标准英文)' },
       explanation: { type: 'string', description: '简体中文解释,1-2 句' },
       tags: {
@@ -76,12 +84,16 @@ export function buildGradePrompt(
     '批改原则:',
     '- 接受同义表达、大小写宽容、轻微标点宽容',
     '- 若提供参考答案,必须以参考答案作为主要批改依据',
-    '- 评分尺度:90+ 优秀;80-89 通过;60-79 部分对;<60 未通过',
-    '- is_correct = score >= 80',
-    '- 错误标签从 12 类中选(spelling / word_order / tense / preposition / article / ' +
+    '- 面向用户只分三档,不要输出百分制概念:',
+    '  1) exact: 用户答案与参考答案完全匹配(忽略大小写、首尾空格、句末标点)',
+    '  2) similar: 意思相近、语法可接受,但和参考答案不完全一样',
+    '  3) incorrect: 语法、单词拼写或表达意思与参考答案不一致',
+    '- is_correct = category 为 exact 或 similar;incorrect 必须 is_correct=false',
+    '- score 仅用于内部统计:exact 建议 100;similar 建议 85;incorrect 按错误严重度给 0-60',
+    '- 错误标签只在 incorrect 时从 12 类中选(spelling / word_order / tense / preposition / article / ' +
       'subject_verb_agreement / auxiliary_verb / collocation / politeness / literal_translation / ' +
-      'missing_word / extra_word),正确题空数组',
-    '- explanation 简体中文,1-2 句,先肯定后指出主要错误',
+      'missing_word / extra_word),exact/similar 时空数组',
+    '- explanation 简体中文,1-2 句;exact 简短肯定,similar 说明为什么意思能接受,incorrect 点出主要错误',
     '',
     '必须通过 grade_answer 工具调用回应。',
   ].filter((line): line is string => line !== null).join('\n');
@@ -90,6 +102,7 @@ export function buildGradePrompt(
 export interface GradeResult {
   score: number;
   isCorrect: boolean;
+  category: GradingCategory;
   corrections: GradingCorrections;
 }
 
@@ -117,18 +130,29 @@ export async function runGrading(
       const input = ev.input as {
         score?: number;
         is_correct?: boolean;
+        category?: string;
         reference_answer?: string;
         explanation?: string;
         tags?: string[];
       };
-      const score = Math.max(0, Math.min(100, Math.round(input.score ?? 0)));
+      const referenceAnswer = input.reference_answer;
+      const category = normalizeCategory(
+        input.category,
+        input.is_correct,
+        input.score,
+        userAnswer,
+        referenceAnswer
+      );
+      const score = normalizeScore(input.score, category);
       result = {
         score,
-        isCorrect: input.is_correct === true || score >= 80,
+        isCorrect: category !== 'incorrect',
+        category,
         corrections: {
-          referenceAnswer: input.reference_answer,
+          category,
+          referenceAnswer,
           explanation: input.explanation,
-          tags: Array.isArray(input.tags)
+          tags: category === 'incorrect' && Array.isArray(input.tags)
             ? input.tags.filter((t) => ALLOWED_TAGS.includes(t))
             : [],
         },
@@ -139,4 +163,54 @@ export async function runGrading(
     throw new Error('LLM 未返回有效批改结果');
   }
   return result;
+}
+
+function normalizeCategory(
+  rawCategory: string | undefined,
+  rawIsCorrect: boolean | undefined,
+  rawScore: number | undefined,
+  userAnswer: string,
+  referenceAnswer: string | undefined
+): GradingCategory {
+  if (isExactAnswer(userAnswer, referenceAnswer)) return 'exact';
+  if (
+    rawCategory === 'exact' ||
+    rawCategory === 'similar' ||
+    rawCategory === 'incorrect'
+  ) {
+    return rawCategory;
+  }
+  return rawIsCorrect === true || (rawScore ?? 0) >= 80
+    ? 'similar'
+    : 'incorrect';
+}
+
+function normalizeScore(
+  rawScore: number | undefined,
+  category: GradingCategory
+): number {
+  const fallback =
+    category === 'exact' ? 100 : category === 'similar' ? 85 : 40;
+  const score = Math.max(0, Math.min(100, Math.round(rawScore ?? fallback)));
+  if (category === 'exact') return Math.max(score, 95);
+  if (category === 'similar') return Math.max(score, 80);
+  return Math.min(score, 60);
+}
+
+function isExactAnswer(
+  userAnswer: string,
+  referenceAnswer: string | undefined
+): boolean {
+  if (!referenceAnswer) return false;
+  return normalizeAnswer(userAnswer) === normalizeAnswer(referenceAnswer);
+}
+
+function normalizeAnswer(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[’‘]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[.,!?;:"'`，。！？；：“”]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }

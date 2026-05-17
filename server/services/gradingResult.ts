@@ -5,6 +5,7 @@
 import type { Db } from '../db/connect.js';
 
 export interface GradingCorrections {
+  category?: 'exact' | 'similar' | 'incorrect';
   referenceAnswer?: string;
   explanation?: string;
   diff?: Array<{ kind: 'add' | 'remove' | 'equal'; text: string }>;
