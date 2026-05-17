@@ -23,6 +23,15 @@ interface ProfileRow {
 
 const ALLOWED_LEVELS: CefrLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 
+export type DifficultyFeedbackDirection = 'up' | 'down';
+
+export interface DifficultyAdjustmentResult {
+  direction: DifficultyFeedbackDirection;
+  previousLevel: CefrLevel;
+  nextLevel: CefrLevel;
+  changed: boolean;
+}
+
 function safeParseArray(v: string | null): string[] {
   if (!v) return [];
   try {
@@ -126,6 +135,30 @@ export function upsertProfile(
   const after = getProfile(db, userId);
   if (!after) throw new Error('upsertProfile 后查询失败');
   return after;
+}
+
+export function adjustProfileLevel(
+  db: Db,
+  userId: number,
+  direction: DifficultyFeedbackDirection
+): DifficultyAdjustmentResult {
+  const profile = ensureProfile(db, userId);
+  const previousLevel = profile.level ?? 'B1';
+  const index = ALLOWED_LEVELS.indexOf(previousLevel);
+  const nextIndex =
+    direction === 'up'
+      ? Math.min(ALLOWED_LEVELS.length - 1, index + 1)
+      : Math.max(0, index - 1);
+  const nextLevel = ALLOWED_LEVELS[nextIndex];
+  if (nextLevel !== previousLevel) {
+    upsertProfile(db, userId, { level: nextLevel });
+  }
+  return {
+    direction,
+    previousLevel,
+    nextLevel,
+    changed: nextLevel !== previousLevel,
+  };
 }
 
 /**

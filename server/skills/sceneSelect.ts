@@ -15,7 +15,10 @@
 import type { Skill, SkillEventInput } from '../../shared/skill.js';
 import { SKILL_NAMES } from '../../shared/skill.js';
 import type { ServerSkillContext } from './types.js';
-import { ensureProfile } from '../services/profile.js';
+import {
+  ensureProfile,
+  type DifficultyAdjustmentResult,
+} from '../services/profile.js';
 import {
   appendSceneHistory,
   listSceneHistory,
@@ -44,6 +47,8 @@ export const sceneSelectSkill: Skill = {
   async *handler(_ctx): AsyncIterable<SkillEventInput> {
     const ctx = _ctx as ServerSkillContext;
     const action = ctx.params.action as ChatAction | undefined;
+    const difficultyFeedback = ctx.params
+      .difficultyFeedback as DifficultyAdjustmentResult | undefined;
     const profile = ensureProfile(ctx.db, ctx.user.id);
 
     /* ============================================================
@@ -111,9 +116,13 @@ export const sceneSelectSkill: Skill = {
     const used = listSceneHistory(ctx.db, ctx.user.id);
     yield {
       type: 'text-chunk',
-      payload: { text: '我来根据你的画像准备几个场景。点击一张进入练习。' },
+      payload: {
+        text:
+          formatDifficultyFeedback(difficultyFeedback) +
+          '我来根据你的画像准备几个场景。点击一张进入练习。',
+      },
     };
-    if (ctx.learningState === 'practicing') {
+    if (ctx.learningState !== 'scene_selecting') {
       yield {
         type: 'state-transition',
         payload: {
@@ -240,6 +249,20 @@ function sceneIdToCandidate(sceneId: string, level: CefrLevel): SceneCandidate {
     knowledgePoint: '场景对话练习',
     difficulty: level,
   };
+}
+
+function formatDifficultyFeedback(
+  adjustment: DifficultyAdjustmentResult | undefined
+): string {
+  if (!adjustment) return '';
+  const directionText =
+    adjustment.direction === 'down' ? '降低' : '提高';
+  if (!adjustment.changed) {
+    return adjustment.direction === 'down'
+      ? `已经是最轻松的 ${adjustment.previousLevel} 难度了。我会继续按这个难度准备更容易入口的场景。\n`
+      : `已经是最高的 ${adjustment.previousLevel} 难度了。我会继续按这个难度准备更有挑战的场景。\n`;
+  }
+  return `收到,我已把练习难度从 ${adjustment.previousLevel} ${directionText}到 ${adjustment.nextLevel}。\n`;
 }
 
 const EMOJI_MAP: Record<string, string> = {

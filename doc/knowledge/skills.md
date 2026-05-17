@@ -66,7 +66,8 @@
 - 已用队列:`scene_history` 表 max 10 per user,服务层 prune
 - 036 起,用户选定场景并成功生成 `scene_dialogue` 后,会把 `conversations.title` 更新为当前场景标题,用于历史会话左栏展示。038 起前端 `scene-cards` 点击会把卡片 `title/description/knowledgePoint/difficulty` 一并传给 `select-scene`,后端优先使用这些元数据,旧客户端只传 sceneId 时仍按 sceneId 兼容推导。
 - 失败恢复(005):`runScenePropose` 失败时,handler 会把已初始化的 `scene-cards` widget patch 为 `status='error'`,写入空 `cards` 与可读 `message`,随后 `mode-switch('chat')` 再发 `error` 终止。前端遇到历史 loading/空候选 widget 时也允许点击"重新生成场景"或直接输入主题,避免 `select` 输入模式永久卡住。
-- 012 起,用户在 `practicing` 中输入 `换场景` / `换一批` / `重新生成场景` 会确定性路由到 `scene-select`;handler 先发 `state-transition('scene_selecting','scene-select')`,再输出 `mode-switch('select')` 和场景卡片,避免继续保持 practicing 导致卡片不可点。
+- 012 起,用户在 `practicing` 中输入 `换场景` / `换一批` / `重新生成场景` 会确定性路由到 `scene-select`;handler 先发 `state-transition('scene_selecting','scene-select')`,再输出 `mode-switch('select')` 和场景卡片,避免继续保持 practicing 导致卡片不可点。042 起,`awaiting_next` / `reviewing` 等非 `scene_selecting` 状态请求新场景也会统一切回 `scene_selecting`。
+- 042 起,难度反馈文本(`太难` / `简单一点` / `too hard` / `easier` / `太简单` / `难一点` / `too easy` / `harder`)会先在 chat route 中调整 `user_profiles.level`,再携带 `difficultyFeedback` 路由到 `scene-select + request-new-scenes`;`scene-select` 输出等级变化说明后按新 profile 等级生成候选。
 
 ## practice Skill(003 已真实接入,013 补齐阶段 1-4)
 
@@ -153,7 +154,7 @@ provider.route()
 - `practicing` / `grading` 中 router 校验失败时**直接抛错**(不再 fallback,002 patch)
 - AI Provider 抛错时 router 不 catch,直接传播到 chat 路由,返 `502 PROVIDER_ERROR`
 - POST `/api/chat/send` body `text` 与 `action` **二选一**(zod refine);action 由 chat route 确定性映射到 skill,并放入 `decision.params.action`
-- 008 起练习态直接输入答案时,chat route 可能把 `text` 规范化为 `submit-answer` action;消息历史仍保存用户原始输入文本。010 起 `awaiting_next` 下输入 `next` / `START` / `开始练习` 会确定性触发 `request-new-scenes`,减少完成一场景后的断流。012 起 `practicing` 下的换场景类文本也确定性触发 `request-new-scenes`,不再交给 AI Router。015 起 `awaiting_next` / `reviewing` 下的复盘类文本确定性触发 `review`。016 起重练类文本确定性触发 `retry`;若 activeSkill 为 `retry`,结构化 `next-question` 继续走 `retry` 而不是主线 `practice`。019 起解释类文本确定性触发 `explain`,并在练习中优先于自由文本答案兜底,避免"为什么错"被当成答案提交。020 起非锁定态低置信度路由改为 `intent-confirm`;锁定态不允许降级到 `general-chat`。
+- 008 起练习态直接输入答案时,chat route 可能把 `text` 规范化为 `submit-answer` action;消息历史仍保存用户原始输入文本。010 起 `awaiting_next` 下输入 `next` / `START` / `开始练习` 会确定性触发 `request-new-scenes`,减少完成一场景后的断流。012 起 `practicing` 下的换场景类文本也确定性触发 `request-new-scenes`,不再交给 AI Router。015 起 `awaiting_next` / `reviewing` 下的复盘类文本确定性触发 `review`。016 起重练类文本确定性触发 `retry`;若 activeSkill 为 `retry`,结构化 `next-question` 继续走 `retry` 而不是主线 `practice`。019 起解释类文本确定性触发 `explain`,并在练习中优先于自由文本答案兜底,避免"为什么错"被当成答案提交。020 起非锁定态低置信度路由改为 `intent-confirm`;锁定态不允许降级到 `general-chat`。042 起难度反馈文本优先于答案兜底处理,避免 `practicing` 中的"太难/太简单"被当作答案提交。
 
 ## 测试入口
 

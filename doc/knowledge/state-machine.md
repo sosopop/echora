@@ -60,6 +60,22 @@ awaiting_next
 
 `reviewing` 下再次输入复盘类文本会重新生成当前场景的学习报告;输入 `换场景` / `next` / `开始练习` 等继续类文本仍按 chat route 规则进入场景选择。025 起,`archived` 会话中只有 `复盘` / `总结` / `学习报告` / `review` 会被允许进入 `review`;继续练习、换场景、提交答案等请求会在 `/api/chat/send` 入口被拒绝,且不会创建用户消息或 assistant 占位消息。
 
+难度反馈(042):
+
+```
+scene_selecting / practicing / awaiting_next / reviewing
+  → 用户输入 "太难" / "简单一点" / "too hard" / "easier"
+  → profile.level 下调一档
+  → scene_selecting + scene-select(request-new-scenes)
+
+scene_selecting / practicing / awaiting_next / reviewing
+  → 用户输入 "太简单" / "难一点" / "too easy" / "harder"
+  → profile.level 上调一档
+  → scene_selecting + scene-select(request-new-scenes)
+```
+
+难度反馈在自由文本答案兜底之前判定,因此 `practicing` 中不会把"太难/太简单"误提交为当前题答案。等级最低 A1、最高 C2 时不越界,`difficultyFeedback.changed=false` 时只解释已到边界。
+
 重练主线(016):
 
 ```
@@ -102,6 +118,7 @@ reviewing / awaiting_next
 - 重练状态转移:`server/__tests__/skill-retry.test.ts` + `server/__tests__/skill-grade.test.ts` + `server/__tests__/chat-route.test.ts`
 - 锁定行为测试:`server/__tests__/chat-route.test.ts`(历史消息脱敏/解锁恢复) + `server/__tests__/learning-services.test.ts`(state → lock_policy)
 - 正确后自动下一题:`server/__tests__/skill-grade.test.ts` + `tests/smoke/run-smoke-learning.ts`
+- 难度反馈:`server/__tests__/chat-route.test.ts` + `server/__tests__/skill-sceneSelect.test.ts`
 
 ## Pending
 

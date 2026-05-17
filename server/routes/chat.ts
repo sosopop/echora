@@ -64,6 +64,10 @@ import {
   type ExerciseAttemptDTO,
 } from '../services/exerciseAttempt.js';
 import { getGradingByAttempt } from '../services/gradingResult.js';
+import {
+  adjustProfileLevel,
+  type DifficultyFeedbackDirection,
+} from '../services/profile.js';
 
 const chatActionSchema = z.discriminatedUnion('type', [
   z.object({
@@ -334,7 +338,7 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
         );
       }
 
-      const normalizedInput = normalizeChatSendInput(db, conv, body);
+      const normalizedInput = normalizeChatSendInput(db, userId, conv, body);
 
       // 2. 持久化用户消息
       //    text 直接落 content;action 落自然文案;submit-answer 落用户真实答案。
@@ -829,6 +833,7 @@ interface NormalizedChatSendInput {
 
 function normalizeChatSendInput(
   db: Db,
+  userId: number,
   conv: ConversationDTO,
   body: ChatSendBody
 ): NormalizedChatSendInput {
@@ -854,6 +859,20 @@ function normalizeChatSendInput(
     return {
       text,
       decision: retryDecision,
+      userMessageContent: text,
+    };
+  }
+
+  const difficultyDecision = createDifficultyFeedbackDecision(
+    db,
+    userId,
+    conv,
+    text
+  );
+  if (difficultyDecision) {
+    return {
+      text,
+      decision: difficultyDecision,
       userMessageContent: text,
     };
   }
@@ -886,6 +905,36 @@ function normalizeChatSendInput(
   return {
     text,
     userMessageContent: text,
+  };
+}
+
+function createDifficultyFeedbackDecision(
+  db: Db,
+  userId: number,
+  conv: ConversationDTO,
+  text: string
+): RouterDecision | null {
+  if (
+    ![
+      'scene_selecting',
+      'practicing',
+      'awaiting_next',
+      'reviewing',
+    ].includes(conv.learningState)
+  ) {
+    return null;
+  }
+  const direction = detectDifficultyFeedback(text);
+  if (!direction) return null;
+  const adjustment = adjustProfileLevel(db, userId, direction);
+  return {
+    skillName: 'scene-select',
+    params: {
+      action: { type: 'request-new-scenes' },
+      difficultyFeedback: adjustment,
+    },
+    confidence: 1,
+    rationale: `deterministic difficulty feedback:${direction}`,
   };
 }
 
@@ -1068,6 +1117,35 @@ function extractRetryTargetTag(text: string): string | null {
   }
   const match = trimmed.match(/^(?:重练|专项重练|retry)[:：\s]+([a-zA-Z_]+)$/i);
   return match?.[1] ?? null;
+}
+
+function detectDifficultyFeedback(
+  text: string
+): DifficultyFeedbackDirection | null {
+  const normalized = normalizeControlText(text);
+  if (!normalized) return null;
+  if (
+    normalized.includes('太难') ||
+    normalized.includes('太難') ||
+    normalized.includes('简单一点') ||
+    normalized.includes('簡單一點') ||
+    normalized.includes('简单点') ||
+    normalized.includes('簡單點') ||
+    /too(hard|difficult)|easier|simpler/i.test(text)
+  ) {
+    return 'down';
+  }
+  if (
+    normalized.includes('太简单') ||
+    normalized.includes('太簡單') ||
+    normalized.includes('太容易') ||
+    normalized.includes('难一点') ||
+    normalized.includes('難一點') ||
+    /too easy|harder|more difficult|more challenging/i.test(text)
+  ) {
+    return 'up';
+  }
+  return null;
 }
 
 function isPracticeControlText(text: string): boolean {

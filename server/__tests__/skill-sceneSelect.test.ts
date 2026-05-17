@@ -99,14 +99,15 @@ function makeProvider(opts: {
 function makeCtx(
   provider: AIProvider,
   action?: unknown,
-  learningState: LearningState = 'scene_selecting'
+  learningState: LearningState = 'scene_selecting',
+  extraParams: Record<string, unknown> = {}
 ): ServerSkillContext {
   return {
     user: { id: userId, email: 'scene@test.com' },
     conversationId,
     messageId,
     streamId: 'test-stream',
-    params: action ? { action } : {},
+    params: { ...(action ? { action } : {}), ...extraParams },
     learningState,
     signal: new AbortController().signal,
     provider,
@@ -177,6 +178,34 @@ describe('sceneSelect skill', () => {
     expect(transition.payload.nextLearningState).toBe('scene_selecting');
     expect(transition.payload.activeSkill).toBe('scene-select');
     expect(events.find((e) => e.type === 'widget-ready')).toBeDefined();
+  });
+
+  it('难度反馈会说明等级调整并切回 scene_selecting', async () => {
+    const provider = makeProvider({ proposeScenes: MOCK_SCENES });
+    const events = await collect(
+      makeCtx(
+        provider,
+        { type: 'request-new-scenes' },
+        'awaiting_next',
+        {
+          difficultyFeedback: {
+            direction: 'down',
+            previousLevel: 'B1',
+            nextLevel: 'A2',
+            changed: true,
+          },
+        }
+      )
+    );
+
+    const text = events.find((e) => e.type === 'text-chunk') as {
+      payload: { text: string };
+    };
+    expect(text.payload.text).toContain('从 B1 降低到 A2');
+    const transition = events.find((e) => e.type === 'state-transition') as {
+      payload: { nextLearningState: string };
+    };
+    expect(transition.payload.nextLearningState).toBe('scene_selecting');
   });
 
   it('action=select-scene → 生成 dialogue + scene_history + 自动出第一题', async () => {

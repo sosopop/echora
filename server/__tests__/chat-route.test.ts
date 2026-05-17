@@ -31,6 +31,7 @@ import {
   updateLearningState,
 } from '../services/conversation.js';
 import { createSceneDialogue } from '../services/sceneDialogue.js';
+import { getProfile, upsertProfile, ensureProfile } from '../services/profile.js';
 import type { Config } from '../config/getConfig.js';
 import type { AIRouter } from '../ai/router.js';
 import type { AIProvider } from '../ai/types.js';
@@ -704,6 +705,61 @@ describe('POST /api/chat/send', () => {
       skillName: 'scene-select',
       params: { action: { type: 'request-new-scenes' } },
     });
+    expect(decideCalls).toHaveLength(0);
+  });
+
+  it('practicing 中太难会先降低画像等级再走场景选择,不会误作答案', async () => {
+    ensureProfile(db, userId);
+    upsertProfile(db, userId, { name: 'Test', level: 'B1' });
+    seedAttempt();
+
+    const res = await request(app)
+      .post('/api/chat/send')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ conversationId, text: '太难了,简单一点' });
+
+    expect(res.status).toBe(202);
+    expect(res.body.data.decision).toMatchObject({
+      skillName: 'scene-select',
+      params: {
+        action: { type: 'request-new-scenes' },
+        difficultyFeedback: {
+          direction: 'down',
+          previousLevel: 'B1',
+          nextLevel: 'A2',
+          changed: true,
+        },
+      },
+    });
+    expect(getProfile(db, userId)?.level).toBe('A2');
+    expect(decideCalls).toHaveLength(0);
+    const user = getMessages(db, conversationId).find((m) => m.role === 'user');
+    expect(user?.content).toBe('太难了,简单一点');
+  });
+
+  it('太简单会提高画像等级并让下一批候选按新难度生成', async () => {
+    ensureProfile(db, userId);
+    upsertProfile(db, userId, { name: 'Test', level: 'B1' });
+    updateLearningState(db, conversationId, 'scene_selecting', 'scene-select');
+
+    const res = await request(app)
+      .post('/api/chat/send')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ conversationId, text: '太简单了,来点 harder 的' });
+
+    expect(res.status).toBe(202);
+    expect(res.body.data.decision).toMatchObject({
+      skillName: 'scene-select',
+      params: {
+        difficultyFeedback: {
+          direction: 'up',
+          previousLevel: 'B1',
+          nextLevel: 'B2',
+          changed: true,
+        },
+      },
+    });
+    expect(getProfile(db, userId)?.level).toBe('B2');
     expect(decideCalls).toHaveLength(0);
   });
 
