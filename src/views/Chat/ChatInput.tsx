@@ -5,20 +5,28 @@
  *   - fill 模式:textarea + Enter 提交 → sendAction({ type: 'submit-answer', ... }),
  *                attemptId 从 activeWidgets 中找最新 exercise-card.data.attemptId
  *   - select 模式:隐藏输入,展示提示「请点击上方场景卡片」(交互由 widget 自己处理)
- *   - menu 模式:留 004,本期降级为 chat
+ *   - menu 模式:左侧按钮打开本地学习菜单
  *
  * streaming 时禁用。
  */
 
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from 'react';
 import { useChatStore } from '../../stores/chat.js';
 import { useLearningStateStore } from '../../stores/learningState.js';
+import { runWidgetAction } from '../../components/widgets/actionProtocol.js';
 import type { LearningWidgetInstance } from '@shared/skill';
 import type { MessageDTO } from '@shared/api';
 import styles from './index.module.css';
 
 export default function ChatInput(): JSX.Element {
   const [text, setText] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuNotice, setMenuNotice] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const shouldRestoreFocusRef = useRef(false);
   const inputMode = useChatStore((s) => s.inputMode);
@@ -30,7 +38,8 @@ export default function ChatInput(): JSX.Element {
   const messages = useChatStore((s) => s.messages);
   const learningState = useLearningStateStore((s) => s.state);
 
-  const disabled = streaming || isLoading || text.trim().length === 0;
+  const busy = streaming || isLoading;
+  const disabled = busy || text.trim().length === 0;
   const hasSceneChoices = hasSelectableSceneCards(activeWidgets, messages);
   const shouldShowSelectHint =
     inputMode === 'select' &&
@@ -42,6 +51,7 @@ export default function ChatInput(): JSX.Element {
     !hasSceneChoices;
   const canStartPractice =
     inputMode === 'select' && learningState === 'practicing';
+  const menuSections = buildLearningMenuSections(learningState, inputMode);
 
   useEffect(() => {
     if (!shouldRestoreFocusRef.current) return;
@@ -59,9 +69,20 @@ export default function ChatInput(): JSX.Element {
     return () => window.clearTimeout(timer);
   }, [inputMode, isLoading, learningState, shouldShowSelectHint, streaming, text]);
 
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (event: globalThis.KeyboardEvent): void => {
+      if (event.key === 'Escape') setMenuOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [menuOpen]);
+
   const submit = async (): Promise<void> => {
     if (disabled) return;
     const value = text.trim();
+    setMenuOpen(false);
+    setMenuNotice(null);
     shouldRestoreFocusRef.current = true;
     setText('');
     if (
@@ -86,7 +107,20 @@ export default function ChatInput(): JSX.Element {
     }
   };
 
-  const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
+  const runMenuItem = (action: string): void => {
+    setMenuOpen(false);
+    setMenuNotice(null);
+    shouldRestoreFocusRef.current = true;
+    runWidgetAction(action, {
+      sendMessage,
+      sendAction,
+      onLocalSaveProgress: () => {
+        setMenuNotice('当前进度已自动保存。');
+      },
+    });
+  };
+
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLTextAreaElement>): void => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       void submit();
@@ -123,11 +157,50 @@ export default function ChatInput(): JSX.Element {
           <button
             type="button"
             className={styles.menuBtn}
-            title="学习菜单(004 实现)"
-            disabled
+            aria-label={menuOpen ? '关闭学习菜单' : '打开学习菜单'}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            aria-controls="chat-learning-menu"
+            disabled={busy}
+            onClick={() => setMenuOpen((open) => !open)}
           >
             ☰
           </button>
+          {menuOpen && (
+            <div
+              id="chat-learning-menu"
+              className={styles.learningMenuPopover}
+              role="menu"
+            >
+              {menuSections.map((section) => (
+                <div key={section.title} className={styles.learningMenuSection}>
+                  <div className={styles.learningMenuTitle}>
+                    {section.title}
+                  </div>
+                  {section.items.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      role="menuitem"
+                      className={`${styles.learningMenuItem} ${
+                        item.primary ? styles.learningMenuItemPrimary : ''
+                      }`}
+                      disabled={busy || item.disabled}
+                      title={item.disabledReason}
+                      onClick={() => runMenuItem(item.action)}
+                    >
+                      <span className={styles.learningMenuIcon}>
+                        {item.icon}
+                      </span>
+                      <span className={styles.learningMenuText}>
+                        {item.label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
           <textarea
             ref={textareaRef}
             className={styles.inputTextarea}
@@ -147,6 +220,11 @@ export default function ChatInput(): JSX.Element {
             发送 →
           </button>
         </div>
+        {menuNotice && (
+          <div className={styles.menuNotice} role="status">
+            {menuNotice}
+          </div>
+        )}
         <div className={canRecoverSceneSelect || canStartPractice ? styles.recoveryRow : styles.tip}>
           <span>
             {inputMode === 'fill'
@@ -181,6 +259,121 @@ export default function ChatInput(): JSX.Element {
       </div>
     </footer>
   );
+}
+
+interface LocalMenuItem {
+  id: string;
+  icon: string;
+  label: string;
+  action: string;
+  primary?: boolean;
+  disabled?: boolean;
+  disabledReason?: string;
+}
+
+interface LocalMenuSection {
+  title: string;
+  items: LocalMenuItem[];
+}
+
+function buildLearningMenuSections(
+  learningState: string,
+  inputMode: string
+): LocalMenuSection[] {
+  const isOnboarding = learningState === 'onboarding';
+  const isGrading = learningState === 'grading';
+  const isArchived = learningState === 'archived';
+  const isPracticing = learningState === 'practicing';
+  const canUseMainFlow = !isOnboarding && !isGrading && !isArchived;
+  const canStartFromSelect = isPracticing && inputMode === 'select';
+
+  const continueLabel =
+    learningState === 'scene_selecting'
+      ? '换一批场景'
+      : learningState === 'awaiting_next' || learningState === 'reviewing'
+      ? '开始新场景'
+      : canStartFromSelect
+      ? '开始练习'
+      : '继续练习';
+  const continueAction =
+    learningState === 'scene_selecting' ||
+    learningState === 'awaiting_next' ||
+    learningState === 'reviewing'
+      ? 'action:request-new-scenes'
+      : 'action:next-question';
+  const continueDisabled =
+    !canUseMainFlow || (isPracticing && !canStartFromSelect);
+
+  return [
+    {
+      title: '主线',
+      items: [
+        {
+          id: 'continue',
+          icon: '>',
+          label: continueLabel,
+          action: continueAction,
+          primary: true,
+          disabled: continueDisabled,
+          disabledReason: isPracticing
+            ? '先完成当前题,正确后会自动继续'
+            : isGrading
+            ? '批改完成后可继续'
+            : isArchived
+            ? '归档会话只能复盘'
+            : undefined,
+        },
+        {
+          id: 'scenes',
+          icon: '#',
+          label: '换场景',
+          action: 'action:request-new-scenes',
+          disabled: !canUseMainFlow,
+          disabledReason: isGrading
+            ? '批改完成后可换场景'
+            : isArchived
+            ? '归档会话不能继续练习'
+            : undefined,
+        },
+      ],
+    },
+    {
+      title: '复盘',
+      items: [
+        {
+          id: 'review',
+          icon: '?',
+          label: '查看复盘',
+          action: 'text:复盘',
+          disabled: ![
+            'awaiting_next',
+            'reviewing',
+            'scene_selecting',
+            'archived',
+          ].includes(learningState),
+          disabledReason: '完成当前题后可查看复盘',
+        },
+        {
+          id: 'retry',
+          icon: '+',
+          label: '复习薄弱点',
+          action: 'text:重练',
+          disabled: ![
+            'awaiting_next',
+            'reviewing',
+            'scene_selecting',
+          ].includes(learningState),
+          disabledReason: '进入复盘或待继续后可重练',
+        },
+        {
+          id: 'save',
+          icon: '.',
+          label: '保存进度',
+          action: 'local:save-progress',
+        },
+      ],
+    },
+  ];
 }
 
 function isPracticeControlText(text: string): boolean {

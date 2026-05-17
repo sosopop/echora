@@ -7,6 +7,7 @@
 
 import type { LearningWidgetInstance } from '@shared/skill';
 import { useChatStore } from '../../stores/chat.js';
+import { runWidgetAction } from './actionProtocol.js';
 import styles from './widgets.module.css';
 
 interface MasteryRow {
@@ -53,14 +54,6 @@ function masteryBand(score: number): 'good' | 'mid' | 'low' {
 function deltaLabel(delta: number | undefined): string {
   if (!delta) return '本轮记录';
   return delta > 0 ? `提升 ${delta}` : `下降 ${Math.abs(delta)}`;
-}
-
-function suggestionCommand(action: string | undefined): string {
-  if (!action) return '重练';
-  if (action.startsWith('retry:')) {
-    return `重练 ${action.slice('retry:'.length)}`;
-  }
-  return action;
 }
 
 export default function ProgressSummary({
@@ -198,11 +191,10 @@ export default function ProgressSummary({
                   className={styles.suggestionButton}
                   disabled={streaming}
                   onClick={() => {
-                    if (s.action === 'request-new-scenes') {
-                      void sendAction({ type: 'request-new-scenes' });
-                      return;
-                    }
-                    void sendMessage(suggestionCommand(s.action));
+                    runWidgetAction(s.action ?? 'text:重练', {
+                      sendMessage,
+                      sendAction,
+                    });
                   }}
                 >
                   开始

@@ -35,6 +35,7 @@
 - **Chat 思考占位(008)**:`src/views/Chat/MessageBubble.tsx` 在 assistant 流式消息内容为空时显示 "Echo 正在思考中...",配合 store 的临时 assistant 消息形成「用户消息 → 思考中 → 小部件/结果」顺序。
 - **Chat SSE 错误可见(022)**:`src/stores/chat.ts` 在收到 SSE `error` 或连接放弃时,把错误写入当前 assistant 消息,避免流结束后空 assistant 气泡被 `MessageBubble` 过滤掉,造成"用户消息发出但没有回复"的假象。
 - **Chat 输入焦点(014)**:`src/views/Chat/ChatInput.tsx` 在提交文本/答案后设置恢复焦点标记;若此时 textarea 因 streaming 被禁用,等 `streamingMessageId` 清空且输入区可用后再把焦点放回 textarea,减少连续作答时反复点击输入框。
+- **Chat 学习菜单(040)**:`src/views/Chat/ChatInput.tsx` 的左侧 `☰` 已接入可用浮层,按当前 `learning_state/input_mode` 展示"继续/开始新场景/换场景/查看复盘/复习薄弱点/保存进度"。菜单动作复用 `action:*` / `text:*` / `retry:*` / `local:save-progress` 协议;练习答题中会禁用继续、复盘和重练,避免误把控制操作当作当前题答案。
 - **批改卡片 loading 与三档结果(009/021)**:`grading-result` 在 `status='ready'` 且有 `category(exact/similar/incorrect)` 或历史 `isCorrect` 前不渲染结果卡,避免先出现占位结果;等待态由 assistant 文本承载。021 起批改卡不展示百分制分数,只展示"完全正确 / 还不错 / 错误"三档,且正确或相近时不再显示"下一题"按钮,由后端自动串接下一题。
 - **场景卡片 loading(011)**:`scene-cards` 在 `status='loading'` 时不渲染空候选小部件,只保留 assistant 文本;`ready` 后一次性出现卡片,`error` 时才显示恢复提示。
 - **Chat widget 间距(011)**:`src/views/Chat/index.module.css` 的 `.messageRow` gap 为 16px,让 AI 文本和其下方 widget 有更清楚的呼吸感。
@@ -47,6 +48,7 @@
 - **ConversationLock 组件(018)**:`src/components/widgets/ConversationLock.tsx` 正式渲染 `conversation-lock`,用于 locked 历史里的答案/批改详情占位。沿用 amber 左边框和 `--color-surface-soft`,在 `status='ready'` 且 `title/description` 完整时才显示,避免 fallback JSON。
 - **FollowUpSource 组件(019)**:`src/components/widgets/FollowUpSource.tsx` 正式渲染 `follow-up-source`,用于 explain 追问前标明来源。`status='ready'` 且 `sourceLabel/snippet` 完整时才显示;未批改题显示"答题前只给提示",已批改来源显示"不改变主学习流"。
 - **IntentConfirm 组件(020)**:`src/components/widgets/IntentConfirm.tsx` 正式渲染 `intent-confirm`,用于低置信度路由确认。`status='ready'` 且 `question/choices>=2` 时才显示;按钮解析 `action:*` 或 `text:*` 字符串并复用既有发送通道。
+- **LearningMenu / AccountGate 组件(040)**:`src/components/widgets/LearningMenu.tsx` 与 `AccountGate.tsx` 已注册到 `WidgetRenderer`,不再走 fallback JSON。二者与 `IntentConfirm` / `ProgressSummary` 共用 `src/components/widgets/actionProtocol.ts`,统一解析 `action:request-new-scenes`、`action:next-question`、`text:<内容>` 与 `retry:<tag>`。
 - **辅助追问右侧面板(031)**:`src/views/Chat/BranchPanel.tsx` 渲染桌面右侧支线;`MessageBubble` 在非 streaming 主线消息内显示"追问"入口,当前追问来源用 `bubbleReferenced` 高亮。桌面宽屏下 `shellWithBranch` 把主区与 360px 支线组成两列,并把固定输入栏右侧收进主区;窄屏下支线用 fixed 面板覆盖,主输入栏暂时隐藏,避免两套输入重叠。
 - **历史会话左栏/抽屉(034/035/037/039)**:`src/views/Chat/HistoryPanel.tsx` 在 960px 以上显示左侧 260px 历史会话栏,可切换当前会话,035 起提供"新建对话"入口;037 起 Chat store 在收到 `state-transition` 后刷新 conversations,用于同步场景标题和学习态。039 起 960px 以下通过顶栏 `☰` 打开历史抽屉,切换会话或新建会话后自动关闭。主输入栏同步从左侧让出 260px。1280px 以上且支线打开时形成 260px 历史栏 + 主学习流 + 360px 支线三栏。
 
@@ -66,6 +68,8 @@
 - conversation-lock 渲染:`src/__tests__/components/widgets/widgets.test.tsx`
 - follow-up-source 渲染:`src/__tests__/components/widgets/widgets.test.tsx`
 - intent-confirm 渲染与点击动作:`src/__tests__/components/widgets/widgets.test.tsx`
+- learning-menu / account-gate 渲染与点击动作:`src/__tests__/components/widgets/widgets.test.tsx`
+- Chat 学习菜单:`src/__tests__/views/ChatInput.test.tsx`
 - 辅助追问入口与支线 store:`src/__tests__/views/MessageList.test.tsx` + `src/__tests__/stores/chat.test.ts`
 - 历史会话左栏:`src/__tests__/views/HistoryPanel.test.tsx`
 

@@ -148,8 +148,11 @@ interface BranchThreadDTO {
 - `action:request-new-scenes` → `sendAction({ type: 'request-new-scenes' })`
 - `action:next-question` → `sendAction({ type: 'next-question' })`
 - `text:<内容>` → `sendMessage(<内容>)`
+- `retry:<tag>` → `sendMessage("重练 <tag>")`
 
 `practicing` / `grading` 中若 Router 试图降级到 `general-chat`,后端返回 `400 VALIDATION_FAILED`,避免练习或批改中被低置信闲聊兜底带偏。
+
+040 起,输入框学习菜单与 `learning-menu` / `account-gate` / `intent-confirm` / `progress-summary` 按同一前端动作协议解析按钮动作。输入框菜单额外支持本地动作 `local:save-progress`,只显示"当前进度已自动保存"提示,不发网络请求,避免在 `practicing` 中被误提交为答案。
 
 028 起,非锁定态下 AI Router 若高置信度选择 `general-chat`,chat route 会把用户原文写入 `decision.params.userText`;`general-chat` 在 Provider 支持 `chat()` 时用该文本生成真实流式闲聊,否则返回规则化引导。Provider chat 抛错会以 SSE `error` 事件返回 `GENERAL_CHAT_FAILED`。
 

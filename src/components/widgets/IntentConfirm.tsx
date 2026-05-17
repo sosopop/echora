@@ -4,6 +4,7 @@
 
 import type { LearningWidgetInstance } from '@shared/skill';
 import { useChatStore } from '../../stores/chat.js';
+import { runWidgetAction } from './actionProtocol.js';
 import styles from './widgets.module.css';
 
 interface IntentChoice {
@@ -38,22 +39,6 @@ export default function IntentConfirm({
     return null;
   }
 
-  const runChoice = (choice: IntentChoice): void => {
-    if (choice.action === 'action:request-new-scenes') {
-      void sendAction({ type: 'request-new-scenes' });
-      return;
-    }
-    if (choice.action === 'action:next-question') {
-      void sendAction({ type: 'next-question' });
-      return;
-    }
-    if (choice.action.startsWith('text:')) {
-      void sendMessage(choice.action.slice('text:'.length));
-      return;
-    }
-    void sendMessage(choice.action);
-  };
-
   return (
     <section
       className={`${styles.intentConfirm} ${
@@ -74,7 +59,9 @@ export default function IntentConfirm({
             type="button"
             className={styles.intentChoice}
             disabled={streaming}
-            onClick={() => runChoice(choice)}
+            onClick={() =>
+              runWidgetAction(choice.action, { sendMessage, sendAction })
+            }
           >
             <span className={styles.intentChoiceText}>
               <span className={styles.intentChoiceTitle}>{choice.title}</span>

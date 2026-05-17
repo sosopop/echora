@@ -10,6 +10,8 @@ import GradingResult from '../../../components/widgets/GradingResult';
 import ProgressSummary from '../../../components/widgets/ProgressSummary';
 import AnswerReview from '../../../components/widgets/AnswerReview';
 import IntentConfirm from '../../../components/widgets/IntentConfirm';
+import LearningMenu from '../../../components/widgets/LearningMenu';
+import AccountGate from '../../../components/widgets/AccountGate';
 import FollowUpSource from '../../../components/widgets/FollowUpSource';
 import ConversationLock from '../../../components/widgets/ConversationLock';
 import WidgetRenderer from '../../../components/widgets/WidgetRenderer';
@@ -711,6 +713,116 @@ describe('IntentConfirm widget', () => {
     };
     render(<WidgetRenderer widget={widget} />);
     fireEvent.click(screen.getByText('看复盘'));
+    expect(sendMessage).toHaveBeenCalledWith('复盘');
+    expect(screen.queryByText(/未实现 widget/)).not.toBeInTheDocument();
+  });
+});
+
+describe('LearningMenu widget', () => {
+  it('loading 或空 sections 时不渲染空菜单', () => {
+    const widget: LearningWidgetInstance = {
+      id: 'menu-loading',
+      type: 'learning-menu',
+      status: 'loading',
+      data: {},
+      version: 1,
+    };
+    const { container } = render(<LearningMenu widget={widget} />);
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByText('学习菜单')).not.toBeInTheDocument();
+  });
+
+  it('渲染菜单并执行 action/text/retry 协议,WidgetRenderer 不走 fallback', () => {
+    const sendAction = vi.fn();
+    const sendMessage = vi.fn();
+    useChatStore.setState({ sendAction, sendMessage });
+    const widget: LearningWidgetInstance = {
+      id: 'menu-1',
+      type: 'learning-menu',
+      status: 'ready',
+      data: {
+        sections: [
+          {
+            title: '主线',
+            items: [
+              {
+                id: 'next',
+                icon: '>',
+                label: '继续练习',
+                action: 'action:next-question',
+                primary: true,
+              },
+              {
+                id: 'review',
+                icon: '?',
+                label: '查看复盘',
+                action: 'text:复盘',
+              },
+              {
+                id: 'retry',
+                icon: '+',
+                label: '重练介词',
+                action: 'retry:preposition',
+              },
+            ],
+          },
+        ],
+      },
+      version: 1,
+    };
+    render(<WidgetRenderer widget={widget} />);
+    fireEvent.click(screen.getByText('继续练习'));
+    expect(sendAction).toHaveBeenCalledWith({ type: 'next-question' });
+    fireEvent.click(screen.getByText('查看复盘'));
+    expect(sendMessage).toHaveBeenCalledWith('复盘');
+    fireEvent.click(screen.getByText('重练介词'));
+    expect(sendMessage).toHaveBeenCalledWith('重练 preposition');
+    expect(screen.queryByText(/未实现 widget/)).not.toBeInTheDocument();
+  });
+});
+
+describe('AccountGate widget', () => {
+  it('loading 或缺字段时不渲染空账号卡', () => {
+    const widget: LearningWidgetInstance = {
+      id: 'account-loading',
+      type: 'account-gate',
+      status: 'loading',
+      data: {},
+      version: 1,
+    };
+    const { container } = render(<AccountGate widget={widget} />);
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByText(/保存进度/)).not.toBeInTheDocument();
+  });
+
+  it('渲染保存进度提示并执行按钮动作,WidgetRenderer 不走 fallback', () => {
+    const sendAction = vi.fn();
+    const sendMessage = vi.fn();
+    useChatStore.setState({ sendAction, sendMessage });
+    const widget: LearningWidgetInstance = {
+      id: 'account-1',
+      type: 'account-gate',
+      status: 'ready',
+      data: {
+        intent: 'save_progress',
+        title: '进度已保存',
+        description: '当前会话、题目和批改结果会继续保留。',
+        primaryAction: {
+          label: '继续练习',
+          action: 'action:next-question',
+        },
+        secondaryAction: {
+          label: '查看复盘',
+          action: 'text:复盘',
+        },
+      },
+      version: 1,
+    };
+    render(<WidgetRenderer widget={widget} />);
+    expect(screen.getByText('进度已保存')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('继续练习'));
+    expect(sendAction).toHaveBeenCalledWith({ type: 'next-question' });
+    fireEvent.click(screen.getByText('查看复盘'));
     expect(sendMessage).toHaveBeenCalledWith('复盘');
     expect(screen.queryByText(/未实现 widget/)).not.toBeInTheDocument();
   });

@@ -13,6 +13,8 @@ import AnswerReview from './AnswerReview.js';
 import IntentConfirm from './IntentConfirm.js';
 import FollowUpSource from './FollowUpSource.js';
 import ConversationLock from './ConversationLock.js';
+import LearningMenu from './LearningMenu.js';
+import AccountGate from './AccountGate.js';
 import styles from './widgets.module.css';
 
 type WidgetComponent = (props: {
@@ -26,6 +28,8 @@ const REGISTRY: Record<string, WidgetComponent> = {
   'progress-summary': ProgressSummary,
   'answer-review': AnswerReview,
   'intent-confirm': IntentConfirm,
+  'learning-menu': LearningMenu,
+  'account-gate': AccountGate,
   'follow-up-source': FollowUpSource,
   'conversation-lock': ConversationLock,
 };

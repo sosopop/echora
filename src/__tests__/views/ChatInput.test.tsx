@@ -247,4 +247,51 @@ describe('ChatInput scene-select recovery', () => {
     await waitFor(() => expect(textarea).toHaveFocus());
     expect(textarea).toHaveValue('');
   });
+
+  it('学习菜单可触发换场景、复盘与保存提示', () => {
+    const sendAction = vi.fn();
+    const sendMessage = vi.fn();
+    useLearningStateStore.setState({ state: 'awaiting_next' });
+    useChatStore.setState({
+      inputMode: 'chat',
+      sendAction,
+      sendMessage,
+    });
+
+    render(<ChatInput />);
+
+    fireEvent.click(screen.getByRole('button', { name: '打开学习菜单' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /开始新场景/ }));
+    expect(sendAction).toHaveBeenCalledWith({ type: 'request-new-scenes' });
+
+    fireEvent.click(screen.getByRole('button', { name: '打开学习菜单' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /查看复盘/ }));
+    expect(sendMessage).toHaveBeenCalledWith('复盘');
+
+    fireEvent.click(screen.getByRole('button', { name: '打开学习菜单' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /保存进度/ }));
+    expect(screen.getByRole('status')).toHaveTextContent('当前进度已自动保存');
+  });
+
+  it('练习答题中菜单不会把继续或复盘误触发为新请求', () => {
+    const sendAction = vi.fn();
+    const sendMessage = vi.fn();
+    useLearningStateStore.setState({ state: 'practicing' });
+    useChatStore.setState({
+      inputMode: 'chat',
+      sendAction,
+      sendMessage,
+      messages: [messageWithExerciseWidget(91)],
+    });
+
+    render(<ChatInput />);
+
+    fireEvent.click(screen.getByRole('button', { name: '打开学习菜单' }));
+    expect(screen.getByRole('menuitem', { name: /继续练习/ })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: /查看复盘/ })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: /复习薄弱点/ })).toBeDisabled();
+    fireEvent.click(screen.getByRole('menuitem', { name: /换场景/ }));
+    expect(sendAction).toHaveBeenCalledWith({ type: 'request-new-scenes' });
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
 });
