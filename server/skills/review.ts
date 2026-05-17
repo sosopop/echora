@@ -125,6 +125,31 @@ function statusForScore(score: number): 'ok' | 'warn' | 'bad' {
   return 'bad';
 }
 
+type ReviewCategory = 'exact' | 'similar' | 'incorrect';
+
+function categoryForRow(row: ReviewAttemptRow): ReviewCategory {
+  const corrections = safeParseCorrections(row.corrections);
+  if (
+    corrections.category === 'exact' ||
+    corrections.category === 'similar' ||
+    corrections.category === 'incorrect'
+  ) {
+    return corrections.category;
+  }
+  if (row.is_correct !== 1) return 'incorrect';
+  return row.score >= 95 ? 'exact' : 'similar';
+}
+
+function categoryCounts(rows: ReviewAttemptRow[]): Record<ReviewCategory, number> {
+  return rows.reduce<Record<ReviewCategory, number>>(
+    (acc, row) => {
+      acc[categoryForRow(row)] += 1;
+      return acc;
+    },
+    { exact: 0, similar: 0, incorrect: 0 }
+  );
+}
+
 function buildAnswerReviewItems(rows: ReviewAttemptRow[]): Array<{
   questionNo: number;
   promptShort: string;
@@ -154,7 +179,7 @@ function buildStrongPoints(rows: ReviewAttemptRow[]): string[] {
     .slice(0, 3)
     .map(
       (row) =>
-        `${labelForQuestionType(row.question_type)} · 第 ${row.stage}-${row.question_no} 题 ${row.score} 分`
+        `${labelForQuestionType(row.question_type)} · 第 ${row.stage}-${row.question_no} 题`
     );
   if (strong.length > 0) return strong;
   return rows.length > 0 ? ['本轮已经完成全部题目,可以从薄弱点继续稳住节奏。'] : [];
@@ -252,6 +277,7 @@ export const reviewSkill: Skill = {
       ctx.conversationId,
       sceneId
     );
+    const distribution = categoryCounts(attempts);
     const strongPoints = buildStrongPoints(attempts);
     const weakPoints = buildWeakPoints(attempts, tagSummary);
     const relatedTags = new Set([
@@ -266,7 +292,6 @@ export const reviewSkill: Skill = {
         score: row.masteryScore,
         delta: 0,
       }));
-    const correctCount = attempts.filter((row) => row.is_correct === 1).length;
     const widgetId = ctx.makeWidgetId('progress-summary');
     const answerReviewWidgetId = ctx.makeWidgetId('answer-review');
     const answerReviewItems = buildAnswerReviewItems(attempts);
@@ -274,7 +299,10 @@ export const reviewSkill: Skill = {
     yield {
       type: 'text-chunk',
       payload: {
-        text: `本轮复盘来了:你完成了 ${attempts.length} 题,平均 ${avg} 分,通过 ${correctCount} 题。`,
+        text:
+          `本轮复盘来了:你完成了 ${attempts.length} 题,` +
+          `完全正确 ${distribution.exact} 题,还不错 ${distribution.similar} 题,` +
+          `错误 ${distribution.incorrect} 题。`,
       },
     };
     yield {
@@ -301,6 +329,7 @@ export const reviewSkill: Skill = {
             questionsCount: attempts.length,
             averageScore: avg,
             averageScoreDelta: 0,
+            categoryCounts: distribution,
             weakTagsCount: tagSummary.length,
             masteredScenesCount: masteries.filter((row) => row.score >= 80)
               .length,

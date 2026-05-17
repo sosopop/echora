@@ -93,6 +93,7 @@ export interface ConversationDTO {
 export interface MessageDTO {
   id: number;
   conversationId: number;
+  branchThreadId: number | null;
   type: 'text' | 'widget' | 'system';
   role: 'user' | 'assistant' | 'system';
   skillName: string | null;
@@ -150,6 +151,33 @@ export interface ChatSendResp {
   assistantMessageId: number;
   streamId: string;
   decision: RouterDecision;
+}
+
+/* ============================================================
+ * Branch follow-up threads(PRD §3.2)
+ * ========================================================== */
+export interface BranchThreadDTO {
+  id: number;
+  userId: number;
+  conversationId: number;
+  sourceMessageId: number;
+  sourceRef: unknown | null;
+  status: 'open' | 'closed';
+  createdAt: string;
+}
+
+export interface BranchThreadCreateReq {
+  sourceMessageId: number;
+  sourceRef?: unknown;
+}
+
+export interface BranchMessageSendReq {
+  text: string;
+}
+
+export interface BranchMessageSendResp {
+  userMessage: MessageDTO;
+  assistantMessage: MessageDTO;
 }
 
 /* ============================================================

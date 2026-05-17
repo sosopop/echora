@@ -30,6 +30,7 @@ import {
   selectTopK,
   type SceneCandidate,
 } from './_helpers/sceneSelectFsm.js';
+import { updateConversationTitle } from '../services/conversation.js';
 import type { ChatAction, CefrLevel } from '../../shared/api.js';
 import { getDevErrorDetails } from '../utils/devError.js';
 import { practiceSkill } from './practice.js';
@@ -75,6 +76,7 @@ export const sceneSelectSkill: Skill = {
           roles: dialogue.roles,
           turns: dialogue.turns,
         });
+        updateConversationTitle(ctx.db, ctx.conversationId, scene.title);
         appendSceneHistory(ctx.db, ctx.user.id, scene.topic);
       } catch (e) {
         const details = getDevErrorDetails(e);

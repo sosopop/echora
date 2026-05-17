@@ -38,6 +38,10 @@ JWT 7 天过期,V1 无刷新令牌。密钥来自 `JWT_SECRET`。
 | POST   | /api/chat/conversations                    | 新建空会话(可选 `learningState`)|
 | GET    | /api/chat/conversations/:id/messages       | 历史消息                           |
 | GET    | /api/chat/conversations/:id/scene-dialogue | 当前活跃 scene_dialogue(003 新增)|
+| GET    | /api/chat/conversations/:id/branch-threads | 当前会话辅助追问支线列表          |
+| POST   | /api/chat/conversations/:id/branch-threads | 创建辅助追问支线                  |
+| GET    | /api/chat/branch-threads/:threadId/messages | 支线消息列表                     |
+| POST   | /api/chat/branch-threads/:threadId/messages | 发送支线追问并获得支线回复       |
 | POST   | /api/chat/send                             | 发消息 → { messageId, streamId, decision } |
 | GET    | /api/chat/stream?streamId=&lastSeq=&token= | SSE 端点                           |
 
@@ -67,13 +71,42 @@ type ChatAction =
 
 `review` 返回的 `progress-summary` widget 继续使用 `shared/widget.ts` 既有 schema。批改后服务端会把 `grading_results.corrections.tags` 写入 `error_tag_events`,并更新 `mastery_records`;正确且无 tag 的题不会写错误事件,但会以题型作为 fallback tag 更新掌握度。
 
+029 起,`progress-summary.data` 增加 `categoryCounts?: { exact; similar; incorrect }`;`averageScore` 继续保留为兼容字段,但正式前端组件优先展示三档分布,不再把平均分作为用户可见主指标。
+
 021 起,`grading-result` widget 的 `data` 增加 `category?: 'exact' | 'similar' | 'incorrect'`。`score/isCorrect` 为兼容历史与统计仍保留,但前端正式卡片只展示三档文案:"完全正确"(exact,与参考表达完全匹配)、"还不错"(similar,意思相近可通过)、"错误"(incorrect,语法/拼写/意思不一致)。`submit-answer` 批改为 exact/similar 后,同一条 SkillEvent 流会继续输出下一题的 `exercise-card`;调用方不需要再触发 `next-question`。
 
-023 起,`exercise-card` widget 的 `data` 支持 `targetZh?: string`。阶段 4 `role_reversal` 使用该字段突出用户需要表达的中文目标句,例如 `targetZh: "你好！我想买一张票。"`;角色信息继续放在 `contextZh/hint` 中,不再用醒目的 `contextEn` 块展示 `Your role`。
+023 起,`exercise-card` widget 的 `data` 支持 `targetZh?: string`。阶段 4 `role_reversal` 使用该字段突出用户需要表达的中文目标句,例如 `targetZh: "你好！我想买一张票。"`;026 起阶段 3 `dialogue_chain` 也使用该字段突出"目标意思"。角色信息继续放在 `contextZh/hint` 中,不再用醒目的 `contextEn` 块展示 `Your role`。
+
+024 起,`exercise-card` widget 的 `data` 支持 `remediationKind?: 'retry' | 'replacement'`。内部 `stage=5` 的专项重练题使用 `remediationKind='retry'` 或省略时前端显示"重练";主线题第 2 次错误后自动生成的降难替换题使用 `remediationKind='replacement'`,前端显示"替换题"。
+
+027 起,`exercise-card` widget 的 `data` 支持 `totalStages?: number` 与 `stageGoal?: number`。主线 `practice` 下发 `totalStages=4`、`stageGoal=2`,用于显示"阶段 1/4 · 第 1/2 题";`retry` 下发 `stageGoal=3`,替换题下发 `stageGoal=1`。
 
 017 起,`review` 同一条 assistant 消息会连续返回 `progress-summary` 与 `answer-review` 两个 widget。`messages.widget_snapshot` 兼容两种形态:历史单 widget object,以及多 widget array。前端 `MessageList` 会按数组顺序渲染多个 `WidgetSlot`;后端 `appendStreamEvent` 也会按 widget id upsert,避免后一个 widget 覆盖前一个 widget。
 
 016 起,`awaiting_next` / `reviewing` / `scene_selecting` / `practicing` 下的 `重练` / `重练错题` / `开始重练` / `retry` 会确定性形成 `RouterDecision { skillName: 'retry' }`;`重练 <tag>` 会把 `<tag>` 写入 `decision.params.targetTag`。不新增 ChatAction。若会话 `activeSkill='retry'`,结构化 `{ type: 'next-question' }` 会继续路由 `retry`,否则仍路由 `practice`。
+
+025 起,若会话 `status='archived'` 或 `learningState='archived'`,POST `/api/chat/send` 只允许复盘类文本(`复盘` / `总结` / `学习报告` / `review`)进入 `review`;其他文本或 action 直接返回 `400 VALIDATION_FAILED`,且不会创建新的 message / agent_run / stream。
+
+030 起,辅助追问第一版接入真实 `branch_threads` 与 `messages.branch_thread_id`:
+
+```ts
+interface BranchThreadCreateReq {
+  sourceMessageId: number;
+  sourceRef?: unknown;
+}
+
+interface BranchThreadDTO {
+  id: number;
+  userId: number;
+  conversationId: number;
+  sourceMessageId: number;
+  sourceRef: unknown | null;
+  status: 'open' | 'closed';
+  createdAt: string;
+}
+```
+
+`POST /api/chat/conversations/:id/branch-threads` 会校验来源消息必须属于当前会话。`GET /api/chat/conversations/:id/messages` 默认只返回主线消息(`branch_thread_id IS NULL`),支线消息只能通过 `/api/chat/branch-threads/:threadId/messages` 读取。`POST /api/chat/branch-threads/:threadId/messages` 会同步写入一条支线 user message 与一条支线 assistant message,不创建 `agent_runs`,不触发 `SkillEvent`/SSE,也不改变 `learning_state` / `active_skill` / `input_mode`。032 起,支线回复在 Provider 支持 `chat()` 时使用真实 LLM 生成;stub 或 Provider 不支持 `chat()` 时保留确定性安全提示。033 起,Provider prompt 会携带同一 `branchThreadId` 下最多 20 条历史支线消息,用于连续追问。Provider chat 抛错会返回 `502 PROVIDER_ERROR`,不静默 fallback。主线锁定(`practicing` / `grading`)时,支线 prompt 与回复都不会复述来源消息正文,避免绕过历史答案脱敏。
 
 018 起,`conversations.lock_policy` 由 `learning_state` 自动维护:`practicing` / `grading` 写为 `locked`,其余学习态写为 `open`。`GET /api/chat/conversations/:id/messages` 在 locked 状态下会对历史消息做服务端脱敏:
 
@@ -106,6 +139,8 @@ type ChatAction =
 
 `practicing` / `grading` 中若 Router 试图降级到 `general-chat`,后端返回 `400 VALIDATION_FAILED`,避免练习或批改中被低置信闲聊兜底带偏。
 
+028 起,非锁定态下 AI Router 若高置信度选择 `general-chat`,chat route 会把用户原文写入 `decision.params.userText`;`general-chat` 在 Provider 支持 `chat()` 时用该文本生成真实流式闲聊,否则返回规则化引导。Provider chat 抛错会以 SSE `error` 事件返回 `GENERAL_CHAT_FAILED`。
+
 016 起,重练题的 `exercise_attempts.prompt` 允许存储兼容 JSON 包装:
 
 ```json
@@ -118,7 +153,7 @@ type ChatAction =
 }
 ```
 
-旧数据的纯字符串 prompt 仍按原逻辑处理。
+024 起 `kind` 也可以是 `"replacement"`,并可附带 `"sourceAttemptId": 123` 指向原始二次失败题。旧数据的纯字符串 prompt 仍按原逻辑处理。
 
 006 起,结构化 `action` 在消息历史中显示为自然文案,不再暴露 `[action] {...}` 原始 JSON。008 起 `submit-answer` 显示用户真实答案,其他映射保持:`request-new-scenes` → "换一批场景",`select-scene` → "选择场景:<sceneId>",`skip-question` → "跳过本题",`next-question` → "下一题"。前端仍兼容历史 raw action 消息,渲染时会转为同一套文案。
 
@@ -171,7 +206,7 @@ type ChatAction =
 ## 测试入口
 
 - supertest 在 `server/__tests__/` 下针对每个路由组写一个 `*.test.ts`
-- E2E 在 `tests/smoke/run-smoke.ts` 覆盖完整链路
+- E2E 在 `tests/smoke/run-smoke.ts` 覆盖完整链路;学习闭环 smoke `tests/smoke/run-smoke-learning.ts` 覆盖 archived 会话继续练习被拒的负样本
 
 ## Pending
 

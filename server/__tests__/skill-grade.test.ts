@@ -28,11 +28,15 @@ import { createSceneDialogue } from '../services/sceneDialogue.js';
 import {
   createAttempt,
   getAttempt,
+  incrementRetry,
   markNeedsReview,
 } from '../services/exerciseAttempt.js';
 import { createGrading } from '../services/gradingResult.js';
 import { getMasteryRecord } from '../services/masteryRecord.js';
-import { encodeRetryAttemptPrompt } from '../services/attemptPrompt.js';
+import {
+  decodeAttemptPrompt,
+  encodeRetryAttemptPrompt,
+} from '../services/attemptPrompt.js';
 import type { SkillEventInput } from '../../shared/skill.js';
 
 let db: Db;
@@ -273,6 +277,59 @@ describe('grade skill', () => {
     expect(mastery?.masteryScore).toBeLessThan(50);
   });
 
+  it('主线题第 2 次错误 → 标记 needs_review 并自动生成降难替换题', async () => {
+    const attemptId = seedAttempt(1, 1);
+    expect(incrementRetry(db, attemptId)).toBe(1);
+    const provider = makeProvider({
+      score: 20,
+      is_correct: false,
+      reference_answer: 'to',
+      explanation: '缺少 to',
+      tags: ['missing_word'],
+    });
+
+    const events = await collect(
+      makeCtx(provider, {
+        type: 'submit-answer',
+        payload: { attemptId, answer: 'order' },
+      })
+    );
+
+    const attempt = getAttempt(db, attemptId);
+    expect(attempt?.retryCount).toBe(2);
+    expect(attempt?.status).toBe('needs_review');
+    expect(
+      events.find(
+        (e) =>
+          e.type === 'text-chunk' &&
+          (e as { payload: { text: string } }).payload.text.includes(
+            '更简单的同类题'
+          )
+      )
+    ).toBeDefined();
+
+    const replacement = widgetReadyData<{
+      attemptId: number;
+      stage: number;
+      questionNo: number;
+      remediationKind: string;
+    }>(events, 'exercise-card');
+    expect(replacement.stage).toBe(5);
+    expect(replacement.questionNo).toBe(1);
+    expect(replacement.remediationKind).toBe('replacement');
+
+    const replacementAttempt = getAttempt(db, replacement.attemptId);
+    const decoded = decodeAttemptPrompt(replacementAttempt?.prompt ?? '');
+    expect(decoded.kind).toBe('replacement');
+    expect(decoded.sourceAttemptId).toBe(attemptId);
+    expect(decoded.targetTag).toBe('missing_word');
+    const transition = events.find((e) => e.type === 'state-transition') as {
+      payload: { nextLearningState: string; activeSkill: string | null };
+    };
+    expect(transition.payload.nextLearningState).toBe('practicing');
+    expect(transition.payload.activeSkill).toBe('practice');
+  });
+
   it('正确答案无 tags → 不写错误事件,但更新题型掌握度', async () => {
     const attemptId = seedAttempt(1, 1);
     const provider = makeProvider({
@@ -479,6 +536,68 @@ describe('grade skill', () => {
           )
       )
     ).toBeDefined();
+  });
+
+  it('替换题答对 → 回到主线下一题', async () => {
+    const sourceAttempt = createAttempt(db, {
+      conversationId,
+      sceneId: 'test',
+      stage: 1,
+      questionNo: 1,
+      questionType: 'fill_word',
+      prompt: 'x',
+    });
+    createGrading(db, {
+      attemptId: sourceAttempt.id,
+      score: 20,
+      isCorrect: false,
+      corrections: {},
+    });
+    markNeedsReview(db, sourceAttempt.id);
+    const replacementId = createAttempt(db, {
+      conversationId,
+      sceneId: 'test',
+      stage: 5,
+      questionNo: 1,
+      questionType: 'fill_word',
+      prompt: encodeRetryAttemptPrompt({
+        prompt: 'retry',
+        referenceAnswer: 'to',
+        targetTag: 'missing_word',
+        kind: 'replacement',
+        sourceAttemptId: sourceAttempt.id,
+      }),
+    }).id;
+    const provider = makeProvider({
+      score: 90,
+      is_correct: true,
+      reference_answer: 'to',
+      explanation: '正确',
+      tags: [],
+    });
+
+    const events = await collect(
+      makeCtx(provider, {
+        type: 'submit-answer',
+        payload: { attemptId: replacementId, answer: 'to' },
+      })
+    );
+
+    expect(
+      events.find(
+        (e) =>
+          e.type === 'text-chunk' &&
+          (e as { payload: { text: string } }).payload.text.includes(
+            '替换题通过了'
+          )
+      )
+    ).toBeDefined();
+    const nextMainline = widgetReadyData<{
+      stage: number;
+      questionNo: number;
+    }>(events, 'exercise-card');
+    expect(nextMainline.stage).toBe(1);
+    expect(nextMainline.questionNo).toBe(2);
   });
 
   it('第 3 道重练题答对 → 转 reviewing', async () => {

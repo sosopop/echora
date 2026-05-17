@@ -4,6 +4,7 @@
 
 import type { Skill } from '../../shared/skill.js';
 import { SKILL_NAMES } from '../../shared/skill.js';
+import type { ServerSkillContext } from './types.js';
 
 interface IntentConfirmParams {
   question?: string;
@@ -24,6 +25,7 @@ export const generalChatSkill: Skill = {
   primaryWidget: 'intent-confirm',
 
   async *handler(ctx) {
+    const serverCtx = ctx as ServerSkillContext;
     const intentConfirm = ctx.params.intentConfirm as
       | IntentConfirmParams
       | undefined;
@@ -67,6 +69,41 @@ export const generalChatSkill: Skill = {
       };
       yield { type: 'done', payload: {} };
       return;
+    }
+
+    const userText =
+      typeof ctx.params.userText === 'string' ? ctx.params.userText.trim() : '';
+    if (userText && serverCtx.provider.chat) {
+      let emitted = false;
+      try {
+        for await (const ev of serverCtx.provider.chat({
+          system:
+            '你是 Echora 的英语学习教练。当前不是练习或批改锁定态,可以进行低风险闲聊。' +
+            '回复要简短、温和,优先把用户自然引导回英语场景练习、复盘或重练。' +
+            '不要声称已经执行系统动作;如果用户想练习,建议他说"开始练习"或"换场景"。',
+          messages: [{ role: 'user', content: userText }],
+          maxTokens: 500,
+          signal: serverCtx.signal,
+        })) {
+          if (ev.type === 'text-delta' && ev.text) {
+            emitted = true;
+            yield { type: 'text-chunk', payload: { text: ev.text } };
+          }
+        }
+      } catch (e) {
+        yield {
+          type: 'error',
+          payload: {
+            code: 'GENERAL_CHAT_FAILED',
+            message: e instanceof Error ? e.message : String(e),
+          },
+        };
+        return;
+      }
+      if (emitted) {
+        yield { type: 'done', payload: {} };
+        return;
+      }
     }
 
     yield {

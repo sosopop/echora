@@ -16,6 +16,8 @@ import { useLearningStateStore } from '../../stores/learningState.js';
 import { useAuthStore } from '../../stores/auth.js';
 import MessageList from './MessageList.js';
 import ChatInput from './ChatInput.js';
+import BranchPanel from './BranchPanel.js';
+import HistoryPanel from './HistoryPanel.js';
 import styles from './index.module.css';
 
 const LEARNING_STATE_LABEL: Record<string, string> = {
@@ -33,6 +35,7 @@ export default function Chat(): JSX.Element {
   const error = useChatStore((s) => s.error);
   const conversations = useChatStore((s) => s.conversations);
   const currentId = useChatStore((s) => s.currentConversationId);
+  const isBranchOpen = useChatStore((s) => s.isBranchOpen);
   const user = useAuthStore((s) => s.user);
   const initRef = useRef(false);
 
@@ -55,7 +58,14 @@ export default function Chat(): JSX.Element {
   }, []);
 
   return (
-    <div className={styles.shell}>
+    <div
+      className={[
+        styles.shell,
+        isBranchOpen ? styles.shellWithBranch : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
       <header className={styles.topBar}>
         <span className={styles.brand}>
           <span className={styles.brandMark}>✱</span> Echora
@@ -72,19 +82,23 @@ export default function Chat(): JSX.Element {
         </span>
       </header>
 
-      <main className={styles.main}>
-        {error && <div className={styles.errorBar}>{error}</div>}
-        {conversations.length === 0 ? (
-          <div className={styles.empty}>
-            <div className={styles.emptyTitle}>暂无会话</div>
-            <div className={styles.emptyDesc}>
-              完成 onboarding 后,Echo 会自动为你推荐场景。
+      <div className={styles.workspace}>
+        <HistoryPanel />
+        <main className={styles.main}>
+          {error && <div className={styles.errorBar}>{error}</div>}
+          {conversations.length === 0 ? (
+            <div className={styles.empty}>
+              <div className={styles.emptyTitle}>暂无会话</div>
+              <div className={styles.emptyDesc}>
+                完成 onboarding 后,Echo 会自动为你推荐场景。
+              </div>
             </div>
-          </div>
-        ) : (
-          <MessageList />
-        )}
-      </main>
+          ) : (
+            <MessageList />
+          )}
+        </main>
+        <BranchPanel />
+      </div>
 
       <ChatInput />
     </div>

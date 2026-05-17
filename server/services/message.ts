@@ -12,6 +12,7 @@ import type { SkillEvent } from '../../shared/skill.js';
 interface MessageRow {
   id: number;
   conversation_id: number;
+  branch_thread_id: number | null;
   type: 'text' | 'widget' | 'system';
   role: 'user' | 'assistant' | 'system';
   skill_name: string | null;
@@ -26,6 +27,7 @@ function toDTO(row: MessageRow): MessageDTO {
   return {
     id: row.id,
     conversationId: row.conversation_id,
+    branchThreadId: row.branch_thread_id,
     type: row.type,
     role: row.role,
     skillName: row.skill_name,
@@ -96,6 +98,7 @@ function nextSeq(db: Db, conversationId: number): number {
 
 export interface AppendMessageInput {
   conversationId: number;
+  branchThreadId?: number | null;
   type: 'text' | 'widget' | 'system';
   role: 'user' | 'assistant' | 'system';
   skillName?: string | null;
@@ -107,11 +110,12 @@ export function appendMessage(db: Db, input: AppendMessageInput): MessageDTO {
   const result = db
     .prepare(
       `INSERT INTO messages
-       (conversation_id, type, role, skill_name, content, stream_events, seq)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+       (conversation_id, branch_thread_id, type, role, skill_name, content, stream_events, seq)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       input.conversationId,
+      input.branchThreadId ?? null,
       input.type,
       input.role,
       input.skillName ?? null,
@@ -134,11 +138,37 @@ export function getMessages(
   const rows = db
     .prepare<[number, number], MessageRow>(
       `SELECT * FROM messages
-       WHERE conversation_id = ?
+       WHERE conversation_id = ? AND branch_thread_id IS NULL
        ORDER BY seq ASC
        LIMIT ?`
     )
     .all(conversationId, limit);
+  return rows.map(toDTO);
+}
+
+export function getMessage(
+  db: Db,
+  messageId: number
+): MessageDTO | null {
+  const row = db
+    .prepare<[number], MessageRow>('SELECT * FROM messages WHERE id = ?')
+    .get(messageId);
+  return row ? toDTO(row) : null;
+}
+
+export function getBranchMessages(
+  db: Db,
+  branchThreadId: number,
+  limit = 100
+): MessageDTO[] {
+  const rows = db
+    .prepare<[number, number], MessageRow>(
+      `SELECT * FROM messages
+       WHERE branch_thread_id = ?
+       ORDER BY seq ASC
+       LIMIT ?`
+    )
+    .all(branchThreadId, limit);
   return rows.map(toDTO);
 }
 

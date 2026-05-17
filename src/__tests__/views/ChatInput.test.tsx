@@ -12,6 +12,7 @@ function messageWithSceneWidget(
   return {
     id: 1,
     conversationId: 1,
+    branchThreadId: null,
     type: 'text',
     role: 'assistant',
     skillName: 'scene-select',
@@ -32,6 +33,7 @@ function messageWithExerciseWidget(attemptId: number): MessageDTO {
   return {
     id: 2,
     conversationId: 1,
+    branchThreadId: null,
     type: 'text',
     role: 'assistant',
     skillName: 'practice',
@@ -61,6 +63,7 @@ function messageWithGradingWidget(
   return {
     id: 3,
     conversationId: 1,
+    branchThreadId: null,
     type: 'text',
     role: 'assistant',
     skillName: 'grade',

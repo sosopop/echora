@@ -9,7 +9,10 @@ import { getActiveSceneDialogue } from '../services/sceneDialogue.js';
 import { createAttempt } from '../services/exerciseAttempt.js';
 import { listErrorTagSummaryByConversation } from '../services/errorTagEvent.js';
 import { listMasteryRecords } from '../services/masteryRecord.js';
-import { encodeRetryAttemptPrompt } from '../services/attemptPrompt.js';
+import {
+  decodeAttemptPrompt,
+  encodeRetryAttemptPrompt,
+} from '../services/attemptPrompt.js';
 
 export const RETRY_STAGE = 5;
 const RETRY_GOAL = 3;
@@ -24,17 +27,33 @@ interface RetryQuestionTemplate {
   referenceAnswer: string;
 }
 
-function countRetryAttempts(ctx: ServerSkillContext, sceneId: string): number {
-  const row = ctx.db
-    .prepare<[number, string, number], { c: number }>(
-      `SELECT COUNT(*) AS c
+function listRetryAttemptPrompts(
+  ctx: ServerSkillContext,
+  sceneId: string
+): string[] {
+  return ctx.db
+    .prepare<[number, string, number], { prompt: string }>(
+      `SELECT prompt
        FROM exercise_attempts
        WHERE conversation_id = ?
          AND scene_id = ?
          AND stage = ?`
     )
-    .get(ctx.conversationId, sceneId, RETRY_STAGE);
-  return row?.c ?? 0;
+    .all(ctx.conversationId, sceneId, RETRY_STAGE)
+    .map((row) => row.prompt);
+}
+
+function countRetryAttempts(ctx: ServerSkillContext, sceneId: string): number {
+  return listRetryAttemptPrompts(ctx, sceneId).filter(
+    (prompt) => decodeAttemptPrompt(prompt).kind !== 'replacement'
+  ).length;
+}
+
+function countAllRemediationAttempts(
+  ctx: ServerSkillContext,
+  sceneId: string
+): number {
+  return listRetryAttemptPrompts(ctx, sceneId).length;
 }
 
 function pickTargetTag(
@@ -268,6 +287,7 @@ export const retrySkill: Skill = {
   primaryWidget: 'exercise-card',
   async *handler(_ctx): AsyncIterable<SkillEventInput> {
     const ctx = _ctx as ServerSkillContext;
+    const isReplacement = ctx.params.mode === 'replacement';
     const dialogue = getActiveSceneDialogue(ctx.db, ctx.conversationId);
     if (!dialogue) {
       yield {
@@ -293,7 +313,7 @@ export const retrySkill: Skill = {
     }
 
     const doneCount = countRetryAttempts(ctx, dialogue.sceneId);
-    if (doneCount >= RETRY_GOAL) {
+    if (!isReplacement && doneCount >= RETRY_GOAL) {
       yield {
         type: 'text-chunk',
         payload: {
@@ -308,7 +328,9 @@ export const retrySkill: Skill = {
       return;
     }
 
-    const questionNo = doneCount + 1;
+    const questionNo = isReplacement
+      ? countAllRemediationAttempts(ctx, dialogue.sceneId) + 1
+      : doneCount + 1;
     const q = buildRetryQuestion(targetTag, questionNo);
     const attempt = createAttempt(ctx.db, {
       conversationId: ctx.conversationId,
@@ -321,13 +343,20 @@ export const retrySkill: Skill = {
         prompt: q.prompt,
         referenceAnswer: q.referenceAnswer,
         targetTag,
+        kind: isReplacement ? 'replacement' : 'retry',
+        sourceAttemptId:
+          typeof ctx.params.sourceAttemptId === 'number'
+            ? ctx.params.sourceAttemptId
+            : undefined,
       }),
     });
 
     yield {
       type: 'text-chunk',
       payload: {
-        text: `重练专场:${targetTag} · 第 ${questionNo}/${RETRY_GOAL} 题`,
+        text: isReplacement
+          ? `降难替换题:${targetTag}`
+          : `重练专场:${targetTag} · 第 ${questionNo}/${RETRY_GOAL} 题`,
       },
     };
     yield { type: 'mode-switch', payload: { mode: q.inputMode } };
@@ -354,7 +383,9 @@ export const retrySkill: Skill = {
             attemptId: attempt.id,
             stage: RETRY_STAGE,
             questionNo,
+            stageGoal: isReplacement ? 1 : RETRY_GOAL,
             questionType: q.questionType,
+            remediationKind: isReplacement ? 'replacement' : 'retry',
             prompt: q.prompt,
             contextZh: q.contextZh,
             contextEn: q.contextEn,
@@ -366,7 +397,10 @@ export const retrySkill: Skill = {
     };
     yield {
       type: 'state-transition',
-      payload: { nextLearningState: 'practicing', activeSkill: 'retry' },
+      payload: {
+        nextLearningState: 'practicing',
+        activeSkill: isReplacement ? 'practice' : 'retry',
+      },
     };
     yield { type: 'done', payload: {} };
   },

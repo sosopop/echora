@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import MessageList from '../../views/Chat/MessageList';
 import { useChatStore } from '../../stores/chat';
 
@@ -17,6 +17,7 @@ beforeEach(() => {
       {
         id: 1,
         conversationId: 1,
+        branchThreadId: null,
         type: 'text',
         role: 'assistant',
         skillName: 'scene-select',
@@ -67,6 +68,7 @@ describe('MessageList scrolling', () => {
           {
             id: 1,
             conversationId: 1,
+            branchThreadId: null,
             type: 'text',
             role: 'assistant',
             skillName: 'scene-select',
@@ -102,6 +104,7 @@ describe('MessageList scrolling', () => {
         {
           id: 2,
           conversationId: 1,
+          branchThreadId: null,
           type: 'text',
           role: 'assistant',
           skillName: 'review',
@@ -149,5 +152,15 @@ describe('MessageList scrolling', () => {
 
     expect(screen.getByText('餐厅点餐 · 已经达标')).toBeInTheDocument();
     expect(screen.getByText('餐厅点餐 · 2 道题回看')).toBeInTheDocument();
+  });
+
+  it('点击消息追问按钮会打开对应支线', () => {
+    const openBranchForMessage = vi.fn();
+    useChatStore.setState({ openBranchForMessage, streamingMessageId: null });
+
+    render(<MessageList />);
+
+    fireEvent.click(screen.getByRole('button', { name: '追问' }));
+    expect(openBranchForMessage).toHaveBeenCalledWith(1);
   });
 });

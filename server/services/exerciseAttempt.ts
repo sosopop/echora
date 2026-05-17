@@ -223,6 +223,46 @@ export function countStagePassed(
 }
 
 /**
+ * 统计当前会话当前阶段已处理完的计分题数:
+ *   - 批改正确的题
+ *   - 已达重试上限并标记 needs_review 的题
+ *
+ * 该值用于推进出题序号,避免用户在同一题错两次后被永久卡住。
+ */
+export function countStageHandled(
+  db: Db,
+  conversationId: number,
+  stage: number,
+  sceneId?: string | null
+): number {
+  if (sceneId) {
+    const row = db
+      .prepare<[number, number, string], { c: number }>(
+        `SELECT COUNT(*) AS c
+         FROM exercise_attempts a
+         LEFT JOIN grading_results g ON g.attempt_id = a.id
+         WHERE a.conversation_id = ?
+           AND a.stage = ?
+           AND a.scene_id = ?
+           AND (a.status = 'needs_review' OR g.is_correct = 1)`
+      )
+      .get(conversationId, stage, sceneId);
+    return row?.c ?? 0;
+  }
+  const row = db
+    .prepare<[number, number], { c: number }>(
+      `SELECT COUNT(*) AS c
+       FROM exercise_attempts a
+       LEFT JOIN grading_results g ON g.attempt_id = a.id
+       WHERE a.conversation_id = ?
+         AND a.stage = ?
+         AND (a.status = 'needs_review' OR g.is_correct = 1)`
+    )
+    .get(conversationId, stage);
+  return row?.c ?? 0;
+}
+
+/**
  * 当前阶段最大 question_no(用于下一题编号)。
  */
 export function maxQuestionNo(

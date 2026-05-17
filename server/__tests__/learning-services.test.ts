@@ -3,7 +3,7 @@
  *
  *   - sceneDialogue:create + getActive(最新一条)
  *   - sceneHistory:append 自动 prune max 10 + list
- *   - exerciseAttempt:create / markSubmitted / markGraded / incrementRetry / countStagePassed / maxQuestionNo
+ *   - exerciseAttempt:create / markSubmitted / markGraded / incrementRetry / countStagePassed / countStageHandled / maxQuestionNo
  *   - gradingResult:create + getByAttempt + corrections JSON 往返
  */
 
@@ -14,6 +14,7 @@ import os from 'node:os';
 import { connect, closeDb, type Db } from '../db/connect.js';
 import { migrate } from '../db/migrate.js';
 import {
+  archiveConversation,
   createConversation,
   getConversation,
   updateLearningState,
@@ -33,6 +34,7 @@ import {
   incrementRetry,
   markNeedsReview,
   countStagePassed,
+  countStageHandled,
   maxQuestionNo,
 } from '../services/exerciseAttempt.js';
 import {
@@ -121,6 +123,13 @@ describe('conversation service lock policy', () => {
     expect(getConversation(db, conversationId, userId)?.lockPolicy).toBe(
       'open'
     );
+
+    archiveConversation(db, conversationId);
+    const archived = getConversation(db, conversationId, userId);
+    expect(archived?.status).toBe('archived');
+    expect(archived?.learningState).toBe('archived');
+    expect(archived?.lockPolicy).toBe('open');
+    expect(archived?.archivedAt).toBeTruthy();
   });
 });
 
@@ -199,6 +208,11 @@ describe('exerciseAttempt service', () => {
     createGrading(db, { attemptId: a2.id, score: 30, isCorrect: false, corrections: {} });
     expect(countStagePassed(db, conversationId, 1)).toBe(1);
     expect(countStagePassed(db, conversationId, 2)).toBe(0);
+    expect(countStageHandled(db, conversationId, 1)).toBe(1);
+    markNeedsReview(db, a2.id);
+    expect(countStagePassed(db, conversationId, 1)).toBe(1);
+    expect(countStageHandled(db, conversationId, 1)).toBe(2);
+    expect(countStageHandled(db, conversationId, 2)).toBe(0);
   });
 
   it('maxQuestionNo 返回当前阶段最大 q_no', () => {

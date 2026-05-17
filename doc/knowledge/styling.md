@@ -39,13 +39,16 @@
 - **场景卡片 loading(011)**:`scene-cards` 在 `status='loading'` 时不渲染空候选小部件,只保留 assistant 文本;`ready` 后一次性出现卡片,`error` 时才显示恢复提示。
 - **Chat widget 间距(011)**:`src/views/Chat/index.module.css` 的 `.messageRow` gap 为 16px,让 AI 文本和其下方 widget 有更清楚的呼吸感。
 - **Widget loading 总防线(012/021)**:`src/views/Chat/WidgetSlot.tsx` 统一过滤 `status='loading'` 的 widget,并对 `exercise-card` / `grading-result` 做必填数据校验后才占用 widget 槽位;`grading-result` 优先校验 `category`,保留 `isCorrect` 历史兼容;`ExerciseCard` 自身也在 `ready + attemptId/stage/questionNo/questionType/contextZh` 完整前返回 `null`,避免显示"阶段 ? / 第 ? 题"半成品。
-- **ProgressSummary 组件(015/016)**:`src/components/widgets/ProgressSummary.tsx` 正式渲染 `progress-summary`,展示题数/平均分/薄弱点/达标项、掌握度条、强弱项与建议。016 起建议卡片有"开始"按钮:`retry:<tag>` 转成文本 `重练 <tag>`,`request-new-scenes` 继续走结构化 action。`status='loading'` 或缺少 `questionsCount/averageScore` 时返回 `null`,不走 fallback JSON。
-- **重练题卡标签(016)**:`ExerciseCard` 收到内部 `stage=5` 时显示为"重练",避免把系统内部阶段编号暴露给用户。
-- **角色互换目标句(023)**:`ExerciseCard` 支持 `targetZh`,用于阶段 4 `role_reversal` 单独展示"请表达「中文目标句」"块;角色信息留在题干/提示中,避免 `Your role` 比目标句更醒目。
+- **ProgressSummary 组件(015/016/029)**:`src/components/widgets/ProgressSummary.tsx` 正式渲染 `progress-summary`,展示题数、三档分布(完全正确/还不错/错误)、薄弱点、掌握度条、强弱项与建议。016 起建议卡片有"开始"按钮:`retry:<tag>` 转成文本 `重练 <tag>`,`request-new-scenes` 继续走结构化 action。029 起不展示平均分;`status='loading'` 或缺少 `questionsCount/averageScore` 时返回 `null`,不走 fallback JSON。
+- **重练/替换题卡标签(016/024)**:`ExerciseCard` 收到内部 `stage=5` 时显示为"重练",避免把系统内部阶段编号暴露给用户;若 `data.remediationKind='replacement'`,则显示为"替换题",用于单题 2 次失败后的自动降难补救。
+- **目标句块(023/026)**:`ExerciseCard` 支持 `targetZh`,用于阶段 4 `role_reversal` 和阶段 3 `dialogue_chain` 单独展示"请表达「中文目标句」"块;角色信息留在题干/提示中,避免 `Your role` 或目标意思说明比目标句更醒目。
+- **题卡进度(027)**:`ExerciseCard` 支持 `totalStages/stageGoal`,主线显示"阶段 N/4 · 第 N/2 题"并渲染短进度条;重练显示"第 N/3 题";替换题显示"第 1/1 题"。
 - **AnswerReview 组件(017)**:`src/components/widgets/AnswerReview.tsx` 正式渲染 `answer-review`,展示逐题短题干、分数 badge、题型和错误标签。`status='loading'` 或 items 为空时返回 `null`。017 起 `MessageList` 支持同一 assistant 消息多个 widget snapshot,用于复盘总览 + 单题回看连续呈现。
 - **ConversationLock 组件(018)**:`src/components/widgets/ConversationLock.tsx` 正式渲染 `conversation-lock`,用于 locked 历史里的答案/批改详情占位。沿用 amber 左边框和 `--color-surface-soft`,在 `status='ready'` 且 `title/description` 完整时才显示,避免 fallback JSON。
 - **FollowUpSource 组件(019)**:`src/components/widgets/FollowUpSource.tsx` 正式渲染 `follow-up-source`,用于 explain 追问前标明来源。`status='ready'` 且 `sourceLabel/snippet` 完整时才显示;未批改题显示"答题前只给提示",已批改来源显示"不改变主学习流"。
 - **IntentConfirm 组件(020)**:`src/components/widgets/IntentConfirm.tsx` 正式渲染 `intent-confirm`,用于低置信度路由确认。`status='ready'` 且 `question/choices>=2` 时才显示;按钮解析 `action:*` 或 `text:*` 字符串并复用既有发送通道。
+- **辅助追问右侧面板(031)**:`src/views/Chat/BranchPanel.tsx` 渲染桌面右侧支线;`MessageBubble` 在非 streaming 主线消息内显示"追问"入口,当前追问来源用 `bubbleReferenced` 高亮。桌面宽屏下 `shellWithBranch` 把主区与 360px 支线组成两列,并把固定输入栏右侧收进主区;窄屏下支线用 fixed 面板覆盖,主输入栏暂时隐藏,避免两套输入重叠。
+- **历史会话左栏(034/035/037)**:`src/views/Chat/HistoryPanel.tsx` 在 960px 以上显示左侧 260px 历史会话栏,可切换当前会话,035 起提供"新建对话"入口;037 起 Chat store 在收到 `state-transition` 后刷新 conversations,用于同步场景标题和学习态。主输入栏同步从左侧让出 260px。1280px 以上且支线打开时形成 260px 历史栏 + 主学习流 + 360px 支线三栏。
 
 ## 测试入口
 
@@ -63,6 +66,8 @@
 - conversation-lock 渲染:`src/__tests__/components/widgets/widgets.test.tsx`
 - follow-up-source 渲染:`src/__tests__/components/widgets/widgets.test.tsx`
 - intent-confirm 渲染与点击动作:`src/__tests__/components/widgets/widgets.test.tsx`
+- 辅助追问入口与支线 store:`src/__tests__/views/MessageList.test.tsx` + `src/__tests__/stores/chat.test.ts`
+- 历史会话左栏:`src/__tests__/views/HistoryPanel.test.tsx`
 
 ## Pending
 

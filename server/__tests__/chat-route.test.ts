@@ -17,6 +17,7 @@ import { createConversation } from '../services/conversation.js';
 import {
   appendMessage,
   appendStreamEvent,
+  getBranchMessages,
   getMessages,
 } from '../services/message.js';
 import {
@@ -24,7 +25,11 @@ import {
   markGraded,
 } from '../services/exerciseAttempt.js';
 import { createGrading } from '../services/gradingResult.js';
-import { updateLearningState } from '../services/conversation.js';
+import {
+  archiveConversation,
+  getConversation,
+  updateLearningState,
+} from '../services/conversation.js';
 import { createSceneDialogue } from '../services/sceneDialogue.js';
 import type { Config } from '../config/getConfig.js';
 import type { AIRouter } from '../ai/router.js';
@@ -44,6 +49,7 @@ let token: string;
 let conversationId: number;
 let decideCalls: Array<{ userText: string }> = [];
 let routerDecisionOverride: RouterDecision | null = null;
+let providerChatImpl: AIProvider['chat'] | null = null;
 
 const config: Config = {
   port: 0,
@@ -88,6 +94,7 @@ beforeEach(() => {
   conversationId = conv.id;
   decideCalls = [];
   routerDecisionOverride = null;
+  providerChatImpl = null;
 
   const skillRegistry = new SkillRegistry();
   skillRegistry.register(fakeSkill('grade', ['practicing', 'grading']));
@@ -102,7 +109,9 @@ beforeEach(() => {
       'practicing',
     ])
   );
-  skillRegistry.register(fakeSkill('review', ['awaiting_next', 'reviewing']));
+  skillRegistry.register(
+    fakeSkill('review', ['awaiting_next', 'reviewing', 'archived'])
+  );
   skillRegistry.register(
     fakeSkill('explain', [
       'practicing',
@@ -136,6 +145,10 @@ beforeEach(() => {
     name: 'test-provider',
     async route() {
       throw new Error('route is not used');
+    },
+    async *chat(req) {
+      if (!providerChatImpl) return;
+      yield* providerChatImpl(req);
     },
   };
   app = createApp({ config: { ...config, databasePath: dbPath }, db, skillRegistry, aiRouter, provider });
@@ -291,6 +304,260 @@ describe('GET /api/chat/conversations/:id/messages', () => {
   });
 });
 
+describe('branch follow-up threads', () => {
+  it('支线消息落 branch_thread_id,不污染主线消息和学习态', async () => {
+    const source = appendMessage(db, {
+      conversationId,
+      type: 'text',
+      role: 'assistant',
+      skillName: 'practice',
+      content: 'Fill the blank: ____ me, where is the train station?',
+    });
+
+    const createRes = await request(app)
+      .post(`/api/chat/conversations/${conversationId}/branch-threads`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        sourceMessageId: source.id,
+        sourceRef: { kind: 'message', messageId: source.id },
+      });
+
+    expect(createRes.status).toBe(201);
+    expect(createRes.body.data).toMatchObject({
+      conversationId,
+      sourceMessageId: source.id,
+      sourceRef: { kind: 'message', messageId: source.id },
+      status: 'open',
+    });
+
+    const threadId = createRes.body.data.id as number;
+    const sendRes = await request(app)
+      .post(`/api/chat/branch-threads/${threadId}/messages`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ text: '为什么这里用 Excuse me?' });
+
+    expect(sendRes.status).toBe(201);
+    expect(sendRes.body.data.userMessage).toMatchObject({
+      conversationId,
+      branchThreadId: threadId,
+      role: 'user',
+      content: '为什么这里用 Excuse me?',
+    });
+    expect(sendRes.body.data.assistantMessage).toMatchObject({
+      conversationId,
+      branchThreadId: threadId,
+      role: 'assistant',
+      skillName: 'explain',
+    });
+    expect(sendRes.body.data.assistantMessage.content).toContain(
+      '不会泄露标准答案'
+    );
+
+    const mainMessages = getMessages(db, conversationId);
+    expect(mainMessages.map((m) => m.id)).toContain(source.id);
+    expect(mainMessages.map((m) => m.id)).not.toContain(
+      sendRes.body.data.userMessage.id
+    );
+    expect(getBranchMessages(db, threadId)).toHaveLength(2);
+    expect(getConversation(db, conversationId, userId)?.learningState).toBe(
+      'practicing'
+    );
+  });
+
+  it('列表和详情接口只返回当前支线的消息', async () => {
+    const source = appendMessage(db, {
+      conversationId,
+      type: 'text',
+      role: 'assistant',
+      skillName: 'practice',
+      content: 'Practice source',
+    });
+    const createRes = await request(app)
+      .post(`/api/chat/conversations/${conversationId}/branch-threads`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ sourceMessageId: source.id });
+    const threadId = createRes.body.data.id as number;
+
+    await request(app)
+      .post(`/api/chat/branch-threads/${threadId}/messages`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ text: '解释一下' });
+
+    const listRes = await request(app)
+      .get(`/api/chat/conversations/${conversationId}/branch-threads`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(listRes.status).toBe(200);
+    expect(listRes.body.data).toEqual([
+      expect.objectContaining({ id: threadId, sourceMessageId: source.id }),
+    ]);
+
+    const messagesRes = await request(app)
+      .get(`/api/chat/branch-threads/${threadId}/messages`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(messagesRes.status).toBe(200);
+    expect(messagesRes.body.data).toHaveLength(2);
+    expect(messagesRes.body.data.every(
+      (m: { branchThreadId: number }) => m.branchThreadId === threadId
+    )).toBe(true);
+  });
+
+  it('支线回复优先使用 provider.chat 并携带解锁态来源上下文', async () => {
+    updateLearningState(db, conversationId, 'awaiting_next', null);
+    const source = appendMessage(db, {
+      conversationId,
+      type: 'text',
+      role: 'assistant',
+      skillName: 'grade',
+      content: "I'd like a steak, please.",
+    });
+    let capturedUserPrompt = '';
+    providerChatImpl = async function* (req) {
+      capturedUserPrompt = req.messages[0]?.content ?? '';
+      yield { type: 'text-delta', text: '真实支线解释:' };
+      yield { type: 'text-delta', text: 'would like 更礼貌。' };
+      yield { type: 'message-stop', stopReason: 'end_turn' };
+    };
+    const createRes = await request(app)
+      .post(`/api/chat/conversations/${conversationId}/branch-threads`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ sourceMessageId: source.id });
+
+    const sendRes = await request(app)
+      .post(`/api/chat/branch-threads/${createRes.body.data.id}/messages`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ text: '为什么这样更礼貌?' });
+
+    expect(sendRes.status).toBe(201);
+    expect(sendRes.body.data.assistantMessage.content).toBe(
+      '真实支线解释:would like 更礼貌。'
+    );
+    expect(capturedUserPrompt).toContain("I'd like a steak, please.");
+  });
+
+  it('锁定态支线调用 provider 时不传来源正文', async () => {
+    const source = appendMessage(db, {
+      conversationId,
+      type: 'text',
+      role: 'assistant',
+      skillName: 'practice',
+      content: 'secret reference answer',
+    });
+    let capturedUserPrompt = '';
+    providerChatImpl = async function* (req) {
+      capturedUserPrompt = req.messages[0]?.content ?? '';
+      yield { type: 'text-delta', text: '只给提示,不泄露答案。' };
+    };
+    const createRes = await request(app)
+      .post(`/api/chat/conversations/${conversationId}/branch-threads`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ sourceMessageId: source.id });
+
+    const sendRes = await request(app)
+      .post(`/api/chat/branch-threads/${createRes.body.data.id}/messages`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ text: '给我答案' });
+
+    expect(sendRes.status).toBe(201);
+    expect(sendRes.body.data.assistantMessage.content).toBe(
+      '只给提示,不泄露答案。'
+    );
+    expect(capturedUserPrompt).not.toContain('secret reference answer');
+    expect(capturedUserPrompt).toContain('来源正文:已隐藏');
+  });
+
+  it('支线 provider.chat 会携带同一支线历史消息', async () => {
+    updateLearningState(db, conversationId, 'awaiting_next', null);
+    const source = appendMessage(db, {
+      conversationId,
+      type: 'text',
+      role: 'assistant',
+      skillName: 'grade',
+      content: 'Use in for a time period.',
+    });
+    const createRes = await request(app)
+      .post(`/api/chat/conversations/${conversationId}/branch-threads`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ sourceMessageId: source.id });
+    const threadId = createRes.body.data.id as number;
+    appendMessage(db, {
+      conversationId,
+      branchThreadId: threadId,
+      type: 'text',
+      role: 'user',
+      content: '为什么 morning 前面用 in?',
+    });
+    appendMessage(db, {
+      conversationId,
+      branchThreadId: threadId,
+      type: 'text',
+      role: 'assistant',
+      skillName: 'explain',
+      content: '因为 morning 是一段时间。',
+    });
+    let capturedMessages: Array<{ role: string; content: string }> = [];
+    providerChatImpl = async function* (req) {
+      capturedMessages = req.messages;
+      yield { type: 'text-delta', text: '继续解释。' };
+    };
+
+    const res = await request(app)
+      .post(`/api/chat/branch-threads/${threadId}/messages`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ text: '那 Monday morning 呢?' });
+
+    expect(res.status).toBe(201);
+    expect(capturedMessages.map((m) => m.content)).toEqual([
+      expect.stringContaining('Use in for a time period.'),
+      '为什么 morning 前面用 in?',
+      '因为 morning 是一段时间。',
+      '那 Monday morning 呢?',
+    ]);
+  });
+
+  it('provider.chat 失败时支线发送显式返回 502', async () => {
+    const source = appendMessage(db, {
+      conversationId,
+      type: 'text',
+      role: 'assistant',
+      content: 'source',
+    });
+    providerChatImpl = async function* () {
+      throw new Error('branch upstream down');
+    };
+    const createRes = await request(app)
+      .post(`/api/chat/conversations/${conversationId}/branch-threads`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ sourceMessageId: source.id });
+
+    const res = await request(app)
+      .post(`/api/chat/branch-threads/${createRes.body.data.id}/messages`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ text: '解释一下' });
+
+    expect(res.status).toBe(502);
+    expect(res.body.error).toMatchObject({ code: 'PROVIDER_ERROR' });
+    expect(res.body.error.message).toContain('辅助追问生成失败');
+  });
+
+  it('创建支线时拒绝其他会话的来源消息', async () => {
+    const other = createConversation(db, userId, { learningState: 'practicing' });
+    const source = appendMessage(db, {
+      conversationId: other.id,
+      type: 'text',
+      role: 'assistant',
+      content: 'other conversation source',
+    });
+
+    const res = await request(app)
+      .post(`/api/chat/conversations/${conversationId}/branch-threads`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ sourceMessageId: source.id });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.message).toContain('来源消息');
+  });
+});
+
 describe('POST /api/chat/send', () => {
   it('practicing 中自由文本绑定最新未批改 attempt 并走 grade', async () => {
     const attemptId = seedAttempt();
@@ -420,6 +687,42 @@ describe('POST /api/chat/send', () => {
     expect(decideCalls).toHaveLength(0);
   });
 
+  it('archived 会话只允许复盘,继续练习被拒且不创建消息', async () => {
+    archiveConversation(db, conversationId);
+    const beforeCount = getMessages(db, conversationId).length;
+
+    const res = await request(app)
+      .post('/api/chat/send')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ conversationId, text: '继续练习' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatchObject({
+      code: 'VALIDATION_FAILED',
+    });
+    expect(res.body.error.message).toContain('已归档');
+    expect(getMessages(db, conversationId)).toHaveLength(beforeCount);
+    expect(decideCalls).toHaveLength(0);
+  });
+
+  it('archived 会话中复盘直接走 review', async () => {
+    archiveConversation(db, conversationId);
+
+    const res = await request(app)
+      .post('/api/chat/send')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ conversationId, text: '复盘' });
+
+    expect(res.status).toBe(202);
+    expect(res.body.data.decision).toMatchObject({
+      skillName: 'review',
+      params: { source: 'deterministic-text' },
+    });
+    expect(decideCalls).toHaveLength(0);
+    const user = getMessages(db, conversationId).find((m) => m.role === 'user');
+    expect(user?.content).toBe('复盘');
+  });
+
   it('practicing 中为什么类追问直接走 explain,不误提交为答案', async () => {
     seedAttempt();
 
@@ -479,6 +782,31 @@ describe('POST /api/chat/send', () => {
       },
     });
     expect(decideCalls).toEqual([{ userText: '看一下之前的' }]);
+  });
+
+  it('非锁定态 general-chat 决策会携带用户原文', async () => {
+    updateLearningState(db, conversationId, 'awaiting_next', null);
+    routerDecisionOverride = {
+      skillName: 'general-chat',
+      params: { topic: 'smalltalk' },
+      confidence: 0.9,
+      rationale: 'free chat',
+    };
+
+    const res = await request(app)
+      .post('/api/chat/send')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ conversationId, text: '今天想聊点轻松的' });
+
+    expect(res.status).toBe(202);
+    expect(res.body.data.decision).toMatchObject({
+      skillName: 'general-chat',
+      params: {
+        topic: 'smalltalk',
+        userText: '今天想聊点轻松的',
+      },
+    });
+    expect(decideCalls).toEqual([{ userText: '今天想聊点轻松的' }]);
   });
 
   it('practicing 中 AI Router 不能降级到 general-chat', async () => {

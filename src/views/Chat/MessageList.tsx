@@ -20,6 +20,8 @@ export default function MessageList(): JSX.Element {
   const streamingId = useChatStore((s) => s.streamingMessageId);
   const streamBuffer = useChatStore((s) => s.streamBuffer);
   const activeWidgets = useChatStore((s) => s.activeWidgets);
+  const branchSourceMessageId = useChatStore((s) => s.branchSourceMessageId);
+  const openBranchForMessage = useChatStore((s) => s.openBranchForMessage);
   const listRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
 
@@ -90,6 +92,14 @@ export default function MessageList(): JSX.Element {
               role={m.role}
               text={text}
               streaming={isStreaming}
+              referenced={branchSourceMessageId === m.id}
+              onOpenBranch={
+                m.role === 'system'
+                  ? undefined
+                  : () => {
+                      void openBranchForMessage(m.id);
+                    }
+              }
             />
             {widgets.map((widget) => (
               <WidgetSlot key={widget.id} widget={widget} />

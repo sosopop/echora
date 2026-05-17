@@ -13,11 +13,14 @@ import styles from './widgets.module.css';
 interface ExerciseCardData {
   attemptId?: number;
   stage?: number;
+  totalStages?: number;
   questionNo?: number;
+  stageGoal?: number;
   questionType?: string;
   contextZh?: string;
   contextEn?: string;
   targetZh?: string;
+  remediationKind?: 'retry' | 'replacement';
   hint?: string;
   inputMode?: 'fill' | 'chat';
 }
@@ -55,14 +58,51 @@ export default function ExerciseCard({
     return null;
   }
   const questionLabel = labelForQuestionType(data.questionType);
-  const stageLabel = data.stage === 5 ? '重练' : `阶段 ${data.stage ?? '?'}`;
+  const stageLabel =
+    data.remediationKind === 'replacement'
+      ? '替换题'
+      : data.stage === 5
+      ? '重练'
+      : typeof data.totalStages === 'number'
+      ? `阶段 ${data.stage}/${data.totalStages}`
+      : `阶段 ${data.stage ?? '?'}`;
+  const questionNoLabel =
+    typeof data.stageGoal === 'number'
+      ? `第 ${data.questionNo}/${data.stageGoal} 题`
+      : `第 ${data.questionNo ?? '?'} 题`;
+  const progressTotal =
+    typeof data.stageGoal === 'number' && data.stageGoal > 0
+      ? Math.min(data.stageGoal, 6)
+      : 0;
+  const progressDone =
+    typeof data.questionNo === 'number'
+      ? Math.max(0, Math.min(data.questionNo, progressTotal))
+      : 0;
   return (
     <div className={styles.exerciseCard}>
       <div className={styles.exerciseHead}>
         <span className={styles.exerciseStage}>{stageLabel}</span>
-        <span>第 {data.questionNo ?? '?'} 题</span>
+        <span>{questionNoLabel}</span>
         <span>· {questionLabel}</span>
       </div>
+      {progressTotal > 0 && (
+        <div
+          className={styles.exerciseProgress}
+          aria-label={`进度 ${progressDone}/${data.stageGoal}`}
+        >
+          {Array.from({ length: progressTotal }).map((_, index) => (
+            <span
+              // eslint-disable-next-line react/no-array-index-key
+              key={index}
+              className={
+                index < progressDone
+                  ? styles.exerciseProgressDotActive
+                  : styles.exerciseProgressDot
+              }
+            />
+          ))}
+        </div>
+      )}
       {data.contextZh && (
         <div className={styles.exerciseContextZh}>{data.contextZh}</div>
       )}

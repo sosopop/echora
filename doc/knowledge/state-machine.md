@@ -34,7 +34,20 @@ practicing
   → awaiting_next
 ```
 
-021 起,阶段内答对不再等待用户点击"下一题":`grade` 会在同一条 assistant 流里先返回批改结果,再自动串接下一张 `exercise-card`。阶段 1-3 达标后自动进入下一阶段第一题;阶段 4 达标后才转 `awaiting_next`。阶段内答错保持 `practicing`;同题第 2 次未通过会标记 `needs_review`,后续通过 `next-question` 继续推进。
+021 起,阶段内答对不再等待用户点击"下一题":`grade` 会在同一条 assistant 流里先返回批改结果,再自动串接下一张 `exercise-card`。阶段 1-3 达标后自动进入下一阶段第一题;阶段 4 达标后才转 `awaiting_next`。阶段内第 1 次答错保持 `practicing` 并允许改句重交;024 起同题第 2 次未通过会标记 `needs_review`,并立即生成一张同知识点降难替换题,通过替换题后自动回主线下一题。
+
+错题替换主线(024):
+
+```
+practicing mainline attempt
+  → 第 1 次 incorrect: retry_count=1,留在原题
+  → 第 2 次 incorrect: retry_count=2 + needs_review
+  → retry(mode=replacement, stage=5, remediationKind=replacement)
+  → 替换题通过
+  → practice 根据 countStageHandled 继续主线下一题
+```
+
+`needs_review` 在主线进度中算作"已处理",但不会算作通过题;替换题使用内部 `stage=5`,只作为当场补救题,不计入专项重练的 3 题额度。
 
 复盘主线(015):
 
@@ -45,7 +58,7 @@ awaiting_next
   → reviewing + progress-summary
 ```
 
-`reviewing` 下再次输入复盘类文本会重新生成当前场景的学习报告;输入 `换场景` / `next` / `开始练习` 等继续类文本仍按 chat route 规则进入场景选择。
+`reviewing` 下再次输入复盘类文本会重新生成当前场景的学习报告;输入 `换场景` / `next` / `开始练习` 等继续类文本仍按 chat route 规则进入场景选择。025 起,`archived` 会话中只有 `复盘` / `总结` / `学习报告` / `review` 会被允许进入 `review`;继续练习、换场景、提交答案等请求会在 `/api/chat/send` 入口被拒绝,且不会创建用户消息或 assistant 占位消息。
 
 重练主线(016):
 
@@ -60,6 +73,18 @@ reviewing / awaiting_next
 
 `stage=5` 是系统内部用于区分专项重练的练习阶段,不属于 PRD §2.6 的四阶段主线。前端展示为"重练";批改通过时不会触发四阶段 `awaiting_next` 完成判断。`activeSkill=retry` 时,结构化 `next-question` 会继续路由到 `retry`。
 021 起,重练第 1/2 题通过后也由 `grade` 自动串接下一道重练题;第 3 题通过后转回 `reviewing`。
+024 起,`retry` 也被 `grade` 用作自动降难替换题生成器:`mode='replacement'` 时会生成单道 `stage=5` 题卡,但 `activeSkill` 写回 `practice`,通过后返回四阶段主线。
+
+辅助追问支线(030):
+
+```
+任意主学习态
+  → 创建 branch_thread(source_message_id + source_ref)
+  → 支线 messages(branch_thread_id=thread.id)
+  → 主线 learning_state / active_skill / input_mode 不变
+```
+
+支线消息复用 `messages` 表,但 `GET /api/chat/conversations/:id/messages` 只返回 `branch_thread_id IS NULL` 的主线消息。支线 API 不发 `state-transition`,不生成下一题,不提交答案,普通支线追问也不写 `error_tag_events` / `mastery_records`。锁定态下支线回复不复述来源消息正文,只能给提示和概念解释。
 
 ## 约束与失败点
 

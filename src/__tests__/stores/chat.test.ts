@@ -1,17 +1,36 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { waitFor } from '@testing-library/react';
 import type { SkillEvent } from '@shared/skill';
 
 const mocks = vi.hoisted(() => ({
+  listConversations: vi.fn(),
   send: vi.fn(),
+  createConversation: vi.fn(),
   openStream: vi.fn(),
+  profileGet: vi.fn(),
+  listBranchThreads: vi.fn(),
+  createBranchThread: vi.fn(),
+  getBranchMessages: vi.fn(),
+  sendBranchMessage: vi.fn(),
 }));
 
 vi.mock('../../api/chat.js', () => ({
   chatApi: {
-    listConversations: vi.fn(),
-    createConversation: vi.fn(),
+    listConversations: mocks.listConversations,
+    createConversation: mocks.createConversation,
     getMessages: vi.fn(),
+    listBranchThreads: mocks.listBranchThreads,
+    createBranchThread: mocks.createBranchThread,
+    getBranchMessages: mocks.getBranchMessages,
+    sendBranchMessage: mocks.sendBranchMessage,
     send: mocks.send,
+  },
+}));
+
+vi.mock('../../api/profile.js', () => ({
+  profileApi: {
+    get: mocks.profileGet,
+    update: vi.fn(),
   },
 }));
 
@@ -21,6 +40,7 @@ vi.mock('../../api/sse.js', () => ({
 
 import { useAuthStore } from '../../stores/auth.js';
 import { useChatStore } from '../../stores/chat.js';
+import { useLearningStateStore } from '../../stores/learningState.js';
 
 function event(
   type: SkillEvent['type'],
@@ -51,6 +71,18 @@ describe('chat store streaming', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useAuthStore.setState({ token: 'token-test' });
+    useLearningStateStore.setState({ state: 'onboarding' });
+    mocks.profileGet.mockResolvedValue({
+      userId: 1,
+      name: 'Test',
+      age: null,
+      grade: null,
+      level: 'A1',
+      weaknessTags: [],
+      recentTopics: [],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
     useChatStore.setState({
       conversations: [],
       currentConversationId: null,
@@ -58,6 +90,13 @@ describe('chat store streaming', () => {
       streamingMessageId: null,
       streamBuffer: {},
       activeWidgets: {},
+      branchThreads: [],
+      currentBranchThreadId: null,
+      branchSourceMessageId: null,
+      branchMessages: [],
+      isBranchOpen: false,
+      isBranchLoading: false,
+      branchError: null,
       inputMode: 'chat',
       isLoading: false,
       error: null,
@@ -225,6 +264,58 @@ describe('chat store streaming', () => {
     });
   });
 
+  it('state-transition 后刷新会话列表,同步历史栏标题和状态', async () => {
+    useLearningStateStore.setState({ state: 'scene_selecting' });
+    mocks.listConversations.mockResolvedValue([
+      {
+        id: 10,
+        title: '餐厅点餐',
+        status: 'active',
+        learningState: 'practicing',
+        activeSkill: 'practice',
+        inputMode: 'fill',
+        lockPolicy: 'locked',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        archivedAt: null,
+      },
+    ]);
+    mocks.send.mockResolvedValue({
+      conversationId: 10,
+      userMessageId: 801,
+      assistantMessageId: 802,
+      streamId: 'stream-transition',
+      decision: {
+        skillName: 'scene-select',
+        params: {},
+        confidence: 1,
+        rationale: 'test',
+      },
+    });
+    mocks.openStream.mockImplementation((_streamId, opts) => {
+      opts.onEvent(
+        event(
+          'state-transition',
+          { nextLearningState: 'practicing', activeSkill: 'practice' },
+          1
+        )
+      );
+      opts.onEvent(event('done', {}, 2));
+      opts.onDone();
+      return { close: vi.fn() };
+    });
+
+    await useChatStore.getState().sendAction({
+      type: 'select-scene',
+      payload: { sceneId: 'restaurant-ordering' },
+    });
+
+    expect(mocks.listConversations).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(useChatStore.getState().conversations[0]?.title).toBe('餐厅点餐');
+    });
+  });
+
   it('submit-answer action 使用答案作为用户消息内容', async () => {
     mocks.send.mockResolvedValue({
       conversationId: 10,
@@ -253,6 +344,52 @@ describe('chat store streaming', () => {
       .getState()
       .messages.find((m) => m.role === 'user');
     expect(user?.content).toBe('A cup of water, please.');
+  });
+
+  it('新建会话后自动请求场景候选', async () => {
+    mocks.createConversation.mockResolvedValue({
+      id: 77,
+      title: null,
+      status: 'active',
+      learningState: 'scene_selecting',
+      activeSkill: null,
+      inputMode: 'chat',
+      lockPolicy: 'open',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      archivedAt: null,
+    });
+    mocks.send.mockResolvedValue({
+      conversationId: 77,
+      userMessageId: 701,
+      assistantMessageId: 702,
+      streamId: 'stream-new',
+      decision: {
+        skillName: 'scene-select',
+        params: {},
+        confidence: 1,
+        rationale: 'test',
+      },
+    });
+    mocks.openStream.mockImplementation((_streamId, opts) => {
+      opts.onEvent(event('done', {}, 1));
+      opts.onDone();
+      return { close: vi.fn() };
+    });
+
+    await useChatStore.getState().startNewConversation();
+
+    const state = useChatStore.getState();
+    expect(mocks.createConversation).toHaveBeenCalledWith({
+      learningState: 'scene_selecting',
+    });
+    expect(mocks.send).toHaveBeenCalledWith({
+      conversationId: 77,
+      action: { type: 'request-new-scenes' },
+    });
+    expect(state.currentConversationId).toBe(77);
+    expect(state.conversations[0]?.id).toBe(77);
+    expect(state.messages[0]?.content).toBe('换一批场景');
   });
 
   it('SSE skill error 会写入 assistant 消息,避免界面空白', async () => {
@@ -297,5 +434,77 @@ describe('chat store streaming', () => {
     expect(assistant?.content).toContain('出错了:GRADE_FAILED');
     expect(assistant?.content).toContain('does not support this tool_choice');
     expect(state.streamingMessageId).toBeNull();
+  });
+
+  it('打开辅助追问会创建支线并隔离支线消息', async () => {
+    useChatStore.setState({
+      currentConversationId: 10,
+      messages: [
+        {
+          id: 7,
+          conversationId: 10,
+          branchThreadId: null,
+          type: 'text',
+          role: 'assistant',
+          skillName: 'grade',
+          content: '这里是批改解释',
+          widgetSnapshot: null,
+          seq: 3,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    mocks.listBranchThreads.mockResolvedValue([]);
+    mocks.createBranchThread.mockResolvedValue({
+      id: 31,
+      userId: 1,
+      conversationId: 10,
+      sourceMessageId: 7,
+      sourceRef: { kind: 'message', messageId: 7 },
+      status: 'open',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    mocks.getBranchMessages.mockResolvedValue([]);
+    mocks.sendBranchMessage.mockResolvedValue({
+      userMessage: {
+        id: 41,
+        conversationId: 10,
+        branchThreadId: 31,
+        type: 'text',
+        role: 'user',
+        skillName: null,
+        content: '为什么这样说?',
+        widgetSnapshot: null,
+        seq: 4,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+      assistantMessage: {
+        id: 42,
+        conversationId: 10,
+        branchThreadId: 31,
+        type: 'text',
+        role: 'assistant',
+        skillName: 'explain',
+        content: '因为这里更礼貌。',
+        widgetSnapshot: null,
+        seq: 5,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    });
+
+    await useChatStore.getState().openBranchForMessage(7);
+    let state = useChatStore.getState();
+    expect(state.isBranchOpen).toBe(true);
+    expect(state.currentBranchThreadId).toBe(31);
+    expect(state.branchSourceMessageId).toBe(7);
+    expect(mocks.createBranchThread).toHaveBeenCalledWith(10, {
+      sourceMessageId: 7,
+      sourceRef: { kind: 'message', messageId: 7 },
+    });
+
+    await useChatStore.getState().sendBranchMessage('为什么这样说?');
+    state = useChatStore.getState();
+    expect(state.branchMessages.map((m) => m.branchThreadId)).toEqual([31, 31]);
+    expect(state.messages).toHaveLength(1);
   });
 });

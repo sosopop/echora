@@ -5,18 +5,22 @@
  * 避免新增数据库列也能让 grade 稳定批改专项题。
  */
 
+export type StructuredAttemptKind = 'retry' | 'replacement';
+
 export interface StructuredAttemptPrompt {
-  kind: 'retry';
+  kind: StructuredAttemptKind;
   prompt: string;
   referenceAnswer: string;
   targetTag: string;
+  sourceAttemptId?: number;
 }
 
 export interface DecodedAttemptPrompt {
   prompt: string;
   referenceAnswer?: string;
   targetTag?: string;
-  kind?: string;
+  sourceAttemptId?: number;
+  kind?: StructuredAttemptKind;
 }
 
 const STRUCTURED_VERSION = 1;
@@ -25,13 +29,16 @@ export function encodeRetryAttemptPrompt(input: {
   prompt: string;
   referenceAnswer: string;
   targetTag: string;
+  kind?: StructuredAttemptKind;
+  sourceAttemptId?: number;
 }): string {
   return JSON.stringify({
     __echoraPrompt: STRUCTURED_VERSION,
-    kind: 'retry',
+    kind: input.kind ?? 'retry',
     prompt: input.prompt,
     referenceAnswer: input.referenceAnswer,
     targetTag: input.targetTag,
+    sourceAttemptId: input.sourceAttemptId,
   });
 }
 
@@ -42,7 +49,7 @@ export function decodeAttemptPrompt(prompt: string): DecodedAttemptPrompt {
     };
     if (
       parsed.__echoraPrompt === STRUCTURED_VERSION &&
-      parsed.kind === 'retry' &&
+      (parsed.kind === 'retry' || parsed.kind === 'replacement') &&
       typeof parsed.prompt === 'string' &&
       typeof parsed.referenceAnswer === 'string'
     ) {
@@ -51,6 +58,10 @@ export function decodeAttemptPrompt(prompt: string): DecodedAttemptPrompt {
         referenceAnswer: parsed.referenceAnswer,
         targetTag:
           typeof parsed.targetTag === 'string' ? parsed.targetTag : undefined,
+        sourceAttemptId:
+          typeof parsed.sourceAttemptId === 'number'
+            ? parsed.sourceAttemptId
+            : undefined,
         kind: parsed.kind,
       };
     }

@@ -25,7 +25,7 @@ import { ensureProfile, upsertProfile } from '../services/profile.js';
 import { createConversation } from '../services/conversation.js';
 import { appendMessage } from '../services/message.js';
 import { createSceneDialogue } from '../services/sceneDialogue.js';
-import { createAttempt } from '../services/exerciseAttempt.js';
+import { createAttempt, markNeedsReview } from '../services/exerciseAttempt.js';
 import { createGrading } from '../services/gradingResult.js';
 import type { SkillEventInput } from '../../shared/skill.js';
 
@@ -135,9 +135,21 @@ describe('practice skill', () => {
     expect(mode.payload.mode).toBe('fill');
 
     const ready = events.find((e) => e.type === 'widget-ready') as {
-      payload: { patch: { data: { attemptId: number; stage: number; questionType: string } } };
+      payload: {
+        patch: {
+          data: {
+            attemptId: number;
+            stage: number;
+            totalStages: number;
+            stageGoal: number;
+            questionType: string;
+          };
+        };
+      };
     };
     expect(ready.payload.patch.data.stage).toBe(1);
+    expect(ready.payload.patch.data.totalStages).toBe(4);
+    expect(ready.payload.patch.data.stageGoal).toBe(2);
     expect(ready.payload.patch.data.questionType).toBe('fill_word');
     expect(ready.payload.patch.data.attemptId).toBeGreaterThan(0);
 
@@ -207,6 +219,32 @@ describe('practice skill', () => {
     expect(ready.payload.patch.data.questionNo).toBe(1);
   });
 
+  it('needs_review 题算已处理 → 继续同阶段下一题', async () => {
+    seedDialogue(6);
+    const a = createAttempt(db, {
+      conversationId,
+      sceneId: 'test-scene',
+      stage: 1,
+      questionNo: 1,
+      questionType: 'fill_word',
+      prompt: 'x',
+    });
+    createGrading(db, {
+      attemptId: a.id,
+      score: 20,
+      isCorrect: false,
+      corrections: {},
+    });
+    markNeedsReview(db, a.id);
+
+    const events = await collect();
+    const ready = events.find((e) => e.type === 'widget-ready') as {
+      payload: { patch: { data: { stage: number; questionNo: number } } };
+    };
+    expect(ready.payload.patch.data.stage).toBe(1);
+    expect(ready.payload.patch.data.questionNo).toBe(2);
+  });
+
   it('新场景不继承旧场景已通过进度', async () => {
     seedDialogue(4);
     for (let stage = 1; stage <= 4; stage++) seedPassed(stage);
@@ -246,10 +284,15 @@ describe('practice skill', () => {
     };
     expect(mode.payload.mode).toBe('chat');
     const ready = events.find((e) => e.type === 'widget-ready') as {
-      payload: { patch: { data: { stage: number; questionType: string } } };
+      payload: {
+        patch: {
+          data: { stage: number; questionType: string; targetZh?: string };
+        };
+      };
     };
     expect(ready.payload.patch.data.stage).toBe(3);
     expect(ready.payload.patch.data.questionType).toBe('dialogue_chain');
+    expect(ready.payload.patch.data.targetZh).toBeTruthy();
     expect(events.find((e) => e.type === 'state-transition' && (
       e as { payload: { nextLearningState?: string } }
     ).payload.nextLearningState === 'awaiting_next')).toBeUndefined();

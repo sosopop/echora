@@ -12,7 +12,7 @@
 
 import type { Db } from '../../db/connect.js';
 import type { SceneDialogueDTO } from '../../../shared/api.js';
-import { countStagePassed } from '../../services/exerciseAttempt.js';
+import { countStageHandled } from '../../services/exerciseAttempt.js';
 
 export const STAGE_GOAL = 2; // 每阶段 2 题,整场 8 题
 export const MAX_STAGE_MVP = 4;
@@ -27,8 +27,9 @@ export interface NextQuestion {
 /**
  * 根据当前 attempts 推断下一题应是哪个阶段、第几题。
  * 规则:
- *   - 从阶段 1 起:countStagePassed(stage) 达到 STAGE_GOAL → 进下一阶段
- *   - 阶段内题号由"已通过数量 + 1"决定,避免未答/错题/重复点击把题号推到模板之外
+ *   - 从阶段 1 起:countStageHandled(stage) 达到 STAGE_GOAL → 进下一阶段
+ *   - 阶段内题号由"已处理数量 + 1"决定,避免未答/错题/重复点击把题号推到模板之外
+ *   - needs_review 算已处理,避免同题 2 次失败后被永久卡住
  */
 export function decideNextQuestion(
   db: Db,
@@ -36,9 +37,9 @@ export function decideNextQuestion(
   sceneId?: string | null
 ): NextQuestion {
   for (let stage = 1; stage <= MAX_STAGE_MVP; stage++) {
-    const passed = countStagePassed(db, conversationId, stage, sceneId);
-    if (passed < STAGE_GOAL) {
-      return { stage, questionNo: passed + 1 };
+    const handled = countStageHandled(db, conversationId, stage, sceneId);
+    if (handled < STAGE_GOAL) {
+      return { stage, questionNo: handled + 1 };
     }
   }
   // 所有 MVP 阶段已通
@@ -138,8 +139,9 @@ function buildDialogueChain(
       `Continue the dialogue after "${previous.role}: ${previous.en}". ` +
       `Target meaning: "${target.zh}"`,
     display: {
-      contextZh: `请接住这句对话,用英文回复。目标意思:${target.zh}`,
+      contextZh: '请接住这句对话,用英文回复。',
       contextEn: `${previous.role}: ${previous.en}`,
+      targetZh: target.zh,
       hint: `你正在回应 ${previous.role},当前角色:${target.role}`,
       inputMode: 'chat',
     },

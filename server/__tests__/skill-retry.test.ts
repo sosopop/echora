@@ -20,6 +20,7 @@ import { createConversation } from '../services/conversation.js';
 import { appendMessage } from '../services/message.js';
 import { createSceneDialogue } from '../services/sceneDialogue.js';
 import { createAttempt } from '../services/exerciseAttempt.js';
+import { decodeAttemptPrompt } from '../services/attemptPrompt.js';
 import type { SkillEventInput } from '../../shared/skill.js';
 
 let db: Db;
@@ -138,6 +139,7 @@ describe('retry skill', () => {
             attemptId: number;
             stage: number;
             questionNo: number;
+            stageGoal: number;
             questionType: string;
             contextEn: string;
           };
@@ -146,6 +148,7 @@ describe('retry skill', () => {
     };
     expect(ready.payload.patch.data.stage).toBe(5);
     expect(ready.payload.patch.data.questionNo).toBe(1);
+    expect(ready.payload.patch.data.stageGoal).toBe(3);
     expect(ready.payload.patch.data.questionType).toBe('fill_word');
     expect(ready.payload.patch.data.contextEn).toContain('______');
     const attempt = db
@@ -155,6 +158,47 @@ describe('retry skill', () => {
       .get(ready.payload.patch.data.attemptId);
     expect(attempt?.stage).toBe(5);
     expect(attempt?.prompt).toContain('referenceAnswer');
+  });
+
+  it('replacement 模式 → 生成替换题且回到 practice 主线', async () => {
+    seedScene();
+    const events = await collect({
+      mode: 'replacement',
+      targetTag: 'missing_word',
+      sourceAttemptId: 123,
+    });
+    const ready = events.find((e) => e.type === 'widget-ready') as {
+      payload: {
+        patch: {
+          data: {
+            attemptId: number;
+            stage: number;
+            questionNo: number;
+            stageGoal: number;
+            remediationKind: string;
+          };
+        };
+      };
+    };
+    expect(ready.payload.patch.data.stage).toBe(5);
+    expect(ready.payload.patch.data.questionNo).toBe(1);
+    expect(ready.payload.patch.data.stageGoal).toBe(1);
+    expect(ready.payload.patch.data.remediationKind).toBe('replacement');
+
+    const attempt = db
+      .prepare<[number], { prompt: string }>(
+        'SELECT prompt FROM exercise_attempts WHERE id = ?'
+      )
+      .get(ready.payload.patch.data.attemptId);
+    const decoded = decodeAttemptPrompt(attempt?.prompt ?? '');
+    expect(decoded.kind).toBe('replacement');
+    expect(decoded.sourceAttemptId).toBe(123);
+
+    const transition = events.find((e) => e.type === 'state-transition') as {
+      payload: { nextLearningState: string; activeSkill: string | null };
+    };
+    expect(transition.payload.nextLearningState).toBe('practicing');
+    expect(transition.payload.activeSkill).toBe('practice');
   });
 
   it('3 题已生成后 → 完成重练并转 reviewing', async () => {

@@ -125,6 +125,18 @@ export function updateInputMode(
   ).run(mode, id);
 }
 
+export function updateConversationTitle(
+  db: Db,
+  id: number,
+  title: string
+): void {
+  db.prepare(
+    `UPDATE conversations
+     SET title = ?, updated_at = datetime('now')
+     WHERE id = ?`
+  ).run(title, id);
+}
+
 export function archiveConversation(db: Db, id: number): void {
   db.prepare(
     `UPDATE conversations

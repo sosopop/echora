@@ -134,6 +134,24 @@
   margin-bottom: 12px;
 }
 
+.exerciseProgress {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.exerciseProgressDot,
+.exerciseProgressDotActive {
+  width: 28px;
+  height: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--color-hairline);
+}
+
+.exerciseProgressDotActive {
+  background: var(--color-primary);
+}
+
 .exerciseStage {
   background: var(--color-primary);
   color: var(--color-on-primary);

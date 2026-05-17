@@ -8,6 +8,9 @@ import { apiClient } from './client.js';
 import type {
   ConversationDTO,
   MessageDTO,
+  BranchMessageSendResp,
+  BranchThreadCreateReq,
+  BranchThreadDTO,
   ChatSendReq,
   ChatSendResp,
   SceneDialogueDTO,
@@ -30,6 +33,34 @@ export const chatApi = {
   getMessages(conversationId: number): Promise<MessageDTO[]> {
     return apiClient.get<MessageDTO[]>(
       `/chat/conversations/${conversationId}/messages`
+    );
+  },
+  listBranchThreads(conversationId: number): Promise<BranchThreadDTO[]> {
+    return apiClient.get<BranchThreadDTO[]>(
+      `/chat/conversations/${conversationId}/branch-threads`
+    );
+  },
+  createBranchThread(
+    conversationId: number,
+    body: BranchThreadCreateReq
+  ): Promise<BranchThreadDTO> {
+    return apiClient.post<BranchThreadDTO>(
+      `/chat/conversations/${conversationId}/branch-threads`,
+      body
+    );
+  },
+  getBranchMessages(threadId: number): Promise<MessageDTO[]> {
+    return apiClient.get<MessageDTO[]>(
+      `/chat/branch-threads/${threadId}/messages`
+    );
+  },
+  sendBranchMessage(
+    threadId: number,
+    text: string
+  ): Promise<BranchMessageSendResp> {
+    return apiClient.post<BranchMessageSendResp>(
+      `/chat/branch-threads/${threadId}/messages`,
+      { text }
     );
   },
   send(body: ChatSendReq): Promise<ChatSendResp> {

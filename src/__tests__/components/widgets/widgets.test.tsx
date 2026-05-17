@@ -146,7 +146,9 @@ describe('ExerciseCard widget', () => {
       data: {
         attemptId: 42,
         stage: 1,
+        totalStages: 4,
         questionNo: 2,
+        stageGoal: 2,
         questionType: 'fill_word',
         contextZh: '我想点一份牛排。',
         contextEn: 'I would ______ a steak.',
@@ -156,8 +158,9 @@ describe('ExerciseCard widget', () => {
       version: 1,
     };
     render(<ExerciseCard widget={widget} />);
-    expect(screen.getByText(/阶段 1/)).toBeInTheDocument();
-    expect(screen.getByText(/第 2 题/)).toBeInTheDocument();
+    expect(screen.getByText('阶段 1/4')).toBeInTheDocument();
+    expect(screen.getByText('第 2/2 题')).toBeInTheDocument();
+    expect(screen.getByLabelText('进度 2/2')).toBeInTheDocument();
     expect(screen.getByText(/单词填空/)).toBeInTheDocument();
     expect(screen.getByText('我想点一份牛排。')).toBeInTheDocument();
     expect(screen.getByText(/I would/)).toBeInTheDocument();
@@ -194,8 +197,9 @@ describe('ExerciseCard widget', () => {
         stage: 3,
         questionNo: 1,
         questionType: 'dialogue_chain',
-        contextZh: '请接住这句对话,用英文回复。目标意思:一杯咖啡谢谢。',
+        contextZh: '请接住这句对话,用英文回复。',
         contextEn: 'Server: Welcome.',
+        targetZh: '一杯咖啡谢谢。',
         hint: '你正在回应 Server,当前角色:Customer',
         inputMode: 'chat',
       },
@@ -204,6 +208,8 @@ describe('ExerciseCard widget', () => {
     render(<ExerciseCard widget={widget} />);
     expect(screen.getByText(/对话接龙/)).toBeInTheDocument();
     expect(screen.getByText('Server: Welcome.')).toBeInTheDocument();
+    expect(screen.getByText('请表达')).toBeInTheDocument();
+    expect(screen.getByText('「一杯咖啡谢谢。」')).toBeInTheDocument();
   });
 
   it('角色互换显示角色提示和题型标签', () => {
@@ -240,6 +246,7 @@ describe('ExerciseCard widget', () => {
         attemptId: 46,
         stage: 5,
         questionNo: 1,
+        stageGoal: 3,
         questionType: 'fill_word',
         contextZh: '降难重练:补上小词。',
         contextEn: 'I want ______ order soup.',
@@ -250,6 +257,33 @@ describe('ExerciseCard widget', () => {
     };
     render(<ExerciseCard widget={widget} />);
     expect(screen.getByText('重练')).toBeInTheDocument();
+    expect(screen.getByText('第 1/3 题')).toBeInTheDocument();
+    expect(screen.queryByText(/阶段 5/)).not.toBeInTheDocument();
+  });
+
+  it('替换题显示替换题标签而不是重练或阶段 5', () => {
+    const widget: LearningWidgetInstance = {
+      id: 'e6',
+      type: 'exercise-card',
+      status: 'ready',
+      data: {
+        attemptId: 47,
+        stage: 5,
+        questionNo: 1,
+        stageGoal: 1,
+        questionType: 'fill_word',
+        remediationKind: 'replacement',
+        contextZh: '降难替换题:补上小词。',
+        contextEn: 'I want ______ order soup.',
+        hint: '两个字母',
+        inputMode: 'fill',
+      },
+      version: 1,
+    };
+    render(<ExerciseCard widget={widget} />);
+    expect(screen.getByText('替换题')).toBeInTheDocument();
+    expect(screen.getByText('第 1/1 题')).toBeInTheDocument();
+    expect(screen.queryByText('重练')).not.toBeInTheDocument();
     expect(screen.queryByText(/阶段 5/)).not.toBeInTheDocument();
   });
 });
@@ -357,7 +391,7 @@ describe('ProgressSummary widget', () => {
     expect(screen.queryByText(/学习报告/)).not.toBeInTheDocument();
   });
 
-  it('渲染平均分、掌握度、强弱项和建议', () => {
+  it('渲染三档分布、掌握度、强弱项和建议', () => {
     const sendMessage = vi.fn();
     useChatStore.setState({ sendMessage });
     const widget: LearningWidgetInstance = {
@@ -370,6 +404,7 @@ describe('ProgressSummary widget', () => {
         questionsCount: 8,
         averageScore: 86,
         averageScoreDelta: 0,
+        categoryCounts: { exact: 3, similar: 4, incorrect: 1 },
         weakTagsCount: 1,
         masteredScenesCount: 2,
         masteries: [
@@ -390,7 +425,10 @@ describe('ProgressSummary widget', () => {
     };
     render(<ProgressSummary widget={widget} />);
     expect(screen.getByText('餐厅点餐 · 已经达标')).toBeInTheDocument();
-    expect(screen.getByText('86')).toBeInTheDocument();
+    expect(screen.queryByText('86')).not.toBeInTheDocument();
+    expect(screen.getByText('完全正确')).toBeInTheDocument();
+    expect(screen.getByText('还不错')).toBeInTheDocument();
+    expect(screen.getByText('错误')).toBeInTheDocument();
     expect(screen.getByText('fill_word')).toBeInTheDocument();
     expect(screen.getByText('missing_word · 出现 1 次')).toBeInTheDocument();
     expect(screen.getByText('重练 missing_word')).toBeInTheDocument();

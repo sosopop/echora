@@ -9,12 +9,16 @@ interface Props {
   role: 'user' | 'assistant' | 'system';
   text: string;
   streaming?: boolean;
+  referenced?: boolean;
+  onOpenBranch?: () => void;
 }
 
 export default function MessageBubble({
   role,
   text,
   streaming,
+  referenced,
+  onOpenBranch,
 }: Props): JSX.Element | null {
   const isAi = role === 'assistant';
   const displayText =
@@ -30,12 +34,26 @@ export default function MessageBubble({
     );
   }
   const rowCls = isAi ? styles.msgAi : styles.msgUser;
-  const bubbleCls = isAi ? styles.bubbleAi : styles.bubbleUser;
+  const bubbleCls = [
+    isAi ? styles.bubbleAi : styles.bubbleUser,
+    referenced ? styles.bubbleReferenced : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
   return (
     <div className={rowCls}>
       <div className={bubbleCls}>
         {displayText}
         {streaming && <span className={styles.cursor} />}
+        {onOpenBranch && !streaming && (
+          <button
+            className={styles.branchOpenBtn}
+            type="button"
+            onClick={onOpenBranch}
+          >
+            追问
+          </button>
+        )}
       </div>
     </div>
   );

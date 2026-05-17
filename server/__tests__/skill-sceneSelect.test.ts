@@ -18,7 +18,7 @@ import { sceneSelectSkill } from '../skills/sceneSelect.js';
 import type { ServerSkillContext } from '../skills/types.js';
 import type { AIProvider, ChatRequest, ChatStreamEvent } from '../ai/types.js';
 import { ensureProfile, upsertProfile } from '../services/profile.js';
-import { createConversation } from '../services/conversation.js';
+import { createConversation, getConversation } from '../services/conversation.js';
 import { appendMessage } from '../services/message.js';
 import {
   listSceneHistory,
@@ -228,6 +228,9 @@ describe('sceneSelect skill', () => {
     // scene_history 已记录
     const history = listSceneHistory(db, userId);
     expect(history).toContain('restaurant ordering');
+    expect(getConversation(db, conversationId, userId)?.title).toBe(
+      'Restaurant Ordering'
+    );
   });
 
   it('propose 失败 → widget error + mode-switch(chat) + yield error', async () => {

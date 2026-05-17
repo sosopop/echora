@@ -1,12 +1,12 @@
 /**
  * smoke:learning — 学习闭环 E2E 烟雾测试(确定性 ScriptedProvider)
  *
- * 覆盖 PRD §5.1 + §5.2 验收点。12 场景:
+ * 覆盖 PRD §5.1 + §5.2 验收点。13 场景:
  *   A · 完整闭环(register → onboarding → scene-select → 阶段 1*2 → 阶段 2*2 → 阶段 3*2 → 阶段 4*2 → awaiting_next → review → retry)
  *   B · 换一批 → 候选过滤已用
  *   C · scene_history 累计 10 → 第 11 次 prune
  *   D · 答错 → retry_count=1 保持 practicing
- *   E · 同题再错 → retry_count=2 + needs_review
+ *   E · 同题再错 → retry_count=2 + needs_review + 降难替换题
  *   F · grading 中尝试换场景 → router 拒(scene-select 不在 grading allowedStates)
  *   G · 重复提交同 attempt → ATTEMPT_LOCKED
  *   H · /send 同时传 text + action → zod 拒
@@ -14,6 +14,7 @@
  *   J · grade 后续 → 阶段 1 全过自动进阶段 2
  *   K · explain 追问 → follow-up-source + 基于最近批改解释
  *   L · 低置信度路由 → intent-confirm
+ *   M · archived 会话继续练习 → 400 且不创建消息
  */
 
 import { setTimeout as delay } from 'node:timers/promises';
@@ -402,6 +403,7 @@ scenario('A', '完整闭环(scene → 阶段 1-4 各 2 题 → awaiting_next →
             sceneName: string;
             questionsCount: number;
             averageScore: number;
+            categoryCounts: { exact: number; similar: number; incorrect: number };
             masteries: Array<{ tag: string; score: number }>;
             nextSuggestions: Array<{ title: string }>;
           };
@@ -410,7 +412,8 @@ scenario('A', '完整闭环(scene → 阶段 1-4 各 2 题 → awaiting_next →
     };
     assertTrue(summaryReady.payload.patch.data.sceneName.length > 0, '复盘场景名非空');
     assertEq(summaryReady.payload.patch.data.questionsCount, 8, '复盘题数');
-    assertEq(summaryReady.payload.patch.data.averageScore, 90, '复盘平均分');
+    assertEq(summaryReady.payload.patch.data.averageScore, 90, '复盘内部平均分');
+    assertEq(summaryReady.payload.patch.data.categoryCounts.similar, 8, '复盘三档分布');
     assertTrue(summaryReady.payload.patch.data.masteries.length > 0, '复盘包含掌握度');
     assertTrue(summaryReady.payload.patch.data.nextSuggestions.length > 0, '复盘包含下一步建议');
 
@@ -579,8 +582,8 @@ scenario('D', '答错 → retry_count=1 + 无 state-transition', async () => {
   }
 });
 
-/* ------- E · 同题再错 → retry_count=2 + needs_review ------- */
-scenario('E', '同题答错 2 次 → markNeedsReview', async () => {
+/* ------- E · 同题再错 → retry_count=2 + needs_review + replacement ------- */
+scenario('E', '同题答错 2 次 → markNeedsReview + 降难替换题', async () => {
   const provider = buildLearningProvider();
   const app = await startTestApp({ provider });
   try {
@@ -617,13 +620,19 @@ scenario('E', '同题答错 2 次 → markNeedsReview', async () => {
       { token, body: { conversationId: convId, action: { type: 'submit-answer', payload: { attemptId, answer: '错误2' } } } }
     );
     await delay(80);
-    await collectSseEvents(app.baseUrl, s.body.data.streamId, token);
+    e = await collectSseEvents(app.baseUrl, s.body.data.streamId, token);
 
     const row = app.db.prepare<[number], { retry_count: number; status: string }>(
       'SELECT retry_count, status FROM exercise_attempts WHERE id = ?'
     ).get(attemptId);
     assertEq(row?.retry_count, 2, 'retry_count=2');
     assertEq(row?.status, 'needs_review', 'status=needs_review');
+    const replacement = requireWidgetReadyDataByType<{
+      stage: number;
+      remediationKind?: string;
+    }>(e, 'exercise-card', 'E replacement exercise');
+    assertEq(replacement.stage, 5, '替换题 stage=5');
+    assertEq(replacement.remediationKind, 'replacement', '替换题 remediationKind');
   } finally {
     await app.cleanup();
   }
@@ -923,6 +932,53 @@ scenario('L', '低置信度路由 → intent-confirm', async () => {
       ready.payload.patch.data.choices.some((choice) => choice.id === 'review'),
       'intent-confirm 包含复盘选项'
     );
+  } finally {
+    await app.cleanup();
+  }
+});
+
+/* ------- M · archived 只读 ------- */
+scenario('M', 'archived 会话继续练习 → 400 且不创建消息', async () => {
+  const provider = buildLearningProvider();
+  const app = await startTestApp({ provider });
+  try {
+    const { token } = await registerUser(app.baseUrl);
+    await setProfileComplete(app.baseUrl, token);
+    const convId = await createConv(app.baseUrl, token, 'awaiting_next');
+    app.db
+      .prepare(
+        `UPDATE conversations
+         SET status = 'archived',
+             learning_state = 'archived',
+             archived_at = datetime('now')
+         WHERE id = ?`
+      )
+      .run(convId);
+    const before = app.db
+      .prepare<[number], { c: number }>(
+        'SELECT COUNT(*) AS c FROM messages WHERE conversation_id = ?'
+      )
+      .get(convId)?.c;
+
+    const res = await httpJson<{ error?: { code: string; message: string } }>(
+      app.baseUrl,
+      'POST',
+      '/api/chat/send',
+      { token, body: { conversationId: convId, text: '继续练习' } }
+    );
+
+    assertEq(res.status, 400, 'archived send 400');
+    assertEq(res.body.error?.code, 'VALIDATION_FAILED', 'archived error code');
+    assertTrue(
+      (res.body.error?.message ?? '').includes('已归档'),
+      'archived error message'
+    );
+    const after = app.db
+      .prepare<[number], { c: number }>(
+        'SELECT COUNT(*) AS c FROM messages WHERE conversation_id = ?'
+      )
+      .get(convId)?.c;
+    assertEq(after, before, 'archived 拒绝时不创建消息');
   } finally {
     await app.cleanup();
   }

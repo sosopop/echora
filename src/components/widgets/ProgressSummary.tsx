@@ -27,6 +27,11 @@ interface ProgressSummaryData {
   questionsCount?: number;
   averageScore?: number;
   averageScoreDelta?: number;
+  categoryCounts?: {
+    exact?: number;
+    similar?: number;
+    incorrect?: number;
+  };
   weakTagsCount?: number;
   masteredScenesCount?: number;
   masteries?: MasteryRow[];
@@ -81,6 +86,11 @@ export default function ProgressSummary({
   const nextSuggestions = Array.isArray(data.nextSuggestions)
     ? data.nextSuggestions
     : [];
+  const categoryCounts = {
+    exact: data.categoryCounts?.exact ?? 0,
+    similar: data.categoryCounts?.similar ?? 0,
+    incorrect: data.categoryCounts?.incorrect ?? 0,
+  };
 
   return (
     <section className={styles.summaryCard} aria-label="学习报告">
@@ -97,31 +107,24 @@ export default function ProgressSummary({
           <span className={styles.summaryStatLabel}>题数</span>
         </div>
         <div className={styles.summaryStat}>
-          <span
-            className={`${styles.summaryStatNum} ${styles.summaryStatScore}`}
-          >
-            {data.averageScore}
+          <span className={styles.summaryStatNum}>{categoryCounts.exact}</span>
+          <span className={styles.summaryStatLabel}>完全正确</span>
+        </div>
+        <div className={styles.summaryStat}>
+          <span className={styles.summaryStatNum}>{categoryCounts.similar}</span>
+          <span className={styles.summaryStatLabel}>还不错</span>
+        </div>
+        <div className={styles.summaryStat}>
+          <span className={styles.summaryStatNum}>
+            {categoryCounts.incorrect}
           </span>
-          <span className={styles.summaryStatLabel}>平均分</span>
-          {typeof data.averageScoreDelta === 'number' &&
-            data.averageScoreDelta !== 0 && (
-              <span className={styles.summaryDelta}>
-                {data.averageScoreDelta > 0 ? '+' : ''}
-                {data.averageScoreDelta}
-              </span>
-            )}
+          <span className={styles.summaryStatLabel}>错误</span>
         </div>
         <div className={styles.summaryStat}>
           <span className={styles.summaryStatNum}>
             {data.weakTagsCount ?? weakPoints.length}
           </span>
           <span className={styles.summaryStatLabel}>薄弱点</span>
-        </div>
-        <div className={styles.summaryStat}>
-          <span className={styles.summaryStatNum}>
-            {data.masteredScenesCount ?? 0}
-          </span>
-          <span className={styles.summaryStatLabel}>达标项</span>
         </div>
       </div>
 

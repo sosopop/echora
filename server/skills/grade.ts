@@ -47,16 +47,18 @@ function countRetryAttempts(
   ctx: ServerSkillContext,
   sceneId: string | null
 ): number {
-  const row = ctx.db
-    .prepare<[number, number, string | null], { c: number }>(
-      `SELECT COUNT(*) AS c
+  const rows = ctx.db
+    .prepare<[number, number, string | null], { prompt: string }>(
+      `SELECT prompt
        FROM exercise_attempts
        WHERE conversation_id = ?
          AND stage = ?
          AND scene_id IS ?`
     )
-    .get(ctx.conversationId, RETRY_STAGE, sceneId);
-  return row?.c ?? 0;
+    .all(ctx.conversationId, RETRY_STAGE, sceneId);
+  return rows.filter(
+    (row) => decodeAttemptPrompt(row.prompt).kind !== 'replacement'
+  ).length;
 }
 
 function categoryLabel(category: GradingCategory): string {
@@ -213,6 +215,28 @@ export const gradeSkill: Skill = {
       const newRetry = incrementRetry(ctx.db, attemptId);
       if (newRetry >= 2) {
         markNeedsReview(ctx.db, attemptId);
+        if (attempt.stage !== RETRY_STAGE) {
+          const targetTag =
+            result.corrections.tags?.[0] ?? attempt.questionType;
+          yield {
+            type: 'text-chunk',
+            payload: {
+              text: '本题已达 2 次重试,我换一道更简单的同类题带你过一下。',
+            },
+          };
+          for await (const ev of retrySkill.handler({
+            ...ctx,
+            learningState: 'practicing',
+            params: {
+              mode: 'replacement',
+              sourceAttemptId: attemptId,
+              targetTag,
+            },
+          })) {
+            yield ev;
+          }
+          return;
+        }
         yield {
           type: 'text-chunk',
           payload: { text: '本题已达 2 次重试,跳过并标记复盘。' },
@@ -235,6 +259,21 @@ export const gradeSkill: Skill = {
 
     // 重练专项题通过 → 不推进 4 阶段主线,由 retry skill 继续出下一题
     if (attempt.stage === RETRY_STAGE) {
+      const retryPrompt = decodeAttemptPrompt(attempt.prompt);
+      if (retryPrompt.kind === 'replacement') {
+        yield {
+          type: 'text-chunk',
+          payload: { text: '替换题通过了,回到主线继续。' },
+        };
+        for await (const ev of practiceSkill.handler({
+          ...ctx,
+          learningState: 'practicing',
+          params: {},
+        })) {
+          yield ev;
+        }
+        return;
+      }
       const retryCount = countRetryAttempts(ctx, attempt.sceneId);
       if (retryCount >= RETRY_GOAL) {
         yield {
@@ -252,7 +291,6 @@ export const gradeSkill: Skill = {
           type: 'text-chunk',
           payload: { text: '专项题答对了,继续下一题。' },
         };
-        const retryPrompt = decodeAttemptPrompt(attempt.prompt);
         for await (const ev of retrySkill.handler({
           ...ctx,
           learningState: 'practicing',

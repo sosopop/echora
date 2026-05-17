@@ -26,8 +26,15 @@ import {
 import {
   appendMessage,
   appendStreamEvent,
+  getBranchMessages,
+  getMessage,
   getMessages,
 } from '../services/message.js';
+import {
+  createBranchThread,
+  getBranchThread,
+  listBranchThreads,
+} from '../services/branchThread.js';
 import { getActiveSceneDialogue } from '../services/sceneDialogue.js';
 import { streamBus } from '../services/streamBus.js';
 import type { SkillRegistry } from '../skills/registry.js';
@@ -44,6 +51,7 @@ import type {
 import { ALL_LEARNING_STATES } from '../../shared/skill.js';
 import {
   describeChatAction,
+  type BranchThreadDTO,
   type ChatAction,
   type ConversationDTO,
   type MessageDTO,
@@ -99,6 +107,15 @@ const createConversationSchema = z.object({
     .optional(),
 });
 
+const createBranchThreadSchema = z.object({
+  sourceMessageId: z.number().int().positive(),
+  sourceRef: z.unknown().optional(),
+});
+
+const sendBranchMessageSchema = z.object({
+  text: z.string().min(1).max(4000),
+});
+
 export interface ChatRouterDeps {
   db: Db;
   config: Config;
@@ -132,21 +149,104 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
     }
   });
 
+  // —— 辅助追问支线 ————————————————————————————————————————
+  router.get('/conversations/:id/branch-threads', auth, (req, res, next) => {
+    try {
+      const id = parsePositiveId(req.params.id);
+      assertConversationOwner(db, id, req.user!.id);
+      res.json({ data: listBranchThreads(db, id, req.user!.id) });
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  router.post('/conversations/:id/branch-threads', auth, (req, res, next) => {
+    try {
+      const id = parsePositiveId(req.params.id);
+      assertConversationOwner(db, id, req.user!.id);
+      const body = createBranchThreadSchema.parse(req.body ?? {});
+      const source = getMessage(db, body.sourceMessageId);
+      if (!source || source.conversationId !== id) {
+        throw new HttpError(
+          404,
+          ERROR_CODES.NOT_FOUND ?? ERROR_CODES.VALIDATION_FAILED,
+          '支线来源消息不存在或不属于当前会话'
+        );
+      }
+
+      const thread = createBranchThread(db, {
+        userId: req.user!.id,
+        conversationId: id,
+        sourceMessageId: body.sourceMessageId,
+        sourceRef: body.sourceRef,
+      });
+      res.status(201).json({ data: thread });
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  router.get('/branch-threads/:threadId/messages', auth, (req, res, next) => {
+    try {
+      const threadId = parsePositiveId(req.params.threadId);
+      const thread = requireBranchThread(db, threadId, req.user!.id);
+      res.json({ data: getBranchMessages(db, thread.id) });
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  router.post('/branch-threads/:threadId/messages', auth, async (req, res, next) => {
+    try {
+      const threadId = parsePositiveId(req.params.threadId);
+      const thread = requireBranchThread(db, threadId, req.user!.id);
+      const conv = assertConversationOwner(
+        db,
+        thread.conversationId,
+        req.user!.id
+      );
+      const body = sendBranchMessageSchema.parse(req.body ?? {});
+      const text = body.text.trim();
+      if (!text) {
+        throw new HttpError(400, ERROR_CODES.VALIDATION_FAILED, '内容不能为空');
+      }
+      const source = getMessage(db, thread.sourceMessageId);
+      const branchHistory = getBranchMessages(db, thread.id, 20);
+      const assistantText = await buildBranchAssistantText(
+        provider,
+        text,
+        source,
+        shouldLockHistory(conv),
+        branchHistory
+      );
+
+      const userMessage = appendMessage(db, {
+        conversationId: thread.conversationId,
+        branchThreadId: thread.id,
+        type: 'text',
+        role: 'user',
+        content: text,
+      });
+      const assistantMessage = appendMessage(db, {
+        conversationId: thread.conversationId,
+        branchThreadId: thread.id,
+        type: 'text',
+        role: 'assistant',
+        skillName: 'explain',
+        content: assistantText,
+      });
+
+      res.status(201).json({ data: { userMessage, assistantMessage } });
+    } catch (e) {
+      next(e);
+    }
+  });
+
   // —— 历史消息 ————————————————————————————————————————————
   router.get('/conversations/:id/messages', auth, (req, res, next) => {
     try {
-      const id = Number(req.params.id);
-      if (!Number.isInteger(id) || id <= 0) {
-        throw new HttpError(400, ERROR_CODES.VALIDATION_FAILED, '非法 id');
-      }
-      const conv = getConversation(db, id, req.user!.id);
-      if (!conv) {
-        throw new HttpError(
-          404,
-          ERROR_CODES.CONVERSATION_NOT_FOUND,
-          '会话不存在或无权访问'
-        );
-      }
+      const id = parsePositiveId(req.params.id);
+      const conv = assertConversationOwner(db, id, req.user!.id);
       const list = sanitizeMessagesForLock(getMessages(db, id), conv);
       res.json({ data: list });
     } catch (e) {
@@ -160,18 +260,8 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
     auth,
     (req, res, next) => {
       try {
-        const id = Number(req.params.id);
-        if (!Number.isInteger(id) || id <= 0) {
-          throw new HttpError(400, ERROR_CODES.VALIDATION_FAILED, '非法 id');
-        }
-        const conv = getConversation(db, id, req.user!.id);
-        if (!conv) {
-          throw new HttpError(
-            404,
-            ERROR_CODES.CONVERSATION_NOT_FOUND,
-            '会话不存在或无权访问'
-          );
-        }
+        const id = parsePositiveId(req.params.id);
+        assertConversationOwner(db, id, req.user!.id);
         const dialogue = getActiveSceneDialogue(db, id);
         if (!dialogue) {
           res.status(404).json({
@@ -208,6 +298,13 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
       }
       if (!conv) {
         conv = createConversation(db, userId);
+      }
+      if (isArchivedConversation(conv) && !isArchivedReviewRequest(body)) {
+        throw new HttpError(
+          400,
+          ERROR_CODES.VALIDATION_FAILED,
+          '该会话已归档,只能查看复盘;如需继续练习,请开启新的会话。'
+        );
       }
 
       const normalizedInput = normalizeChatSendInput(db, conv, body);
@@ -394,6 +491,163 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
   });
 
   return router;
+}
+
+function parsePositiveId(raw: string | string[] | undefined): number {
+  if (Array.isArray(raw)) {
+    throw new HttpError(400, ERROR_CODES.VALIDATION_FAILED, '非法 id');
+  }
+  const id = Number(raw);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new HttpError(400, ERROR_CODES.VALIDATION_FAILED, '非法 id');
+  }
+  return id;
+}
+
+function assertConversationOwner(
+  db: Db,
+  conversationId: number,
+  userId: number
+): ConversationDTO {
+  const conv = getConversation(db, conversationId, userId);
+  if (!conv) {
+    throw new HttpError(
+      404,
+      ERROR_CODES.CONVERSATION_NOT_FOUND,
+      '会话不存在或无权访问'
+    );
+  }
+  return conv;
+}
+
+function requireBranchThread(
+  db: Db,
+  threadId: number,
+  userId: number
+): BranchThreadDTO {
+  const thread = getBranchThread(db, threadId, userId);
+  if (!thread) {
+    throw new HttpError(
+      404,
+      ERROR_CODES.NOT_FOUND,
+      '辅助追问支线不存在或无权访问'
+    );
+  }
+  return thread;
+}
+
+async function buildBranchAssistantText(
+  provider: AIProvider,
+  question: string,
+  source: MessageDTO | null,
+  hideSourceContent: boolean,
+  branchHistory: MessageDTO[]
+): Promise<string> {
+  if (provider.chat) {
+    let text = '';
+    try {
+      for await (const ev of provider.chat({
+        system: buildBranchSystemPrompt(hideSourceContent),
+        messages: buildBranchProviderMessages(
+          question,
+          source,
+          hideSourceContent,
+          branchHistory
+        ),
+        maxTokens: 700,
+        signal: new AbortController().signal,
+      })) {
+        if (ev.type === 'text-delta' && ev.text) {
+          text += ev.text;
+        }
+      }
+    } catch (e) {
+      const details = getDevErrorDetails(e);
+      throw new HttpError(
+        502,
+        ERROR_CODES.PROVIDER_ERROR,
+        `辅助追问生成失败: ${e instanceof Error ? e.message : String(e)}`,
+        details ? { upstream: details } : undefined
+      );
+    }
+    if (text.trim()) return text.trim();
+  }
+
+  return buildBranchFallbackText(question, source, hideSourceContent);
+}
+
+function buildBranchSystemPrompt(hideSourceContent: boolean): string {
+  return [
+    '你是 Echora 的英语学习辅助追问教练。',
+    '你正在右侧支线里回答,不能改变主学习流状态,不能生成下一题,不能替用户提交答案。',
+    '用中文回答,简洁、具体,优先解释英语表达、语法、词汇、语气和场景用法。',
+    hideSourceContent
+      ? '当前主线处于锁定态,来源正文已隐藏。不要泄露、猜测或补全标准答案、参考表达、完整翻译或等价答案;只给概念提示和解题思路。'
+      : '如果引用来源内容,只围绕用户追问解释,不要声称已经把任何内容加入统计或复盘。',
+  ].join('\n');
+}
+
+function buildBranchProviderMessages(
+  question: string,
+  source: MessageDTO | null,
+  hideSourceContent: boolean,
+  branchHistory: MessageDTO[]
+): Array<{ role: 'user' | 'assistant'; content: string }> {
+  const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [
+    {
+      role: 'user',
+      content: [
+        `来源:${summarizeBranchSource(source, hideSourceContent)}`,
+        source && !hideSourceContent
+          ? `来源角色:${source.role};来源技能:${source.skillName ?? 'unknown'};来源正文:${source.content ?? '(无正文)'}`
+          : '来源正文:已隐藏。',
+      ].join('\n'),
+    },
+  ];
+  for (const msg of branchHistory) {
+    if (msg.role !== 'user' && msg.role !== 'assistant') continue;
+    const content = msg.content?.trim();
+    if (!content) continue;
+    messages.push({ role: msg.role, content });
+  }
+  messages.push({ role: 'user', content: question });
+  return messages;
+}
+
+function buildBranchFallbackText(
+  question: string,
+  source: MessageDTO | null,
+  hideSourceContent: boolean
+): string {
+  const sourceSummary = summarizeBranchSource(source, hideSourceContent);
+  const lower = question.toLowerCase();
+  const guidance =
+    /为什么|为啥|why|explain|解释|怎么/.test(lower)
+      ? '可以先看这句话在当前语境里的功能,再看词义、搭配和语法位置。'
+      : '我会围绕你选中的内容回答,不改变主学习进度。';
+
+  return [
+    `${sourceSummary}`,
+    '如果来源是还没提交的题目,这里只给提示和概念解释,不会泄露标准答案或完整翻译。',
+    `关于“${question}”:${guidance}`,
+  ].join('\n');
+}
+
+function summarizeBranchSource(
+  source: MessageDTO | null,
+  hideSourceContent: boolean
+): string {
+  if (!source) return '我没有找到原始来源,先按这条支线的问题解释。';
+  const content = source.content?.trim();
+  if (hideSourceContent) return `我会基于第 ${source.seq} 条消息继续解释。`;
+  if (!content) return `我会基于第 ${source.seq} 条消息继续解释。`;
+  return `我会基于第 ${source.seq} 条消息继续解释:“${truncateText(content, 80)}”。`;
+}
+
+function truncateText(value: string, maxLength: number): string {
+  return value.length <= maxLength
+    ? value
+    : `${value.slice(0, maxLength - 1)}…`;
 }
 
 const LOCKED_USER_ANSWER_TEXT = '完成当前题后查看完整答案';
@@ -592,7 +846,8 @@ function createTextReviewDecision(
 ): RouterDecision | null {
   if (
     conv.learningState !== 'awaiting_next' &&
-    conv.learningState !== 'reviewing'
+    conv.learningState !== 'reviewing' &&
+    conv.learningState !== 'archived'
   ) {
     return null;
   }
@@ -770,6 +1025,14 @@ function normalizeControlText(text: string): string {
   return text.trim().toLowerCase().replace(/[.!?。！？\s]+/g, '');
 }
 
+function isArchivedConversation(conv: ConversationDTO): boolean {
+  return conv.status === 'archived' || conv.learningState === 'archived';
+}
+
+function isArchivedReviewRequest(body: ChatSendBody): boolean {
+  return typeof body.text === 'string' && isReviewRequestText(body.text);
+}
+
 function isAttemptAnswerable(db: Db, attempt: ExerciseAttemptDTO): boolean {
   if (attempt.status === 'pending' || attempt.status === 'submitted') {
     return true;
@@ -833,6 +1096,16 @@ function normalizeRouterDecision(
       },
       confidence: 1,
       rationale: `low confidence intent-confirm:${decision.rationale}`,
+    };
+  }
+
+  if (decision.skillName === 'general-chat') {
+    return {
+      ...decision,
+      params: {
+        ...decision.params,
+        userText,
+      },
     };
   }
 

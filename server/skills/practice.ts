@@ -22,6 +22,7 @@ import {
   decideNextQuestion,
   buildQuestionFromTurn,
   MAX_STAGE_MVP,
+  STAGE_GOAL,
 } from './_helpers/practiceFsm.js';
 
 export const practiceSkill: Skill = {
@@ -121,7 +122,9 @@ export const practiceSkill: Skill = {
           data: {
             attemptId: attempt.id,
             stage: next.stage,
+            totalStages: MAX_STAGE_MVP,
             questionNo: next.questionNo,
+            stageGoal: STAGE_GOAL,
             questionType: q.questionType,
             prompt: q.prompt,
             contextZh: q.display.contextZh,

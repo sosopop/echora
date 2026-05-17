@@ -20,6 +20,7 @@ import { useLearningStateStore } from './learningState.js';
 import { useProfileStore } from './profile.js';
 import { describeChatAction } from '@shared/api';
 import type {
+  BranchThreadDTO,
   ConversationDTO,
   MessageDTO,
   ChatAction,
@@ -38,14 +39,25 @@ interface ChatState {
   streamingMessageId: number | null;
   streamBuffer: Record<number, string>;
   activeWidgets: Record<string, LearningWidgetInstance>;
+  branchThreads: BranchThreadDTO[];
+  currentBranchThreadId: number | null;
+  branchSourceMessageId: number | null;
+  branchMessages: MessageDTO[];
+  isBranchOpen: boolean;
+  isBranchLoading: boolean;
+  branchError: string | null;
   inputMode: InputMode;
   isLoading: boolean;
   error: string | null;
 
   loadConversations(): Promise<void>;
   selectConversation(id: number): Promise<void>;
+  startNewConversation(): Promise<void>;
   sendMessage(text: string): Promise<void>;
   sendAction(action: ChatAction): Promise<void>;
+  openBranchForMessage(messageId: number): Promise<void>;
+  closeBranch(): void;
+  sendBranchMessage(text: string): Promise<void>;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -55,6 +67,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
   streamingMessageId: null,
   streamBuffer: {},
   activeWidgets: {},
+  branchThreads: [],
+  currentBranchThreadId: null,
+  branchSourceMessageId: null,
+  branchMessages: [],
+  isBranchOpen: false,
+  isBranchLoading: false,
+  branchError: null,
   inputMode: 'chat',
   isLoading: false,
   error: null,
@@ -73,7 +92,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   async selectConversation(id: number) {
-    set({ isLoading: true, error: null, currentConversationId: id });
+    set({
+      isLoading: true,
+      error: null,
+      currentConversationId: id,
+      branchThreads: [],
+      currentBranchThreadId: null,
+      branchSourceMessageId: null,
+      branchMessages: [],
+      isBranchOpen: false,
+      isBranchLoading: false,
+      branchError: null,
+    });
     try {
       const messages = await chatApi.getMessages(id);
       set({ messages, isLoading: false });
@@ -90,6 +120,39 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  async startNewConversation() {
+    set({ isLoading: true, error: null });
+    try {
+      const conv = await chatApi.createConversation({
+        learningState: 'scene_selecting',
+      });
+      set((s) => ({
+        conversations: [conv, ...s.conversations.filter((c) => c.id !== conv.id)],
+        currentConversationId: conv.id,
+        messages: [],
+        streamingMessageId: null,
+        streamBuffer: {},
+        activeWidgets: {},
+        branchThreads: [],
+        currentBranchThreadId: null,
+        branchSourceMessageId: null,
+        branchMessages: [],
+        isBranchOpen: false,
+        isBranchLoading: false,
+        branchError: null,
+        inputMode: conv.inputMode,
+        isLoading: false,
+      }));
+      useLearningStateStore.getState().setState(conv.learningState);
+      await sendInternal({ action: { type: 'request-new-scenes' } }, get, set);
+    } catch (e) {
+      set({
+        isLoading: false,
+        error: e instanceof Error ? e.message : '新建会话失败',
+      });
+    }
+  },
+
   async sendMessage(text: string) {
     if (!text.trim()) return;
     return await sendInternal({ text }, get, set);
@@ -97,6 +160,80 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   async sendAction(action: ChatAction) {
     return await sendInternal({ action }, get, set);
+  },
+
+  async openBranchForMessage(messageId: number) {
+    const conversationId = get().currentConversationId;
+    if (!conversationId) {
+      set({ branchError: '请先选择会话' });
+      return;
+    }
+    set({
+      isBranchOpen: true,
+      isBranchLoading: true,
+      branchError: null,
+      branchSourceMessageId: messageId,
+    });
+    try {
+      const list = await chatApi.listBranchThreads(conversationId);
+      let thread = list.find((t) => t.sourceMessageId === messageId) ?? null;
+      if (!thread) {
+        thread = await chatApi.createBranchThread(conversationId, {
+          sourceMessageId: messageId,
+          sourceRef: { kind: 'message', messageId },
+        });
+      }
+      const nextThreads = list.some((t) => t.id === thread.id)
+        ? list
+        : [...list, thread];
+      const messages = await chatApi.getBranchMessages(thread.id);
+      set({
+        branchThreads: nextThreads,
+        currentBranchThreadId: thread.id,
+        branchSourceMessageId: messageId,
+        branchMessages: messages,
+        isBranchLoading: false,
+        branchError: null,
+      });
+    } catch (e) {
+      set({
+        isBranchLoading: false,
+        branchError: e instanceof Error ? e.message : '打开辅助追问失败',
+      });
+    }
+  },
+
+  closeBranch() {
+    set({
+      isBranchOpen: false,
+      currentBranchThreadId: null,
+      branchSourceMessageId: null,
+      branchMessages: [],
+      branchError: null,
+    });
+  },
+
+  async sendBranchMessage(text: string) {
+    const trimmed = text.trim();
+    const threadId = get().currentBranchThreadId;
+    if (!trimmed || !threadId) return;
+    set({ isBranchLoading: true, branchError: null });
+    try {
+      const resp = await chatApi.sendBranchMessage(threadId, trimmed);
+      set((s) => ({
+        branchMessages: [
+          ...s.branchMessages,
+          resp.userMessage,
+          resp.assistantMessage,
+        ],
+        isBranchLoading: false,
+      }));
+    } catch (e) {
+      set({
+        isBranchLoading: false,
+        branchError: e instanceof Error ? e.message : '发送支线追问失败',
+      });
+    }
   },
 }));
 
@@ -123,6 +260,7 @@ async function sendInternal(
   const optimisticUserMsg: MessageDTO = {
     id: optimisticUserId,
     conversationId: optimisticConversationId,
+    branchThreadId: null,
     type: 'text',
     role: 'user',
     skillName: null,
@@ -134,6 +272,7 @@ async function sendInternal(
   const optimisticAssistantMsg: MessageDTO = {
     id: optimisticAssistantId,
     conversationId: optimisticConversationId,
+    branchThreadId: null,
     type: 'text',
     role: 'assistant',
     skillName: null,
@@ -279,6 +418,9 @@ function handleStreamEvent(
     // 学习态变化(如 onboarding → scene_selecting)往往伴随 profile 更新,
     // 异步刷新画像,RouteGuard / 视图凭新 profile 决定下一步导航
     void useProfileStore.getState().reload();
+    // 场景选定等状态变化可能同步更新 conversations.title / input_mode,
+    // 刷新左侧历史栏,让标题和学习态不等到下一次进页面才更新。
+    void useChatStore.getState().loadConversations();
   } else if (evt.type === 'error') {
     const text = formatStreamError(evt);
     set((s) => ({

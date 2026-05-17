@@ -187,6 +187,11 @@ describe('review skill', () => {
             sceneName: string;
             questionsCount: number;
             averageScore: number;
+            categoryCounts: {
+              exact: number;
+              similar: number;
+              incorrect: number;
+            };
             weakTagsCount: number;
             weakPoints: string[];
             masteries: Array<{ tag: string; score: number }>;
@@ -197,11 +202,24 @@ describe('review skill', () => {
     expect(ready.payload.patch.data.sceneName).toBe('餐厅点餐');
     expect(ready.payload.patch.data.questionsCount).toBe(8);
     expect(ready.payload.patch.data.averageScore).toBe(86);
+    expect(ready.payload.patch.data.categoryCounts).toEqual({
+      exact: 0,
+      similar: 7,
+      incorrect: 1,
+    });
     expect(ready.payload.patch.data.weakTagsCount).toBe(1);
     expect(ready.payload.patch.data.weakPoints.join(' ')).toContain('missing_word');
     expect(
       ready.payload.patch.data.masteries.some((m) => m.tag === 'missing_word')
     ).toBe(true);
+    const text = events
+      .filter((e) => e.type === 'text-chunk')
+      .map((e) => (e as { payload: { text: string } }).payload.text)
+      .join('');
+    expect(text).toContain('完全正确 0 题');
+    expect(text).toContain('还不错 7 题');
+    expect(text).toContain('错误 1 题');
+    expect(text).not.toContain('平均');
     const answerReady = events
       .filter((e) => e.type === 'widget-ready')
       .find(
