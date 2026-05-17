@@ -47,6 +47,23 @@
   font-size: 12px;
 }
 
+.historyClose {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.historyClose:hover {
+  background: var(--color-surface-soft);
+  color: var(--color-ink);
+}
+
 .historyList {
   min-height: 0;
   overflow-y: auto;
@@ -111,6 +128,31 @@
   font-size: 12px;
 }
 
+.mobileHistoryOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+}
+
+.mobileHistoryBackdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+}
+
+.historyDrawerPanel {
+  display: flex;
+  position: relative;
+  z-index: 1;
+  width: min(320px, 86vw);
+  height: 100%;
+  flex-direction: column;
+  box-shadow: var(--shadow-lg);
+}
+
 .topBar {
   position: sticky;
   top: 0;
@@ -122,6 +164,25 @@
   align-items: center;
   gap: 16px;
   padding: 0 24px;
+}
+
+.historyToggle {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.historyToggle:hover {
+  background: var(--color-surface-soft);
+  color: var(--color-ink);
 }
 
 .brand {
@@ -624,6 +685,10 @@
 }
 
 @media (min-width: 960px) {
+  .historyToggle {
+    display: none;
+  }
+
   .workspace {
     grid-template-columns: 260px minmax(0, 1fr);
   }

@@ -93,4 +93,26 @@ describe('HistoryPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /新建对话/ }));
     expect(startNewConversation).toHaveBeenCalled();
   });
+
+  it('抽屉模式点击关闭和切换会话会触发 onClose', () => {
+    const selectConversation = vi.fn();
+    const onClose = vi.fn();
+    useChatStore.setState({
+      conversations: [
+        conversation(1, '餐厅点餐'),
+        conversation(2, '咖啡店点单'),
+      ],
+      currentConversationId: 1,
+      selectConversation,
+    });
+
+    render(<HistoryPanel variant="drawer" onClose={onClose} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭历史会话' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: /咖啡店点单/ }));
+    expect(selectConversation).toHaveBeenCalledWith(2);
+    expect(onClose).toHaveBeenCalledTimes(2);
+  });
 });

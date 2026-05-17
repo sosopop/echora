@@ -12,23 +12,50 @@ const STATE_LABELS: Record<string, string> = {
   archived: '归档',
 };
 
-export default function HistoryPanel(): JSX.Element {
+interface Props {
+  variant?: 'sidebar' | 'drawer';
+  onClose?: () => void;
+}
+
+export default function HistoryPanel({
+  variant = 'sidebar',
+  onClose,
+}: Props): JSX.Element {
   const conversations = useChatStore((s) => s.conversations);
   const currentId = useChatStore((s) => s.currentConversationId);
   const selectConversation = useChatStore((s) => s.selectConversation);
   const startNewConversation = useChatStore((s) => s.startNewConversation);
 
   return (
-    <aside className={styles.historyPanel} aria-label="历史会话">
+    <aside
+      className={[
+        styles.historyPanel,
+        variant === 'drawer' ? styles.historyDrawerPanel : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      aria-label="历史会话"
+    >
       <div className={styles.historyHead}>
         <div className={styles.historyTitle}>历史会话</div>
         <div className={styles.historyCount}>{conversations.length}</div>
+        {variant === 'drawer' && (
+          <button
+            className={styles.historyClose}
+            type="button"
+            aria-label="关闭历史会话"
+            onClick={onClose}
+          >
+            ×
+          </button>
+        )}
       </div>
       <button
         className={styles.historyNewBtn}
         type="button"
         onClick={() => {
           void startNewConversation();
+          onClose?.();
         }}
       >
         ＋ 新建对话
@@ -50,6 +77,7 @@ export default function HistoryPanel(): JSX.Element {
               onClick={() => {
                 if (conversation.id !== currentId) {
                   void selectConversation(conversation.id);
+                  onClose?.();
                 }
               }}
             >

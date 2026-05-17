@@ -48,7 +48,7 @@
 - **FollowUpSource 组件(019)**:`src/components/widgets/FollowUpSource.tsx` 正式渲染 `follow-up-source`,用于 explain 追问前标明来源。`status='ready'` 且 `sourceLabel/snippet` 完整时才显示;未批改题显示"答题前只给提示",已批改来源显示"不改变主学习流"。
 - **IntentConfirm 组件(020)**:`src/components/widgets/IntentConfirm.tsx` 正式渲染 `intent-confirm`,用于低置信度路由确认。`status='ready'` 且 `question/choices>=2` 时才显示;按钮解析 `action:*` 或 `text:*` 字符串并复用既有发送通道。
 - **辅助追问右侧面板(031)**:`src/views/Chat/BranchPanel.tsx` 渲染桌面右侧支线;`MessageBubble` 在非 streaming 主线消息内显示"追问"入口,当前追问来源用 `bubbleReferenced` 高亮。桌面宽屏下 `shellWithBranch` 把主区与 360px 支线组成两列,并把固定输入栏右侧收进主区;窄屏下支线用 fixed 面板覆盖,主输入栏暂时隐藏,避免两套输入重叠。
-- **历史会话左栏(034/035/037)**:`src/views/Chat/HistoryPanel.tsx` 在 960px 以上显示左侧 260px 历史会话栏,可切换当前会话,035 起提供"新建对话"入口;037 起 Chat store 在收到 `state-transition` 后刷新 conversations,用于同步场景标题和学习态。主输入栏同步从左侧让出 260px。1280px 以上且支线打开时形成 260px 历史栏 + 主学习流 + 360px 支线三栏。
+- **历史会话左栏/抽屉(034/035/037/039)**:`src/views/Chat/HistoryPanel.tsx` 在 960px 以上显示左侧 260px 历史会话栏,可切换当前会话,035 起提供"新建对话"入口;037 起 Chat store 在收到 `state-transition` 后刷新 conversations,用于同步场景标题和学习态。039 起 960px 以下通过顶栏 `☰` 打开历史抽屉,切换会话或新建会话后自动关闭。主输入栏同步从左侧让出 260px。1280px 以上且支线打开时形成 260px 历史栏 + 主学习流 + 360px 支线三栏。
 
 ## 测试入口
 

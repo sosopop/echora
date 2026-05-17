@@ -10,7 +10,7 @@
  * 子组件:ProgressBanner / MessageList / ChatInput
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useChatStore } from '../../stores/chat.js';
 import { useLearningStateStore } from '../../stores/learningState.js';
 import { useAuthStore } from '../../stores/auth.js';
@@ -38,6 +38,7 @@ export default function Chat(): JSX.Element {
   const isBranchOpen = useChatStore((s) => s.isBranchOpen);
   const user = useAuthStore((s) => s.user);
   const initRef = useRef(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   useEffect(() => {
     if (initRef.current) return;
@@ -67,6 +68,14 @@ export default function Chat(): JSX.Element {
         .join(' ')}
     >
       <header className={styles.topBar}>
+        <button
+          className={styles.historyToggle}
+          type="button"
+          aria-label="打开历史会话"
+          onClick={() => setHistoryOpen(true)}
+        >
+          ☰
+        </button>
         <span className={styles.brand}>
           <span className={styles.brandMark}>✱</span> Echora
         </span>
@@ -99,6 +108,21 @@ export default function Chat(): JSX.Element {
         </main>
         <BranchPanel />
       </div>
+
+      {historyOpen && (
+        <div className={styles.mobileHistoryOverlay}>
+          <button
+            className={styles.mobileHistoryBackdrop}
+            type="button"
+            aria-label="关闭历史会话"
+            onClick={() => setHistoryOpen(false)}
+          />
+          <HistoryPanel
+            variant="drawer"
+            onClose={() => setHistoryOpen(false)}
+          />
+        </div>
+      )}
 
       <ChatInput />
     </div>
