@@ -2,7 +2,7 @@
  * smoke:learning — 学习闭环 E2E 烟雾测试(确定性 ScriptedProvider)
  *
  * 覆盖 PRD §5.1 + §5.2 验收点。10 场景:
- *   A · 完整闭环(register → onboarding → scene-select → 阶段 1*2 → 阶段 2*2 → 阶段 3*2 → 阶段 4*2 → awaiting_next)
+ *   A · 完整闭环(register → onboarding → scene-select → 阶段 1*2 → 阶段 2*2 → 阶段 3*2 → 阶段 4*2 → awaiting_next → review)
  *   B · 换一批 → 候选过滤已用
  *   C · scene_history 累计 10 → 第 11 次 prune
  *   D · 答错 → retry_count=1 保持 practicing
@@ -280,7 +280,7 @@ function scenario(id: string, title: string, run: () => Promise<void>): void {
 }
 
 /* ------- A · 完整闭环 ------- */
-scenario('A', '完整闭环(scene → 阶段 1-4 各 2 题 → awaiting_next)', async () => {
+scenario('A', '完整闭环(scene → 阶段 1-4 各 2 题 → awaiting_next → review)', async () => {
   const provider = buildLearningProvider();
   const app = await startTestApp({ provider });
   try {
@@ -343,6 +343,37 @@ scenario('A', '完整闭环(scene → 阶段 1-4 各 2 题 → awaiting_next)', 
       }
     }
     assertEq(lastTransition, 'awaiting_next', '完成 4 阶段后转 awaiting_next');
+
+    // 11. 完成后发送复盘 → 真实 progress-summary
+    s = await httpJson<{ data: { streamId: string; decision: RouterDecision } }>(
+      app.baseUrl, 'POST', '/api/chat/send',
+      { token, body: { conversationId: convId, text: '复盘' } }
+    );
+    assertEq(s.body.data.decision.skillName, 'review', '复盘确定性路由 review');
+    await delay(80);
+    e = await collectSseEvents(app.baseUrl, s.body.data.streamId, token);
+    const reviewTransition = eventsByType(e, 'state-transition')[0] as {
+      payload: { nextLearningState: string };
+    };
+    assertEq(reviewTransition.payload.nextLearningState, 'reviewing', '复盘后转 reviewing');
+    const summaryReady = eventsByType(e, 'widget-ready')[0] as {
+      payload: {
+        patch: {
+          data: {
+            sceneName: string;
+            questionsCount: number;
+            averageScore: number;
+            masteries: Array<{ tag: string; score: number }>;
+            nextSuggestions: Array<{ title: string }>;
+          };
+        };
+      };
+    };
+    assertTrue(summaryReady.payload.patch.data.sceneName.length > 0, '复盘场景名非空');
+    assertEq(summaryReady.payload.patch.data.questionsCount, 8, '复盘题数');
+    assertEq(summaryReady.payload.patch.data.averageScore, 90, '复盘平均分');
+    assertTrue(summaryReady.payload.patch.data.masteries.length > 0, '复盘包含掌握度');
+    assertTrue(summaryReady.payload.patch.data.nextSuggestions.length > 0, '复盘包含下一步建议');
   } finally {
     await app.cleanup();
   }

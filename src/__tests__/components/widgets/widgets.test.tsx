@@ -7,6 +7,8 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import SceneCards from '../../../components/widgets/SceneCards';
 import ExerciseCard from '../../../components/widgets/ExerciseCard';
 import GradingResult from '../../../components/widgets/GradingResult';
+import ProgressSummary from '../../../components/widgets/ProgressSummary';
+import WidgetRenderer from '../../../components/widgets/WidgetRenderer';
 import { useChatStore } from '../../../stores/chat';
 import { useLearningStateStore } from '../../../stores/learningState';
 import type { LearningWidgetInstance } from '@shared/skill';
@@ -287,5 +289,75 @@ describe('GradingResult widget', () => {
     expect(screen.getByText('preposition')).toBeInTheDocument();
     expect(screen.getByText(/改一句再提交/)).toBeInTheDocument();
     expect(screen.getByText(/跳过到下一题/)).toBeInTheDocument();
+  });
+});
+
+describe('ProgressSummary widget', () => {
+  it('loading 状态不显示空复盘卡', () => {
+    const widget: LearningWidgetInstance = {
+      id: 'p-loading',
+      type: 'progress-summary',
+      status: 'loading',
+      data: {},
+      version: 1,
+    };
+    const { container } = render(<ProgressSummary widget={widget} />);
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByText(/学习报告/)).not.toBeInTheDocument();
+  });
+
+  it('渲染平均分、掌握度、强弱项和建议', () => {
+    const widget: LearningWidgetInstance = {
+      id: 'p1',
+      type: 'progress-summary',
+      status: 'ready',
+      data: {
+        title: '餐厅点餐 · 已经达标',
+        sceneName: '餐厅点餐',
+        questionsCount: 8,
+        averageScore: 86,
+        averageScoreDelta: 0,
+        weakTagsCount: 1,
+        masteredScenesCount: 2,
+        masteries: [
+          { tag: 'fill_word', score: 88, delta: 0 },
+          { tag: 'missing_word', score: 38, delta: 0 },
+        ],
+        strongPoints: ['整句翻译 · 第 2-1 题 90 分'],
+        weakPoints: ['missing_word · 出现 1 次'],
+        nextSuggestions: [
+          {
+            title: '重练 missing_word',
+            desc: '后续可基于这个薄弱点生成专项题。',
+            action: 'retry:missing_word',
+          },
+        ],
+      },
+      version: 1,
+    };
+    render(<ProgressSummary widget={widget} />);
+    expect(screen.getByText('餐厅点餐 · 已经达标')).toBeInTheDocument();
+    expect(screen.getByText('86')).toBeInTheDocument();
+    expect(screen.getByText('fill_word')).toBeInTheDocument();
+    expect(screen.getByText('missing_word · 出现 1 次')).toBeInTheDocument();
+    expect(screen.getByText('重练 missing_word')).toBeInTheDocument();
+  });
+
+  it('WidgetRenderer 对 progress-summary 使用正式组件', () => {
+    const widget: LearningWidgetInstance = {
+      id: 'p2',
+      type: 'progress-summary',
+      status: 'ready',
+      data: {
+        title: '当前会话 · 继续巩固',
+        sceneName: '当前会话',
+        questionsCount: 2,
+        averageScore: 75,
+      },
+      version: 1,
+    };
+    render(<WidgetRenderer widget={widget} />);
+    expect(screen.getByText('当前会话 · 继续巩固')).toBeInTheDocument();
+    expect(screen.queryByText(/未实现 widget/)).not.toBeInTheDocument();
   });
 });

@@ -8,6 +8,7 @@ import type { LearningWidgetInstance } from '@shared/skill';
 import SceneCards from './SceneCards.js';
 import ExerciseCard from './ExerciseCard.js';
 import GradingResult from './GradingResult.js';
+import ProgressSummary from './ProgressSummary.js';
 import styles from './widgets.module.css';
 
 type WidgetComponent = (props: {
@@ -18,6 +19,7 @@ const REGISTRY: Record<string, WidgetComponent> = {
   'scene-cards': SceneCards,
   'exercise-card': ExerciseCard,
   'grading-result': GradingResult,
+  'progress-summary': ProgressSummary,
 };
 
 export default function WidgetRenderer({

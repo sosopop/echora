@@ -34,6 +34,7 @@ import {
   MAX_STAGE_MVP,
   buildQuestionFromTurn,
 } from './_helpers/practiceFsm.js';
+import { recordGradingLearningSignals } from '../services/learningSignals.js';
 
 export const gradeSkill: Skill = {
   name: SKILL_NAMES.grade,
@@ -139,11 +140,16 @@ export const gradeSkill: Skill = {
     }
 
     // 落库
-    createGrading(ctx.db, {
+    const grading = createGrading(ctx.db, {
       attemptId,
       score: result.score,
       isCorrect: result.isCorrect,
       corrections: result.corrections,
+    });
+    recordGradingLearningSignals(ctx.db, {
+      userId: ctx.user.id,
+      attempt,
+      grading,
     });
     markGraded(ctx.db, attemptId);
 

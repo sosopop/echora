@@ -4,7 +4,7 @@
 
 - Skill 接口:`shared/skill.ts`(`Skill` / `SkillEventInput` / `SkillContext` / `RouterDecision`)
 - Skill 注册:`server/skills/registry.ts`(`registerAllSkills` 一键)
-- 8 Skill stub:`server/skills/{onboarding,sceneSelect,practice,grade,explain,review,retry,generalChat}.ts`
+- 8 Skill 入口:`server/skills/{onboarding,sceneSelect,practice,grade,explain,review,retry,generalChat}.ts`
 - AI Provider 接口:`server/ai/types.ts`
 - Provider 工厂:`server/ai/providers/index.ts`(根据 `AI_PROVIDER` 选 Stub | Anthropic)
 - AI Router:`server/ai/router.ts`(`createAIRouter`)
@@ -24,9 +24,9 @@
 | retry          | awaiting_next / reviewing / scene_selecting                 | exercise-card       |
 | general-chat   | (空数组 = 任意态)                                            | (无)                |
 
-## Stub 行为(剩余 4 个 stub)
+## Stub 行为(剩余 3 个 stub)
 
-剩余 stub:`explain` / `review` / `retry` / `general-chat`。其余 4 个(onboarding/scene-select/practice/grade)已 002+003 真实接入。
+剩余 stub:`explain` / `retry` / `general-chat`。其余 5 个(onboarding/scene-select/practice/grade/review)已真实接入。
 
 - `StubProvider.route()` 固定返回 `{ skillName: 'general-chat', confidence: 0.6, ... }`
 - `StubProvider` 不实现 `chat()`(可选接口),onboarding / scene-select / grade 等需 LLM 的 skill 在 stub provider 下会 yield error
@@ -83,8 +83,18 @@
 - 流程:从 `ctx.params.action(submit-answer)` 拿 attemptId + answer → 锁定检查 → `markSubmitted` → `runGrading`(LLM tool `grade_answer`,12 错误标签 enum)→ `createGrading`(UPSERT 支持重批改)→ `markGraded`
 - 008/010 兜底:若用户在 `practicing` 态直接输入非控制指令文本,chat route 会把当前活跃场景下最新可作答 attempt 自动包装成 `submit-answer` 并进入 grade;前端 chat/fill 输入同样优先提交最新可作答 exercise-card,但 `出题` / `下一题` / `go` 等控制指令会确定性进入 practice,避免阶段 2 chat 模式答案被当作 general chat。
 - 008 批改 prompt 会从当前 `scene_dialogue` + attempt stage/questionNo 重新推导参考答案,并要求模型优先按参考答案批改,减少错题反馈漂移。
+- 015 起批改后调用 `recordGradingLearningSignals`:根据 `corrections.tags` 写入 `error_tag_events`,并用错误 tag 或题型 fallback 更新 `mastery_records`。正确且无错误标签的题不会生成错误事件,但会更新对应题型掌握度。
 - retry:错答 `incrementRetry`,达 2 次 `markNeedsReview`(MVP 不出降难替换题,留 004)
 - 阶段判断:本题答对且 `countStagePassed >= STAGE_GOAL` 且 `stage >= MAX_STAGE_MVP(4)` → state-transition('awaiting_next');阶段 4 答对时如存在下一句对方回应,会在批改后追加自然文本展示。
+
+## review Skill(015 已真实接入)
+
+- 入口:`server/skills/review.ts`
+- 数据源:当前会话最新 `scene_dialogue`、同 scene 的 `exercise_attempts + grading_results`、`error_tag_events`、`mastery_records`;不从消息正文解析。
+- 无批改记录:yield `state-transition('reviewing','review')` + 友好文本 + `done`,不初始化空 `progress-summary`。
+- 有批改记录:输出本轮题数、平均分、通过数文本,随后 `widget-init(progress-summary loading)` → `widget-ready(progress-summary ready)`。
+- `progress-summary` data 包含:`title/sceneName/questionsCount/averageScore/averageScoreDelta/weakTagsCount/masteredScenesCount/masteries/strongPoints/weakPoints/nextSuggestions`。当前 `averageScoreDelta/mastery.delta` 尚无历史基线,固定为 0。
+- 015 起 `/api/chat/send` 在 `awaiting_next` / `reviewing` 下识别 `复盘` / `总结` / `学习报告` / `review`,确定性路由到 `review`,不经过 AI Router。
 
 ## AI Router 校验链
 
@@ -105,7 +115,7 @@ provider.route()
 - `practicing` / `grading` 中 router 校验失败时**直接抛错**(不再 fallback,002 patch)
 - AI Provider 抛错时 router 不 catch,直接传播到 chat 路由,返 `502 PROVIDER_ERROR`
 - POST `/api/chat/send` body `text` 与 `action` **二选一**(zod refine);action 由 chat route 确定性映射到 skill,并放入 `decision.params.action`
-- 008 起练习态直接输入答案时,chat route 可能把 `text` 规范化为 `submit-answer` action;消息历史仍保存用户原始输入文本。010 起 `awaiting_next` 下输入 `next` / `START` / `开始练习` 会确定性触发 `request-new-scenes`,减少完成一场景后的断流。012 起 `practicing` 下的换场景类文本也确定性触发 `request-new-scenes`,不再交给 AI Router。
+- 008 起练习态直接输入答案时,chat route 可能把 `text` 规范化为 `submit-answer` action;消息历史仍保存用户原始输入文本。010 起 `awaiting_next` 下输入 `next` / `START` / `开始练习` 会确定性触发 `request-new-scenes`,减少完成一场景后的断流。012 起 `practicing` 下的换场景类文本也确定性触发 `request-new-scenes`,不再交给 AI Router。015 起 `awaiting_next` / `reviewing` 下的复盘类文本确定性触发 `review`。
 
 ## 测试入口
 
@@ -113,7 +123,8 @@ provider.route()
 - onboarding skill 单测:`server/__tests__/skill-onboarding.test.ts`(5 测试)
 - scene-select 单测:`server/__tests__/skill-sceneSelect.test.ts`(6 测试)
 - practice 单测:`server/__tests__/skill-practice.test.ts`(8 测试)
-- grade 单测:`server/__tests__/skill-grade.test.ts`(9 测试)
+- grade 单测:`server/__tests__/skill-grade.test.ts`(11 测试)
+- review 单测:`server/__tests__/skill-review.test.ts`(2 测试)
 - learning services 单测:`server/__tests__/learning-services.test.ts`(12 测试)
 - onboarding 端到端:`npm run test:smoke:onboarding`(10 场景)
 - 学习闭环端到端:`npm run test:smoke:learning`(10 场景,覆盖 4 阶段完整闭环、错题重试、状态拒绝与 provider 错误路径)
@@ -121,8 +132,8 @@ provider.route()
 
 ## Pending
 
-- explain / review / retry / general-chat 4 stub 待真实化(留 004+)
+- explain / retry / general-chat 3 stub 待真实化(留 004+)
 - 真实 Anthropic Provider `route()` 低置信度处理(<0.5 触发 intent-confirm widget)未实现
 - Skill 取消机制:`ctx.signal` 已传入,onboarding 已消费;其他 6 stub/真实 skill 尚未消费
 - `agent_runs.payload` 字段写入 finalSeq 与累计文本长度的细节
-- mastery_records + error_tag_events 写入(留 004 闭环质量任务)
+- retry 降难替换题仍未真实化,当前 review 只给静态下一步建议

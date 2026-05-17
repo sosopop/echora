@@ -31,6 +31,7 @@ import {
   markNeedsReview,
 } from '../services/exerciseAttempt.js';
 import { createGrading } from '../services/gradingResult.js';
+import { getMasteryRecord } from '../services/masteryRecord.js';
 import type { SkillEventInput } from '../../shared/skill.js';
 
 let db: Db;
@@ -172,6 +173,73 @@ describe('grade skill', () => {
     );
     expect(events.find((e) => e.type === 'state-transition')).toBeUndefined();
     expect(getAttempt(db, attemptId)?.retryCount).toBe(1);
+  });
+
+  it('错误答案带 tags → 写入 error_tag_events 并更新 mastery_records', async () => {
+    const attemptId = seedAttempt(1, 1);
+    const provider = makeProvider({
+      score: 30,
+      is_correct: false,
+      reference_answer: 'order',
+      explanation: '固定搭配不对',
+      tags: ['collocation', 'missing_word'],
+    });
+
+    await collect(
+      makeCtx(provider, {
+        type: 'submit-answer',
+        payload: { attemptId, answer: 'ordering' },
+      })
+    );
+
+    const events = db
+      .prepare<
+        [number],
+        { tag: string; severity: string; included_in_stats: number }
+      >(
+        `SELECT tag, severity, included_in_stats
+         FROM error_tag_events
+         WHERE attempt_id = ?
+         ORDER BY tag ASC`
+      )
+      .all(attemptId);
+    expect(events).toEqual([
+      { tag: 'collocation', severity: 'high', included_in_stats: 1 },
+      { tag: 'missing_word', severity: 'high', included_in_stats: 1 },
+    ]);
+    const mastery = getMasteryRecord(db, userId, 'collocation');
+    expect(mastery?.attemptsCount).toBe(1);
+    expect(mastery?.correctCount).toBe(0);
+    expect(mastery?.masteryScore).toBeLessThan(50);
+  });
+
+  it('正确答案无 tags → 不写错误事件,但更新题型掌握度', async () => {
+    const attemptId = seedAttempt(1, 1);
+    const provider = makeProvider({
+      score: 90,
+      is_correct: true,
+      reference_answer: 'order',
+      explanation: '正确',
+      tags: [],
+    });
+
+    await collect(
+      makeCtx(provider, {
+        type: 'submit-answer',
+        payload: { attemptId, answer: 'order' },
+      })
+    );
+
+    const eventCount = db
+      .prepare<[number], { c: number }>(
+        'SELECT COUNT(*) AS c FROM error_tag_events WHERE attempt_id = ?'
+      )
+      .get(attemptId);
+    expect(eventCount?.c).toBe(0);
+    const mastery = getMasteryRecord(db, userId, 'fill_word');
+    expect(mastery?.attemptsCount).toBe(1);
+    expect(mastery?.correctCount).toBe(1);
+    expect(mastery?.masteryScore).toBeGreaterThan(50);
   });
 
   it('阶段 2 最后一题正确 → 不结束整场', async () => {

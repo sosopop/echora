@@ -220,7 +220,9 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
       // 3. 调度决策
       //    结构化 action 走确定性路由;自由文本才交给 AI Router。
       let decision: RouterDecision;
-      if (normalizedInput.action) {
+      if (normalizedInput.decision) {
+        decision = normalizedInput.decision;
+      } else if (normalizedInput.action) {
         decision = createActionDecision(normalizedInput.action);
       } else {
         const routerInput: RouterInput = {
@@ -387,6 +389,7 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
 interface NormalizedChatSendInput {
   text?: string;
   action?: ChatAction;
+  decision?: RouterDecision;
   userMessageContent: string;
 }
 
@@ -403,6 +406,15 @@ function normalizeChatSendInput(
   }
 
   const text = body.text?.trim() ?? '';
+  const reviewDecision = createTextReviewDecision(conv, text);
+  if (reviewDecision) {
+    return {
+      text,
+      decision: reviewDecision,
+      userMessageContent: text,
+    };
+  }
+
   const controlAction = createTextControlAction(conv, text);
   if (controlAction) {
     return {
@@ -429,6 +441,25 @@ function describeUserMessageForAction(action: ChatAction): string {
   return action.type === 'submit-answer'
     ? action.payload.answer
     : describeChatAction(action);
+}
+
+function createTextReviewDecision(
+  conv: ConversationDTO,
+  text: string
+): RouterDecision | null {
+  if (
+    conv.learningState !== 'awaiting_next' &&
+    conv.learningState !== 'reviewing'
+  ) {
+    return null;
+  }
+  if (!isReviewRequestText(text)) return null;
+  return {
+    skillName: 'review',
+    params: { source: 'deterministic-text' },
+    confidence: 1,
+    rationale: 'deterministic text route:review',
+  };
 }
 
 function createTextControlAction(
@@ -495,6 +526,12 @@ function isSceneRequestText(text: string): boolean {
   const normalized = normalizeControlText(text);
   if (!normalized) return false;
   return ['换场景', '换一批', '重新生成场景'].includes(normalized);
+}
+
+function isReviewRequestText(text: string): boolean {
+  const normalized = normalizeControlText(text);
+  if (!normalized) return false;
+  return ['复盘', '总结', '学习报告', '报告', 'review'].includes(normalized);
 }
 
 function isPracticeControlText(text: string): boolean {

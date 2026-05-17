@@ -36,6 +36,17 @@ practicing
 
 阶段内答错保持 `practicing`;同题第 2 次未通过会标记 `needs_review`,后续通过 `next-question` 继续推进。
 
+复盘主线(015):
+
+```
+awaiting_next
+  → 用户输入 "复盘" / "总结" / "学习报告" / "review"
+  → review skill
+  → reviewing + progress-summary
+```
+
+`reviewing` 下再次输入复盘类文本会重新生成当前场景的学习报告;输入 `换场景` / `next` / `开始练习` 等继续类文本仍按 chat route 规则进入场景选择。
+
 ## 约束与失败点
 
 - **`practicing` / `grading` 期间锁定**:历史会话答案/参考/批改详情默认隐藏(防抄袭),由 conversations.lock_policy 控制
@@ -47,6 +58,7 @@ practicing
 ## 测试入口
 
 - 转移合法性测试:后续在 `server/__tests__/conversation.test.ts`
+- 复盘状态转移:`server/__tests__/skill-review.test.ts` + `server/__tests__/chat-route.test.ts`
 - 锁定行为测试:在历史消息接口测试中覆盖
 
 ## Pending

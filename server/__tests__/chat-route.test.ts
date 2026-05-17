@@ -96,6 +96,7 @@ beforeEach(() => {
       'practicing',
     ])
   );
+  skillRegistry.register(fakeSkill('review', ['awaiting_next', 'reviewing']));
   const aiRouter: AIRouter = {
     async decide(input): Promise<RouterDecision> {
       decideCalls.push({ userText: input.userText });
@@ -237,6 +238,24 @@ describe('POST /api/chat/send', () => {
       params: { action: { type: 'request-new-scenes' } },
     });
     expect(decideCalls).toHaveLength(0);
+  });
+
+  it('awaiting_next 中复盘直接走 review,不绕 AI Router', async () => {
+    updateLearningState(db, conversationId, 'awaiting_next', null);
+
+    const res = await request(app)
+      .post('/api/chat/send')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ conversationId, text: '复盘' });
+
+    expect(res.status).toBe(202);
+    expect(res.body.data.decision).toMatchObject({
+      skillName: 'review',
+      params: { source: 'deterministic-text' },
+    });
+    expect(decideCalls).toHaveLength(0);
+    const user = getMessages(db, conversationId).find((m) => m.role === 'user');
+    expect(user?.content).toBe('复盘');
   });
 
   it('直接输入答案只绑定当前活跃场景 attempt', async () => {

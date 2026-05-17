@@ -10,7 +10,7 @@
  * streaming 时禁用。
  */
 
-import { useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useChatStore } from '../../stores/chat.js';
 import { useLearningStateStore } from '../../stores/learningState.js';
 import type { LearningWidgetInstance } from '@shared/skill';
@@ -19,6 +19,8 @@ import styles from './index.module.css';
 
 export default function ChatInput(): JSX.Element {
   const [text, setText] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const shouldRestoreFocusRef = useRef(false);
   const inputMode = useChatStore((s) => s.inputMode);
   const streaming = useChatStore((s) => s.streamingMessageId !== null);
   const isLoading = useChatStore((s) => s.isLoading);
@@ -41,9 +43,26 @@ export default function ChatInput(): JSX.Element {
   const canStartPractice =
     inputMode === 'select' && learningState === 'practicing';
 
+  useEffect(() => {
+    if (!shouldRestoreFocusRef.current) return;
+    if (streaming || isLoading || shouldShowSelectHint) return;
+
+    const timer = window.setTimeout(() => {
+      const textarea = textareaRef.current;
+      if (!textarea || textarea.disabled) return;
+      textarea.focus();
+      const cursor = textarea.value.length;
+      textarea.setSelectionRange(cursor, cursor);
+      shouldRestoreFocusRef.current = false;
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [inputMode, isLoading, learningState, shouldShowSelectHint, streaming, text]);
+
   const submit = async (): Promise<void> => {
     if (disabled) return;
     const value = text.trim();
+    shouldRestoreFocusRef.current = true;
     setText('');
     if (
       (learningState === 'practicing' || inputMode === 'fill') &&
@@ -110,6 +129,7 @@ export default function ChatInput(): JSX.Element {
             ☰
           </button>
           <textarea
+            ref={textareaRef}
             className={styles.inputTextarea}
             placeholder={placeholder}
             value={text}

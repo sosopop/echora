@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ChatInput from '../../views/Chat/ChatInput';
 import { useChatStore } from '../../stores/chat';
 import { useLearningStateStore } from '../../stores/learningState';
@@ -214,5 +214,34 @@ describe('ChatInput scene-select recovery', () => {
 
     expect(sendAction).not.toHaveBeenCalled();
     expect(sendMessage).toHaveBeenCalledWith('出题');
+  });
+
+  it('发送后在流式回复结束时恢复输入框焦点', async () => {
+    const sendMessage = vi.fn(async () => {
+      useChatStore.setState({ streamingMessageId: 123 });
+    });
+    useChatStore.setState({
+      inputMode: 'chat',
+      sendMessage,
+    });
+
+    render(<ChatInput />);
+
+    const textarea = screen.getByPlaceholderText(
+      /直接打字告诉我/
+    ) as HTMLTextAreaElement;
+    textarea.focus();
+    fireEvent.change(textarea, { target: { value: 'hello' } });
+    fireEvent.click(screen.getByRole('button', { name: /发送/ }));
+
+    await waitFor(() => expect(sendMessage).toHaveBeenCalledWith('hello'));
+    await waitFor(() => expect(textarea).toBeDisabled());
+
+    act(() => {
+      useChatStore.setState({ streamingMessageId: null });
+    });
+
+    await waitFor(() => expect(textarea).toHaveFocus());
+    expect(textarea).toHaveValue('');
   });
 });
