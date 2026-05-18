@@ -450,32 +450,6 @@ textarea.input {
   }
 }
 
-/* —— Widget 通用容器 ————————————————————————————————————————————— */
-.widget {
-  background: var(--color-canvas);
-  border: 1px solid var(--color-hairline);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
-.widget-head {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--color-hairline-soft);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.widget-body {
-  padding: 20px;
-}
-.widget-foot {
-  padding: 12px 16px;
-  border-top: 1px solid var(--color-hairline-soft);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  background: var(--color-surface-soft);
-}
-
 /* —— 状态条 ——————————————————————————————————————————————————— */
 .state-bar {
   height: 4px;
@@ -786,4 +760,3 @@ textarea.input {
     scrollbar-color: var(--color-hairline-dark) transparent;
   }
 }
-

@@ -4,6 +4,7 @@
 
 - 设计 token:`src/styles/tokens.css`(从 `doc/design/styles/tokens.css` 拷贝)
 - 公共组件样式:`src/styles/components.css`(从 `doc/design/styles/components.css` 拷贝)
+- Widget 全局壳样式:`src/styles/widgets/base.css`
 - 在 `src/main.tsx` 顶部 `import` 注入全局样式
 - 主题 store:`src/stores/theme.ts`
 
@@ -29,7 +30,7 @@
 - **不引入 Tailwind / CSS-in-JS**:沿用 prototype 的 tokens + components,统一约定
 - **不要硬编码十六进制色**:用 `var(--color-...)`,否则暗色模式断
 - **品牌色与语义色双主题保持一致**:primary / success / warning / error 不在暗色下变色
-- **Widget 协议样式在 `widget-preview.css`**:此文件仅用于原型预览,**不**进 src/styles
+- **Widget 协议样式在 `widget-preview.css`**:此文件仅用于原型预览,**不**进 src/styles;运行时代码中的通用 `.widget` / `.widget-head` / `.widget-body` / `.widget-foot` 放在 `src/styles/widgets/base.css`,具体 widget 组件细节继续使用 `src/components/widgets/widgets.module.css`
 - **视图局部样式用 `*.module.css`**(Vite 原生支持,002 起约定):公共组件继续 global,视图层局部样式拆模块化(class hash 隔离),示例见 `src/views/Onboarding/index.module.css`
 - **Chat 滚动锚定(008)**:`src/views/Chat/MessageList.tsx` 不使用 `scrollIntoView` 锚点,而是滚到 `document.scrollingElement.scrollHeight`;同时监听 message list 的 `ResizeObserver`,在 widget 从 loading 展开成 ready 后补滚。固定输入栏下方空间由 `src/views/Chat/index.module.css` 的 `.main` / `.messageList` padding 预留。
 - **Chat 思考占位(008)**:`src/views/Chat/MessageBubble.tsx` 在 assistant 流式消息内容为空时显示 "Echo 正在思考中...",配合 store 的临时 assistant 消息形成「用户消息 → 思考中 → 小部件/结果」顺序。
@@ -79,4 +80,4 @@
 
 ## Pending
 
-- 未来 12 Widget 实现时是否拆出 `src/styles/widgets/` 子目录
+- 暂无

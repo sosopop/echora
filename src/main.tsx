@@ -19,6 +19,7 @@ import { setOnUnauthorized } from './api/client.js';
 
 import './styles/tokens.css';
 import './styles/components.css';
+import './styles/widgets/base.css';
 
 useThemeStore.getState().apply();
 
