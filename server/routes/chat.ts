@@ -6,7 +6,7 @@
  *   GET  /conversations/:id/messages         历史消息
  *   POST /send                               发送消息(同步) → { messageId, streamId, decision }
  *   POST /streams/:streamId/abort            停止正在生成的 Skill 流
- *   GET  /stream?streamId=...&lastSeq=...    SSE 端点(token 走 query)
+ *   GET  /stream?streamId=...                SSE 端点(token 走 Authorization)
  */
 
 import { Router } from 'express';
@@ -145,6 +145,7 @@ const sendBranchMessageSchema = z.object({
 });
 
 const streamIdSchema = z.string().min(1).max(160);
+const STREAM_POLL_INTERVAL_MS = 300;
 
 interface ActiveSkillRun {
   streamId: string;
@@ -642,11 +643,10 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
   router.get('/stream', auth, (req, res) => {
     const streamId =
       typeof req.query.streamId === 'string' ? req.query.streamId : '';
-    const lastSeqRaw = req.query.lastSeq;
-    const lastSeq =
-      typeof lastSeqRaw === 'string' && /^\d+$/.test(lastSeqRaw)
-        ? Number(lastSeqRaw)
-        : 0;
+    const lastSeq = Math.max(
+      parsePositiveSeq(req.get('Last-Event-ID') ?? null),
+      parsePositiveSeq(typeof req.query.lastSeq === 'string' ? req.query.lastSeq : null)
+    );
 
     if (!streamId) {
       res.status(400).json({
@@ -668,16 +668,28 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
 
     let ended = false;
     let lastSentSeq = lastSeq;
-    const send = (event: SkillEvent): void => {
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    let unsubscribe = (): void => {};
+    const stop = (): void => {
       if (ended) return;
+      ended = true;
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+      unsubscribe();
+    };
+    const send = (event: SkillEvent): void => {
+      if (ended || event.seq <= lastSentSeq) return;
+      lastSentSeq = Math.max(lastSentSeq, event.seq);
       try {
         res.write(`data: ${JSON.stringify(event)}\n\n`);
       } catch {
-        ended = true;
+        stop();
         return;
       }
       if (event.type === 'done' || event.type === 'error') {
-        ended = true;
+        stop();
         try {
           res.end();
         } catch {
@@ -686,16 +698,21 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
       }
     };
 
-    const persistedEvents = replayPersistedStreamEvents(db, streamId, lastSentSeq);
-    for (const event of persistedEvents) {
-      send(event);
-      lastSentSeq = Math.max(lastSentSeq, event.seq);
-      if (ended) break;
-    }
+    const replayPersisted = (): void => {
+      if (ended) return;
+      const persistedEvents = replayPersistedStreamEvents(db, streamId, lastSentSeq);
+      for (const event of persistedEvents) {
+        send(event);
+        if (ended) break;
+      }
+    };
 
-    const unsubscribe = ended
-      ? () => {}
-      : streamBus.subscribe(streamId, lastSentSeq, send);
+    replayPersisted();
+
+    if (!ended) {
+      unsubscribe = streamBus.subscribe(streamId, lastSentSeq, send);
+      pollTimer = setInterval(replayPersisted, STREAM_POLL_INTERVAL_MS);
+    }
 
     // 心跳:每 15s 发注释行,防止反向代理断开
     const heartbeat = setInterval(() => {
@@ -710,14 +727,22 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
       }
     }, 15000);
 
-    req.on('close', () => {
-      ended = true;
+    const onClose = (): void => {
+      stop();
       clearInterval(heartbeat);
-      unsubscribe();
-    });
+    };
+
+    req.on('close', onClose);
+    req.on('aborted', onClose);
   });
 
   return router;
+}
+
+function parsePositiveSeq(raw: string | null): number {
+  if (!raw || !/^\d+$/.test(raw)) return 0;
+  const value = Number(raw);
+  return Number.isInteger(value) && value >= 0 ? value : 0;
 }
 
 function replayPersistedStreamEvents(

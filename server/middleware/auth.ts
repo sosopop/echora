@@ -2,7 +2,6 @@
  * JWT 中间件
  *
  * 从 Authorization: Bearer <token> 解析。
- * 也兼容 ?token=... 查询参数(EventSource 场景,V1 限定 SSE 路由用)。
  */
 
 import type { Request, Response, NextFunction } from 'express';
@@ -66,11 +65,6 @@ export function requireAuth(config: Config) {
     if (header.startsWith('Bearer ')) {
       token = header.substring('Bearer '.length).trim();
     }
-    // SSE 兜底:允许 ?token=... 查询参数(EventSource 不支持自定义 header)
-    if (!token && typeof req.query.token === 'string') {
-      token = req.query.token;
-    }
-
     if (!token) {
       res.status(401).json({
         error: {

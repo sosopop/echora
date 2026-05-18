@@ -136,9 +136,12 @@ async function main(): Promise<void> {
         const res = await fetch(
           `${baseUrl}/api/chat/stream?streamId=${encodeURIComponent(
             streamId!
-          )}&lastSeq=0&token=${encodeURIComponent(token!)}`,
+          )}`,
           {
-            headers: { Accept: 'text/event-stream' },
+            headers: {
+              Accept: 'text/event-stream',
+              Authorization: `Bearer ${token!}`,
+            },
           }
         );
         if (res.status !== 200 || !res.body) {

@@ -7,6 +7,7 @@ import request from 'supertest';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
+import { setTimeout as delay } from 'node:timers/promises';
 import type { Application } from 'express';
 import { connect, closeDb, type Db } from '../db/connect.js';
 import { migrate } from '../db/migrate.js';
@@ -725,13 +726,85 @@ describe('POST /api/chat/send', () => {
       .get('/api/chat/stream')
       .query({
         streamId: `stream-${assistant.id}-persisted`,
-        lastSeq: 1,
-        token,
-      });
+      })
+      .set('Authorization', `Bearer ${token}`)
+      .set('Last-Event-ID', '1');
 
     expect(res.status).toBe(200);
     expect(res.text).toContain('"type":"done"');
     expect(res.text).not.toContain('"seq":1');
+  });
+
+  it('SSE 会轮询数据库补回不经 streamBus 发布的新事件', async () => {
+    const assistant = appendMessage(db, {
+      conversationId,
+      type: 'text',
+      role: 'assistant',
+      skillName: 'practice',
+      content: '',
+    });
+    const streamId = `stream-${assistant.id}-poll`;
+    const server = app.listen(0);
+    const addr = server.address();
+    if (!addr || typeof addr === 'string') {
+      throw new Error('无法启动测试 server');
+    }
+    const baseUrl = `http://127.0.0.1:${addr.port}`;
+
+    try {
+      const resPromise = fetch(
+        `${baseUrl}/api/chat/stream?streamId=${encodeURIComponent(streamId)}`,
+        {
+          headers: {
+            Accept: 'text/event-stream',
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      await delay(200);
+      appendStreamEvent(db, assistant.id, {
+        type: 'done',
+        payload: {},
+        seq: 1,
+        streamId,
+        timestamp: Date.now(),
+      });
+
+      const res = await resPromise;
+      expect(res.status).toBe(200);
+      expect(res.body).toBeDefined();
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let text = '';
+      const deadline = Date.now() + 3000;
+      while (Date.now() < deadline && !text.includes('"type":"done"')) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        text += decoder.decode(value, { stream: true });
+      }
+      try {
+        await reader.cancel();
+      } catch {
+        /* ignore */
+      }
+      expect(text).toContain('"type":"done"');
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('SSE 不再接受 query token 认证', async () => {
+    const res = await request(app)
+      .get('/api/chat/stream')
+      .query({
+        streamId: 'stream-query-token',
+        token,
+      });
+
+    expect(res.status).toBe(401);
+    expect(res.body.error).toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
   });
 
   it('streams/:streamId/abort 停止生成并记录 aborted run', async () => {

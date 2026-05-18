@@ -78,10 +78,16 @@ async function collectSseEvents(
   const maxEvents = opts.maxEvents ?? 100;
 
   const url =
-    `${baseUrl}/api/chat/stream?streamId=${encodeURIComponent(streamId)}` +
-    `&lastSeq=${lastSeq}&token=${encodeURIComponent(token)}`;
+    `${baseUrl}/api/chat/stream?streamId=${encodeURIComponent(streamId)}`;
+  const headers: Record<string, string> = {
+    Accept: 'text/event-stream',
+    Authorization: `Bearer ${token}`,
+  };
+  if (lastSeq > 0) {
+    headers['Last-Event-ID'] = String(lastSeq);
+  }
   const res = await fetch(url, {
-    headers: { Accept: 'text/event-stream' },
+    headers,
   });
   if (res.status !== 200 || !res.body) {
     throw new Error(`SSE open 失败 ${res.status}`);

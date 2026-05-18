@@ -1,10 +1,11 @@
 /**
  * SSE 流封装
  *
- * V1 用浏览器原生 EventSource。token 通过 ?token= 查询参数传(EventSource
- * 不支持自定义 header)。生产化前迁移到 fetch + ReadableStream。
+ * 使用 fetch + ReadableStream 读取 text/event-stream,因此 token 可以走
+ * Authorization header,不会再暴露在 URL 查询参数中。
  *
- * 支持 lastSeq 续传:每收到一条事件就更新内部 lastSeq,断线重连用最新值。
+ * 支持 Last-Event-ID 续传:每收到一条事件就更新内部 lastSeq,断线重连用
+ * 标准 header 请求服务端回放。
  */
 
 import { getApiBaseUrl } from './client.js';
@@ -33,7 +34,7 @@ export function openStream(
   let lastSeq = 0;
   let attempt = 0;
   let closed = false;
-  let es: EventSource | null = null;
+  let controller: AbortController | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   const open = (): void => {
@@ -41,30 +42,10 @@ export function openStream(
     const base = getApiBaseUrl();
     const url = `${base}/chat/stream?streamId=${encodeURIComponent(
       streamId
-    )}&lastSeq=${lastSeq}&token=${encodeURIComponent(opts.token)}`;
-    es = new EventSource(url);
-
-    es.onmessage = (msgEvt) => {
-      try {
-        const evt = JSON.parse(msgEvt.data) as SkillEvent;
-        if (typeof evt.seq === 'number') lastSeq = Math.max(lastSeq, evt.seq);
-        opts.onEvent(evt);
-        if (evt.type === 'done') {
-          opts.onDone?.();
-          close();
-        } else if (evt.type === 'error') {
-          opts.onError?.(formatSkillError(evt), { kind: 'skill' });
-          close();
-        }
-      } catch (e) {
-        opts.onError?.(e as Error, { kind: 'transport' });
-      }
-    };
-
-    es.onerror = () => {
-      if (closed) return;
-      es?.close();
-      es = null;
+    )}`;
+    controller = new AbortController();
+    void readStream(url, controller.signal).catch((err) => {
+      if (closed || isAbortError(err)) return;
       const delay =
         RECONNECT_DELAYS[Math.min(attempt, RECONNECT_DELAYS.length - 1)];
       attempt += 1;
@@ -74,20 +55,107 @@ export function openStream(
         });
         return;
       }
-      reconnectTimer = setTimeout(open, delay);
-    };
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        open();
+      }, delay);
+    });
   };
 
   const close = (): void => {
     if (closed) return;
     closed = true;
     if (reconnectTimer) clearTimeout(reconnectTimer);
-    es?.close();
-    es = null;
+    controller?.abort();
+    controller = null;
+  };
+
+  const readStream = async (url: string, signal: AbortSignal): Promise<void> => {
+    const res = await fetch(url, {
+      headers: {
+        Accept: 'text/event-stream',
+        Authorization: `Bearer ${opts.token}`,
+        ...(lastSeq > 0 ? { 'Last-Event-ID': String(lastSeq) } : {}),
+      },
+      signal,
+    });
+    if (!res.ok || !res.body) {
+      throw new Error(`SSE 连接失败:HTTP ${res.status}`);
+    }
+    attempt = 0;
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let sawTerminal = false;
+    try {
+      while (!closed) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() ?? '';
+        for (const part of parts) {
+          const data = parseSseData(part);
+          if (!data) continue;
+          const evt = JSON.parse(data) as SkillEvent;
+          if (typeof evt.seq === 'number') {
+            lastSeq = Math.max(lastSeq, evt.seq);
+          }
+          opts.onEvent(evt);
+          if (evt.type === 'done') {
+            sawTerminal = true;
+            opts.onDone?.();
+            close();
+            return;
+          }
+          if (evt.type === 'error') {
+            sawTerminal = true;
+            opts.onError?.(formatSkillError(evt), { kind: 'skill' });
+            close();
+            return;
+          }
+        }
+      }
+      if (!closed && !sawTerminal) {
+        throw new Error('SSE 连接中断');
+      }
+    } finally {
+      try {
+        await reader.cancel();
+      } catch {
+        /* reader already closed */
+      }
+      if (controller?.signal === signal) {
+        controller = null;
+      }
+    }
   };
 
   open();
   return { close };
+}
+
+function parseSseData(block: string): string | null {
+  const lines = block
+    .split('\n')
+    .map((line) => (line.endsWith('\r') ? line.slice(0, -1) : line))
+    .filter((line) => line.startsWith('data:'));
+  if (lines.length === 0) return null;
+  return lines
+    .map((line) => {
+      const raw = line.slice('data:'.length);
+      return raw.startsWith(' ') ? raw.slice(1) : raw;
+    })
+    .join('\n');
+}
+
+function isAbortError(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'name' in err &&
+    (err as { name?: string }).name === 'AbortError'
+  );
 }
 
 function formatSkillError(evt: Extract<SkillEvent, { type: 'error' }>): Error {

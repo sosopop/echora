@@ -45,7 +45,7 @@ JWT 7 天过期,V1 无刷新令牌。密钥来自 `JWT_SECRET`。
 | POST   | /api/chat/branch-threads/:threadId/messages | 发送支线追问并获得支线回复       |
 | POST   | /api/chat/send                             | 发消息 → { messageId, streamId, decision } |
 | POST   | /api/chat/streams/:streamId/abort          | 停止当前用户正在生成的 Skill 流   |
-| GET    | /api/chat/stream?streamId=&lastSeq=&token= | SSE 端点                           |
+| GET    | /api/chat/stream?streamId=                 | SSE 端点                           |
 
 POST `/api/chat/conversations` body 可选 `{ learningState?: LearningState, title?: string }`,Onboarding 视图传 `learningState='onboarding'`。
 
@@ -223,14 +223,15 @@ interface BranchThreadDTO {
 
 042 起,`X-Request-Id` / `X-Trace-Id` 请求头会在服务端透传到响应头 `X-Request-Id` 并写入错误响应 `details.traceId`;未显式提供时由服务端自动生成,用于串联前端请求、HTTP 错误与 `agent_runs.payload.traceId`。
 
+050 起,`/api/chat/stream` 只接受 `Authorization: Bearer <token>` 认证,SSE 客户端改用 `fetch + ReadableStream` 读取事件。重连时前端发送标准 `Last-Event-ID` 头,后端优先回放内存 `streamBus`,若多副本或内存丢失则按 `messages.stream_events` 做轮询补回。
+
 前端发送顺序(008):`useChatStore.sendMessage/sendAction` 会在 `/api/chat/send` 返回前先插入临时用户消息与空 assistant 消息;assistant 空流式消息渲染为 "Echo 正在思考中..."。服务端返回后再替换真实 messageId 并连接 SSE,随后 `text-chunk` / `widget-*` 覆盖为真实 AI 输出或小部件结果。
 
 022 起,SSE `error` 事件不再只写入全局 error state,也会写回当前 assistant 消息正文,格式为 `出错了:<code>: <message>`;dev 模式下若事件携带 `details`,会追加 JSON 调试信息。这样 `GRADE_FAILED` / `ATTEMPT_LOCKED` / provider tool_choice 错误不会在聊天列表中表现为空白回复。
 
 ## 约束与失败点
 
-- **EventSource 不支持自定义 Header**:SSE token 走 `?token=` 查询参数,V1 接受 URL 日志泄露风险,生产化前迁 fetch + ReadableStream
-- **Express 5 SSE 资源泄漏**:必须 `req.on('close', () => streamBus.unsubscribe(...))`,否则订阅累积
+- **SSE 资源泄漏**:必须在 `close/aborted` 时清理订阅与心跳,否则订阅累积
 - **CORS**:`CORS_ORIGIN` 默认 `http://localhost:5173`,多域用逗号分隔
 
 ## 测试入口
@@ -240,4 +241,4 @@ interface BranchThreadDTO {
 
 ## Pending
 
-- SSE 是否需要 Last-Event-ID 标准头(EventSource 自动支持)
+- 多副本部署下是否需要 Redis Streams 作为跨进程共享流
