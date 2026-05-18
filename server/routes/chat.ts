@@ -30,6 +30,7 @@ import {
   appendStreamEvent,
   getBranchMessages,
   getMessage,
+  getMessageStreamEvents,
   getMessages,
 } from '../services/message.js';
 import {
@@ -606,6 +607,7 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
     res.flushHeaders?.();
 
     let ended = false;
+    let lastSentSeq = lastSeq;
     const send = (event: SkillEvent): void => {
       if (ended) return;
       try {
@@ -624,7 +626,16 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
       }
     };
 
-    const unsubscribe = streamBus.subscribe(streamId, lastSeq, send);
+    const persistedEvents = replayPersistedStreamEvents(db, streamId, lastSentSeq);
+    for (const event of persistedEvents) {
+      send(event);
+      lastSentSeq = Math.max(lastSentSeq, event.seq);
+      if (ended) break;
+    }
+
+    const unsubscribe = ended
+      ? () => {}
+      : streamBus.subscribe(streamId, lastSentSeq, send);
 
     // 心跳:每 15s 发注释行,防止反向代理断开
     const heartbeat = setInterval(() => {
@@ -647,6 +658,23 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
   });
 
   return router;
+}
+
+function replayPersistedStreamEvents(
+  db: Db,
+  streamId: string,
+  lastSeq: number
+): SkillEvent[] {
+  const messageId = extractStreamMessageId(streamId);
+  if (!messageId) return [];
+  return getMessageStreamEvents(db, messageId).filter((event) => event.seq > lastSeq);
+}
+
+function extractStreamMessageId(streamId: string): number | null {
+  const match = /^stream-(\d+)-[A-Za-z0-9]+$/.exec(streamId);
+  if (!match) return null;
+  const messageId = Number(match[1]);
+  return Number.isInteger(messageId) && messageId > 0 ? messageId : null;
 }
 
 function parsePositiveId(raw: string | string[] | undefined): number {

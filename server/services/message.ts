@@ -156,6 +156,28 @@ export function getMessage(
   return row ? toDTO(row) : null;
 }
 
+export function getMessageStreamEvents(
+  db: Db,
+  messageId: number
+): SkillEvent[] {
+  const row = db
+    .prepare<[number], MessageRow>('SELECT * FROM messages WHERE id = ?')
+    .get(messageId);
+  if (!row) return [];
+  const parsed = safeParse(row.stream_events ?? '[]');
+  return Array.isArray(parsed)
+    ? (parsed.filter((event): event is SkillEvent => {
+        if (typeof event !== 'object' || event === null) return false;
+        const candidate = event as Partial<SkillEvent>;
+        return (
+          typeof candidate.type === 'string' &&
+          typeof candidate.seq === 'number' &&
+          typeof candidate.streamId === 'string'
+        );
+      }) as SkillEvent[])
+    : [];
+}
+
 export function getBranchMessages(
   db: Db,
   branchThreadId: number,

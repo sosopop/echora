@@ -33,7 +33,7 @@
 - **视图局部样式用 `*.module.css`**(Vite 原生支持,002 起约定):公共组件继续 global,视图层局部样式拆模块化(class hash 隔离),示例见 `src/views/Onboarding/index.module.css`
 - **Chat 滚动锚定(008)**:`src/views/Chat/MessageList.tsx` 不使用 `scrollIntoView` 锚点,而是滚到 `document.scrollingElement.scrollHeight`;同时监听 message list 的 `ResizeObserver`,在 widget 从 loading 展开成 ready 后补滚。固定输入栏下方空间由 `src/views/Chat/index.module.css` 的 `.main` / `.messageList` padding 预留。
 - **Chat 思考占位(008)**:`src/views/Chat/MessageBubble.tsx` 在 assistant 流式消息内容为空时显示 "Echo 正在思考中...",配合 store 的临时 assistant 消息形成「用户消息 → 思考中 → 小部件/结果」顺序。
-- **Chat SSE 错误可见(022)**:`src/stores/chat.ts` 在收到 SSE `error` 或连接放弃时,把错误写入当前 assistant 消息,避免流结束后空 assistant 气泡被 `MessageBubble` 过滤掉,造成"用户消息发出但没有回复"的假象。
+- **Chat SSE 错误可见/恢复(022/047)**:`src/stores/chat.ts` 在收到 Skill `error` 时,把错误写入当前 assistant 消息,避免流结束后空 assistant 气泡被 `MessageBubble` 过滤掉;若是最终 SSE 传输失败,则回退到 `GET /api/chat/conversations/:id/messages` 的历史快照并重建 widget,避免用户停留在空白流式占位。
 - **Chat 停止生成(041)**:`src/views/Chat/ChatInput.tsx` 在 `streamingMessageId` 存在时把发送按钮切换为"停止";点击后调用 `useChatStore.stopGenerating()` → `POST /api/chat/streams/:streamId/abort`,关闭本地 EventSource 并清空流式态。若 assistant 尚无内容,前端写入"已停止生成。"避免空回复。
 - **Chat 输入焦点(014)**:`src/views/Chat/ChatInput.tsx` 在提交文本/答案后设置恢复焦点标记;若此时 textarea 因 streaming 被禁用,等 `streamingMessageId` 清空且输入区可用后再把焦点放回 textarea,减少连续作答时反复点击输入框。
 - **Chat 学习菜单(040)**:`src/views/Chat/ChatInput.tsx` 的左侧 `☰` 已接入可用浮层,按当前 `learning_state/input_mode` 展示"继续/开始新场景/换场景/查看复盘/复习薄弱点/保存进度"。菜单动作复用 `action:*` / `text:*` / `retry:*` / `local:save-progress` 协议;练习答题中会禁用继续、复盘和重练,避免误把控制操作当作当前题答案。
@@ -60,7 +60,7 @@
 - 主题切换通过手工烟雾验证:启动 dev:web → 点 🌙/☀ 切换 → `localStorage.echora-theme` 被写入
 - Chat 滚动行为:`src/__tests__/views/MessageList.test.tsx`
 - Chat 消息顺序/思考占位:`src/__tests__/stores/chat.test.ts` + `src/__tests__/views/MessageBubble.test.tsx`
-- Chat SSE 错误显示:`src/__tests__/stores/chat.test.ts`
+- Chat SSE 错误显示与历史快照恢复:`src/__tests__/stores/chat.test.ts`
 - Chat 停止生成:`src/__tests__/stores/chat.test.ts` + `src/__tests__/views/ChatInput.test.tsx` + `server/__tests__/chat-route.test.ts`
 - Chat 输入焦点恢复:`src/__tests__/views/ChatInput.test.tsx`
 - 批改卡片 loading:`src/__tests__/components/widgets/widgets.test.tsx`

@@ -22,7 +22,7 @@ getConfig
   → app.listen(port)
 ```
 
-`createApp` 装配 `/api/auth` `/api/profile` `/api/chat` 三组路由。chat router 的 deps 包含 provider,因为 skill handler 可在 ServerSkillContext 中拿到 provider 调 chat()。
+`createApp` 装配 `/api/auth` `/api/profile` `/api/chat` 三组路由。chat router 的 deps 包含 provider,因为 skill handler 可在 ServerSkillContext 中拿到 provider 调 chat()。`/api/chat/stream` 会先按 `lastSeq` replay 内存 ring buffer,若对应 assistant 消息的 `stream_events` 已持久化且内存缓存不可用,会先从数据库回放已落盘事件,再在必要时继续挂接 live 订阅。
 
 目录边界:
 - `server/` 后端入口 / 路由 / 服务 / 数据库 / Skills / providers / middleware

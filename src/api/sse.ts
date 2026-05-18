@@ -14,7 +14,10 @@ interface OpenStreamOptions {
   token: string;
   onEvent: (event: SkillEvent) => void;
   onDone?: () => void;
-  onError?: (err: Error) => void;
+  onError?: (
+    err: Error,
+    info?: { kind: 'skill' | 'transport' }
+  ) => void;
 }
 
 export interface OpenStreamHandle {
@@ -50,11 +53,11 @@ export function openStream(
           opts.onDone?.();
           close();
         } else if (evt.type === 'error') {
-          opts.onError?.(formatSkillError(evt));
+          opts.onError?.(formatSkillError(evt), { kind: 'skill' });
           close();
         }
       } catch (e) {
-        opts.onError?.(e as Error);
+        opts.onError?.(e as Error, { kind: 'transport' });
       }
     };
 
@@ -66,7 +69,9 @@ export function openStream(
         RECONNECT_DELAYS[Math.min(attempt, RECONNECT_DELAYS.length - 1)];
       attempt += 1;
       if (attempt > RECONNECT_DELAYS.length) {
-        opts.onError?.(new Error('SSE 连接失败,已放弃重连'));
+        opts.onError?.(new Error('SSE 连接失败,已放弃重连'), {
+          kind: 'transport',
+        });
         return;
       }
       reconnectTimer = setTimeout(open, delay);

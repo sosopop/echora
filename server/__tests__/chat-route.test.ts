@@ -695,6 +695,42 @@ describe('branch follow-up threads', () => {
 });
 
 describe('POST /api/chat/send', () => {
+  it('SSE 会先回放持久化 stream_events,即使内存 ring buffer 已清空', async () => {
+    const assistant = appendMessage(db, {
+      conversationId,
+      type: 'text',
+      role: 'assistant',
+      skillName: 'practice',
+      content: '生成中',
+    });
+    appendStreamEvent(db, assistant.id, {
+      type: 'text-chunk',
+      payload: { text: 'A' },
+      seq: 1,
+      streamId: `stream-${assistant.id}-persisted`,
+      timestamp: 1,
+    });
+    appendStreamEvent(db, assistant.id, {
+      type: 'done',
+      payload: {},
+      seq: 2,
+      streamId: `stream-${assistant.id}-persisted`,
+      timestamp: 2,
+    });
+
+    const res = await request(app)
+      .get('/api/chat/stream')
+      .query({
+        streamId: `stream-${assistant.id}-persisted`,
+        lastSeq: 1,
+        token,
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('"type":"done"');
+    expect(res.text).not.toContain('"seq":1');
+  });
+
   it('streams/:streamId/abort 停止生成并记录 aborted run', async () => {
     skillHandlerOverrides.set('practice', async function* (ctx) {
       yield { type: 'text-chunk', payload: { text: '生成中' } };

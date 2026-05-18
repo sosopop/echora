@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   createConversation: vi.fn(),
   openStream: vi.fn(),
   profileGet: vi.fn(),
+  getMessages: vi.fn(),
   listBranchThreads: vi.fn(),
   createBranchThread: vi.fn(),
   getBranchMessages: vi.fn(),
@@ -20,7 +21,7 @@ vi.mock('../../api/chat.js', () => ({
   chatApi: {
     listConversations: mocks.listConversations,
     createConversation: mocks.createConversation,
-    getMessages: vi.fn(),
+    getMessages: mocks.getMessages,
     listBranchThreads: mocks.listBranchThreads,
     createBranchThread: mocks.createBranchThread,
     getBranchMessages: mocks.getBranchMessages,
@@ -587,10 +588,11 @@ describe('chat store streaming', () => {
           1
         )
       );
-      opts.onError(
+      opts.onError?.(
         new Error(
           'GRADE_FAILED: deepseek-reasoner does not support this tool_choice'
-        )
+        ),
+        { kind: 'skill' }
       );
       return { close: vi.fn() };
     });
@@ -605,6 +607,84 @@ describe('chat store streaming', () => {
     expect(assistant?.content).toContain('出错了:GRADE_FAILED');
     expect(assistant?.content).toContain('does not support this tool_choice');
     expect(state.streamingMessageId).toBeNull();
+  });
+
+  it('SSE 传输失败后会回退到消息历史快照恢复内容和 widget', async () => {
+    mocks.send.mockResolvedValue({
+      conversationId: 10,
+      userMessageId: 601,
+      assistantMessageId: 602,
+      streamId: 'stream-snapshot',
+      decision: {
+        skillName: 'review',
+        params: {},
+        confidence: 1,
+        rationale: 'test',
+      },
+    });
+    mocks.getMessages.mockResolvedValue([
+      {
+        id: 601,
+        conversationId: 10,
+        branchThreadId: null,
+        type: 'text',
+        role: 'user',
+        skillName: null,
+        content: '复盘',
+        widgetSnapshot: null,
+        seq: 1,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 602,
+        conversationId: 10,
+        branchThreadId: null,
+        type: 'text',
+        role: 'assistant',
+        skillName: 'review',
+        content: '回放后的总结内容',
+        widgetSnapshot: {
+          id: 'summary-1',
+          type: 'progress-summary',
+          status: 'ready',
+          data: {
+            questionsCount: 8,
+            averageScore: 82.5,
+            categoryCounts: {
+              exact: 4,
+              similar: 2,
+              incorrect: 2,
+            },
+          },
+          version: 1,
+        },
+        seq: 2,
+        createdAt: '2026-01-01T00:00:01.000Z',
+      },
+    ]);
+    mocks.openStream.mockImplementation((_streamId, opts) => {
+      opts.onError(new Error('SSE 连接失败,已放弃重连'));
+      return { close: vi.fn() };
+    });
+
+    await useChatStore.getState().sendMessage('复盘');
+
+    const state = useChatStore.getState();
+    const assistant = state.messages.find((m) => m.id === 602);
+    expect(mocks.getMessages).toHaveBeenCalledWith(10);
+    expect(assistant?.content).toBe('回放后的总结内容');
+    expect(assistant?.widgetSnapshot).toMatchObject({
+      id: 'summary-1',
+      type: 'progress-summary',
+      status: 'ready',
+      data: {
+        questionsCount: 8,
+        averageScore: 82.5,
+      },
+    });
+    expect(state.streamingMessageId).toBeNull();
+    expect(state.currentStreamId).toBeNull();
+    expect(state.error).toBeNull();
   });
 
   it('打开辅助追问会创建支线并隔离支线消息', async () => {

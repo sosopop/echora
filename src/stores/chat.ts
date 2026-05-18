@@ -404,9 +404,18 @@ async function sendInternal(
         activeStreamHandle = null;
         clearStreamBuffer(set, resp.assistantMessageId, null);
       },
-      onError: (err) => {
+      onError: (err, info) => {
         activeStreamHandle = null;
-        clearStreamBuffer(set, resp.assistantMessageId, err.message);
+        if (info?.kind === 'skill') {
+          clearStreamBuffer(set, resp.assistantMessageId, err.message);
+          return;
+        }
+        void recoverStreamSnapshot(set, get, {
+          conversationId: resp.conversationId,
+          messageId: resp.assistantMessageId,
+          streamId: resp.streamId,
+          fallbackError: err.message,
+        });
       },
     });
   } catch (e) {
@@ -597,6 +606,91 @@ function clearStreamBuffer(
               : m
           )
         : s.messages,
+    };
+  });
+}
+
+async function recoverStreamSnapshot(
+  set: (
+    partial:
+      | Partial<ChatState>
+      | ((s: ChatState) => Partial<ChatState>)
+  ) => void,
+  get: () => ChatState,
+  opts: {
+    conversationId: number;
+    messageId: number;
+    streamId: string;
+    fallbackError: string;
+  }
+): Promise<void> {
+  try {
+    const messages = await chatApi.getMessages(opts.conversationId);
+    const current = get();
+    if (
+      current.currentConversationId !== opts.conversationId ||
+      current.currentStreamId !== opts.streamId ||
+      current.streamingMessageId !== opts.messageId
+    ) {
+      return;
+    }
+    const mergedMessages = mergeRecoveredMessages(current.messages, messages);
+    const recoveredWidgets = buildWidgetsFromMessages(messages);
+    set({
+      messages: mergedMessages,
+      activeWidgets: { ...recoveredWidgets, ...current.activeWidgets },
+      streamBuffer: {},
+      streamingMessageId: null,
+      currentStreamId: null,
+      error: null,
+      isLoading: false,
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : opts.fallbackError;
+    if (
+      get().currentConversationId !== opts.conversationId ||
+      get().currentStreamId !== opts.streamId ||
+      get().streamingMessageId !== opts.messageId
+    ) {
+      return;
+    }
+    clearStreamBuffer(set, opts.messageId, message);
+  }
+}
+
+function buildWidgetsFromMessages(
+  messages: MessageDTO[]
+): Record<string, LearningWidgetInstance> {
+  const widgets: Record<string, LearningWidgetInstance> = {};
+  for (const msg of messages) {
+    for (const snap of widgetSnapshotToArray(msg.widgetSnapshot)) {
+      if (!snap.id || !snap.type) continue;
+      widgets[snap.id] = {
+        id: snap.id,
+        type: snap.type,
+        status: snap.status ?? 'ready',
+        data: (snap.data ?? {}) as Record<string, unknown>,
+        version: snap.version ?? 1,
+      };
+    }
+  }
+  return widgets;
+}
+
+function mergeRecoveredMessages(
+  currentMessages: MessageDTO[],
+  recoveredMessages: MessageDTO[]
+): MessageDTO[] {
+  const currentById = new Map(currentMessages.map((msg) => [msg.id, msg]));
+  return recoveredMessages.map((msg) => {
+    const live = currentById.get(msg.id);
+    if (!live) return msg;
+    const recoveredContent = msg.content?.trim() ?? '';
+    const liveContent = live.content?.trim() ?? '';
+    return {
+      ...msg,
+      content: recoveredContent || liveContent,
+      widgetSnapshot: live.widgetSnapshot ?? msg.widgetSnapshot,
     };
   });
 }

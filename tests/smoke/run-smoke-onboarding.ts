@@ -16,6 +16,7 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { startTestApp, type TestAppHandle } from './_helpers/testApp.js';
 import { ScriptedProvider, type ChatScript } from './_helpers/scriptedProvider.js';
+import { streamBus } from '../../server/services/streamBus.js';
 import type { AIProvider } from '../../server/ai/types.js';
 import type {
   RouterInput,
@@ -651,6 +652,52 @@ scenario('H', 'SSE 断线后用 lastSeq 续传 ring buffer 事件', async () => 
     const minSeq = Math.min(...partial.map((e) => e.seq));
     assertTrue(minSeq > 2, `续传起始 seq 应 > 2,实得 ${minSeq}`);
   } finally {
+    await app.cleanup();
+  }
+});
+
+/* ============================================================
+ * Scenario H2 — SSE ring buffer 丢失后从历史快照恢复
+ * ========================================================== */
+
+scenario('H2', 'SSE 缓存丢失后仍可从消息历史快照恢复', async () => {
+  const provider = new ScriptedProvider({
+    chatScripts: [
+      {
+        match: '',
+        events: [
+          { type: 'text-delta', text: '回放内容 A' },
+          { type: 'text-delta', text: ' 回放内容 B' },
+          { type: 'message-stop', stopReason: 'end_turn' },
+        ],
+      },
+    ],
+  });
+  const app = await startTestApp({ provider });
+  try {
+    const { token } = await registerUser(app.baseUrl);
+    const convId = await createOnboardingConv(app.baseUrl, token);
+    const send = await httpJson<{ data: { streamId: string } }>(
+      app.baseUrl,
+      'POST',
+      '/api/chat/send',
+      { token, body: { conversationId: convId, text: 'hi' } }
+    );
+    await delay(150);
+    streamBus.clear();
+    const events = await collectSseEvents(
+      app.baseUrl,
+      send.body.data.streamId,
+      token,
+      { timeoutMs: 1000 }
+    );
+    assertTrue(
+      eventsByType(events, 'text-chunk').length >= 1,
+      '应从历史快照回放 text-chunk'
+    );
+    assertEq(eventsByType(events, 'done').length, 1, '应从历史快照回放 done');
+  } finally {
+    streamBus.clear();
     await app.cleanup();
   }
 });
