@@ -169,6 +169,8 @@ interface ActiveSkillRun {
   startedAt: number;
   seq: number;
   textLength: number;
+  assistantText: string;
+  eventCounts: Partial<Record<SkillEvent['type'], number>>;
   aborted: boolean;
   terminalSent: boolean;
 }
@@ -341,7 +343,7 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
           traceId: req.traceId,
           userId: req.user!.id,
           conversationId: thread.conversationId,
-          messageId: body.sourceMessageId,
+          messageId: thread.sourceMessageId,
           skillName: 'branch-follow-up',
           learningState: conv.learningState,
           phase: 'branch-follow-up',
@@ -576,16 +578,6 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
           availableSkills: skillRegistry.names(),
         };
         try {
-          logDebug?.({
-            level: 'debug',
-            type: 'ai_route_input',
-            traceId: req.traceId,
-            userId,
-            conversationId: conv.id,
-            messageId: userMsg.id,
-            learningState: conv.learningState,
-            input: sanitizeForDebugLog(routerInput),
-          });
           decision = await aiRouter.decide(routerInput, sendController.signal, {
             traceId: req.traceId,
             userId,
@@ -593,16 +585,6 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
             messageId: userMsg.id,
             learningState: conv.learningState,
             phase: 'chat-route',
-          });
-          logDebug?.({
-            level: 'debug',
-            type: 'ai_route_output',
-            traceId: req.traceId,
-            userId,
-            conversationId: conv.id,
-            messageId: userMsg.id,
-            learningState: conv.learningState,
-            decision: sanitizeForDebugLog(decision),
           });
           decision = normalizeRouterDecision(
             conv,
@@ -1824,6 +1806,8 @@ function runSkillInBackground(args: RunSkillArgs): void {
     startedAt,
     seq,
     textLength: 0,
+    assistantText: '',
+    eventCounts: {},
     aborted: false,
     terminalSent: false,
   };
@@ -1950,19 +1934,23 @@ function runSkillInBackground(args: RunSkillArgs): void {
           streamId,
           timestamp: Date.now(),
         } as SkillEvent;
-        logDebug?.({
-          level: fullEvent.type === 'error' ? 'error' : 'debug',
-          type: 'skill_event',
-          traceId,
-          userId,
-          conversationId,
-          messageId,
-          streamId,
-          runId,
-          skillName: skill.name,
-          learningState,
-          event: sanitizeForDebugLog(fullEvent),
-        });
+        activeRun.eventCounts[fullEvent.type] =
+          (activeRun.eventCounts[fullEvent.type] ?? 0) + 1;
+        if (fullEvent.type === 'error') {
+          logDebug?.({
+            level: 'error',
+            type: 'skill_event_error',
+            traceId,
+            userId,
+            conversationId,
+            messageId,
+            streamId,
+            runId,
+            skillName: skill.name,
+            learningState,
+            errorEvent: sanitizeForDebugLog(fullEvent),
+          });
+        }
 
         // 落盘
         try {
@@ -1972,6 +1960,7 @@ function runSkillInBackground(args: RunSkillArgs): void {
         }
         if (fullEvent.type === 'text-chunk') {
           activeRun.textLength += fullEvent.payload.text.length;
+          activeRun.assistantText += fullEvent.payload.text;
         }
         // 副作用
         handleSideEffects(fullEvent);
@@ -2006,20 +1995,8 @@ function runSkillInBackground(args: RunSkillArgs): void {
           streamId,
           timestamp: Date.now(),
         };
-        logDebug?.({
-          level: 'debug',
-          type: 'skill_event',
-          traceId,
-          userId,
-          conversationId,
-          messageId,
-          streamId,
-          runId,
-          skillName: skill.name,
-          learningState,
-          event: sanitizeForDebugLog(lastEvent),
-          autoInserted: true,
-        });
+        activeRun.eventCounts[lastEvent.type] =
+          (activeRun.eventCounts[lastEvent.type] ?? 0) + 1;
         try {
           appendStreamEvent(db, messageId, lastEvent);
         } catch {
@@ -2046,6 +2023,8 @@ function runSkillInBackground(args: RunSkillArgs): void {
         latencyMs: Date.now() - startedAt,
         finalSeq: activeRun.seq,
         textLength: activeRun.textLength,
+        assistantText: sanitizeForDebugLog(activeRun.assistantText),
+        eventCounts: activeRun.eventCounts,
       });
 
       // grade skill 003 已自身 yield state-transition,不再需要兼容分支
@@ -2090,9 +2069,11 @@ function runSkillInBackground(args: RunSkillArgs): void {
         timestamp: Date.now(),
       };
       activeRun.seq = errEvent.seq;
+      activeRun.eventCounts[errEvent.type] =
+        (activeRun.eventCounts[errEvent.type] ?? 0) + 1;
       logDebug?.({
         level: 'error',
-        type: 'skill_event',
+        type: 'skill_event_error',
         traceId,
         userId,
         conversationId,
@@ -2101,7 +2082,7 @@ function runSkillInBackground(args: RunSkillArgs): void {
         runId,
         skillName: skill.name,
         learningState,
-        event: sanitizeForDebugLog(errEvent),
+        errorEvent: sanitizeForDebugLog(errEvent),
       });
       try {
         appendStreamEvent(db, messageId, errEvent);

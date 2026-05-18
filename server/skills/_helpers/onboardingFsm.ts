@@ -36,8 +36,8 @@ export function decideMissingRequired(p: ProfileDTO): OnboardingField[] {
 export function decidePromptMissingFields(p: ProfileDTO): OnboardingField[] {
   const missing: OnboardingField[] = [];
   if (!p.name) missing.push('name');
-  if (!p.grade) missing.push('grade');
   if (!p.level) missing.push('level');
+  if (!p.grade) missing.push('grade');
   return missing;
 }
 

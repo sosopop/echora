@@ -15,6 +15,7 @@ import type { AIProvider, ChatStreamEvent } from '../ai/types.js';
 import type { Config } from '../config/getConfig.js';
 import { getConfig, resetConfigCache } from '../config/getConfig.js';
 import { createConversation } from '../services/conversation.js';
+import { createDebugLogger } from '../utils/debugLog.js';
 
 let app: Application;
 let db: Db;
@@ -22,10 +23,10 @@ let tmpDir: string;
 let debugLogPath: string;
 let token: string;
 let conversationId: number;
+let logDebug: ReturnType<typeof createDebugLogger>;
 
-function readEntries(): Array<Record<string, unknown>> {
-  const text = fs.readFileSync(debugLogPath, 'utf8').trim();
-  return text.split('\n').map((line) => JSON.parse(line) as Record<string, unknown>);
+function readLogText(): string {
+  return fs.existsSync(debugLogPath) ? fs.readFileSync(debugLogPath, 'utf8') : '';
 }
 
 beforeEach(() => {
@@ -59,6 +60,7 @@ beforeEach(() => {
     corsOrigin: ['http://localhost'],
     nodeEnv: 'test',
   };
+  logDebug = createDebugLogger(config);
   const skillRegistry = new SkillRegistry();
   skillRegistry.register(generalChatSkill);
   const provider: AIProvider = {
@@ -79,8 +81,8 @@ beforeEach(() => {
       yield { type: 'message-stop', stopReason: 'end_turn' };
     },
   };
-  const aiRouter = createAIRouter(provider, skillRegistry);
-  app = createApp({ config, db, skillRegistry, aiRouter, provider });
+  const aiRouter = createAIRouter(provider, skillRegistry, logDebug);
+  app = createApp({ config, db, skillRegistry, aiRouter, provider, logDebug });
 });
 
 afterEach(() => {
@@ -98,6 +100,12 @@ afterEach(() => {
 
 describe('debug log', () => {
   it('测试环境默认打开,生产环境默认关闭,且 env 可覆盖', () => {
+    const previousEnabled = process.env.DEBUG_LOG_ENABLED;
+    const previousCamelEnabled = process.env.debugLogEnabled;
+    const previousConfigPath = process.env.SERVER_CONFIG_PATH;
+    delete process.env.DEBUG_LOG_ENABLED;
+    delete process.env.debugLogEnabled;
+    delete process.env.SERVER_CONFIG_PATH;
     process.env.NODE_ENV = 'test';
     resetConfigCache();
     expect(getConfig({ reload: true }).debugLogEnabled).toBe(true);
@@ -109,9 +117,24 @@ describe('debug log', () => {
     process.env.DEBUG_LOG_ENABLED = 'true';
     resetConfigCache();
     expect(getConfig({ reload: true }).debugLogEnabled).toBe(true);
+    if (previousEnabled === undefined) {
+      delete process.env.DEBUG_LOG_ENABLED;
+    } else {
+      process.env.DEBUG_LOG_ENABLED = previousEnabled;
+    }
+    if (previousCamelEnabled === undefined) {
+      delete process.env.debugLogEnabled;
+    } else {
+      process.env.debugLogEnabled = previousCamelEnabled;
+    }
+    if (previousConfigPath === undefined) {
+      delete process.env.SERVER_CONFIG_PATH;
+    } else {
+      process.env.SERVER_CONFIG_PATH = previousConfigPath;
+    }
   });
 
-  it('记录聊天内容、AI 输入输出和工作流事件', async () => {
+  it('用自然语言记录聊天内容、AI 最终输入输出和工作流摘要', async () => {
     const res = await request(app)
       .post('/api/chat/send')
       .set('Authorization', `Bearer ${token}`)
@@ -123,40 +146,35 @@ describe('debug log', () => {
       });
 
     expect(res.status).toBe(202);
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await waitForLogText(['HTTP 请求完成', 'AI 聊天最终输出', 'Skill 运行完成']);
 
-    const entries = readEntries();
-    const types = entries.map((entry) => entry.type);
-    expect(types).toEqual(
-      expect.arrayContaining([
-        'http_request',
-        'chat_send_user_message',
-        'ai_route_input',
-        'ai_provider_route_input',
-        'ai_provider_route_output',
-        'chat_route_decision',
-        'skill_run_started',
-        'ai_chat_input',
-        'ai_chat_event',
-        'ai_chat_output',
-        'skill_event',
-        'skill_run_finished',
-      ])
-    );
+    const text = readLogText();
+    expect(text).toContain('收到用户消息: hello debug');
+    expect(text).toContain('请求体: conversationId');
+    expect(text).toContain('password: <REDACTED>');
+    expect(text).toContain('调用 AI 聊天接口');
+    expect(text).toContain('最后一条用户消息: hello debug');
+    expect(text).toContain('AI 聊天最终输出');
+    expect(text).toContain('最终文本: 收到:hello debug');
+    expect(text).toContain('流式分片: textDelta=1');
+    expect(text).toContain('Skill 运行完成');
+    expect(text).toContain('assistant 最终文本: 收到:hello debug');
 
-    const userEntry = entries.find((entry) => entry.type === 'chat_send_user_message');
-    expect(userEntry).toMatchObject({
-      traceId: 'trace-debug-log',
-      conversationId,
-      userMessage: 'hello debug',
-    });
-    expect((userEntry?.requestBody as { password?: unknown }).password).toBe(
-      '<REDACTED>'
-    );
-
-    const chatInput = entries.find((entry) => entry.type === 'ai_chat_input');
-    expect(JSON.stringify(chatInput)).toContain('hello debug');
-    const chatOutput = entries.find((entry) => entry.type === 'ai_chat_output');
-    expect(chatOutput).toMatchObject({ text: '收到:hello debug' });
+    expect(text).not.toContain('"type"');
+    expect(text).not.toContain('ai_chat_event');
+    expect(text).not.toContain('skill_event');
+    expect(() => JSON.parse(text.split('\n')[0])).toThrow();
   });
 });
+
+async function waitForLogText(requiredFragments: string[]): Promise<void> {
+  const deadline = Date.now() + 2000;
+  while (Date.now() < deadline) {
+    const text = readLogText();
+    if (requiredFragments.every((fragment) => text.includes(fragment))) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(
+    `调试日志未在超时内写全: ${requiredFragments.join(', ')}`
+  );
+}

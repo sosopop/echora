@@ -33,6 +33,14 @@
 - 各 stub Skill handler 产出:1-2 条 text-chunk + 必要的 mode-switch + widget-init/ready + done
 - `general-chat` 默认纯文本;当 `params.intentConfirm` 存在时输出 `intent-confirm` widget
 
+## 预期回答策略
+
+- 通用 helper:`server/skills/_helpers/interactionPolicy.ts`。任何 workflow step 如果期待用户回答某个具体字段,必须声明 `ExpectedInputPolicy`:字段是否必填、提示语、拒答/无效输入的处理方式。
+- 处理方式固定为四类:`retry`(必须信息重问,状态不推进)、`fallback`(写入明确兜底值后继续)、`skip`(选填信息跳过)、`fail`(不能恢复时返回 error 事件)。不要只靠 prompt 暗示模型自行决定。
+- 必填信息默认不能跳过或由模型猜测;只有产品上已定义安全默认值时才允许 `fallback`。选填信息默认允许 `skip`,但不得影响主状态推进。
+- helper 会用 `refusalPatterns` 识别拒答/让 AI 代选/模糊回答,用 `promptedPatterns` 判断模型是否已经追问同一字段,避免追加重复兜底句。
+- 设计上对应常见 agent guardrail 做法:LLM 负责自然表达和抽取,服务端 policy 负责状态推进、字段合法性、失败恢复和是否允许兜底。
+
 ## 真实 Provider 接入(002)
 
 - **Anthropic**(`AnthropicProvider`):`route()` 默认用 `tool_use`(`route_to_skill` 工具)强制 JSON;`chat()` 用 `messages.stream`,转 `ChatStreamEvent`(text-delta / tool-use / message-stop)
@@ -53,8 +61,11 @@
 - 流程:`ensureProfile` → `decideMissingRequired`(短路判定)/ `decidePromptMissingFields`(prompt 措辞)→ `buildSystemPrompt` → `provider.chat()` 流式
 - 工具:`update_profile`(name/age/grade/level,LLM tool_use)
 - 落库:tool input 在流结束后一次性 `upsertProfile`
-- 完成判定:`isOnboardingComplete = !!(name && level)`,完成后 yield `state-transition('scene_selecting', null)`
-- 短路:已完成时跳过 LLM 调用,直接 yield text-chunk + state-transition + done
+- 完成判定:`isOnboardingComplete = !!(name && level)`,完成后先 yield 画像完成说明,再 yield `state-transition('scene_selecting','scene-select')`,并在同一条 assistant 流里继续串接 `scene-select` 的场景推荐结果
+- 拒绝昵称:由 `ExpectedInputPolicy(name)` 明确走 `fallback`,若用户表示不想说称呼(`不告诉/不想说/保密/匿名/随便叫` 等),skill 会用临时称呼 `小伙伴` 写入 `name`,随后继续采集英语水平,避免反复卡在姓名字段
+- 拒绝英语水平:由 `ExpectedInputPolicy(level)` 明确走 `retry`;英语水平决定场景和题目难度,用户说“不知道/你决定/随便”等时不会调用模型猜测,也不会转场,而是给出 A1-C2 和自然语言示例继续追问
+- 兜底:若模型只回文字或工具调用后仍缺 `name` / `level`,skill 会追加确定性下一步引导;若模型文本已在追问同一字段,不会重复追加同义兜底
+- 短路:已完成时跳过 onboarding LLM 调用,直接进入场景推荐链路
 
 ## scene-select Skill(003 已真实接入)
 
@@ -163,7 +174,7 @@ provider.route(input, signal)
 ## 测试入口
 
 - AI Router 校验链测试:`server/__tests__/ai-router.test.ts`(6 测试,正常路径 + 3 失败路径 + 任意 state + abort signal)
-- onboarding skill 单测:`server/__tests__/skill-onboarding.test.ts`(5 测试)
+- onboarding skill 单测:`server/__tests__/skill-onboarding.test.ts`(10 测试)
 - scene-select 单测:`server/__tests__/skill-sceneSelect.test.ts`(6 测试)
 - practice 单测:`server/__tests__/skill-practice.test.ts`(12 测试,含 A1/B1/C1 动态题量)
 - grade 单测:`server/__tests__/skill-grade.test.ts`(19 测试,含 A1/C1 阶段完成边界)
@@ -172,7 +183,7 @@ provider.route(input, signal)
 - explain 单测:`server/__tests__/skill-explain.test.ts`(3 测试,覆盖已批改解释、未批改不泄露答案、无上下文提示)
 - general-chat 单测:`server/__tests__/skill-generalChat.test.ts`(4 测试,覆盖默认文本、真实 provider 流式文本、provider 错误和 intent-confirm widget)
 - learning services 单测:`server/__tests__/learning-services.test.ts`(17 测试,含 learning_state → lock_policy)
-- onboarding 端到端:`npm run test:smoke:onboarding`(10 场景)
+- onboarding 端到端:`npm run test:smoke:onboarding`(13 场景)
 - 学习闭环端到端:`npm run test:smoke:learning`(13 场景,覆盖 4 阶段完整闭环、错题重试、explain 追问、低置信度确认、状态拒绝、archived 只读与 provider 错误路径)
 - 真实 Provider 接入:`npm run test:smoke:ai`(需双 key)
 

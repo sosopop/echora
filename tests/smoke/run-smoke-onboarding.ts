@@ -246,6 +246,45 @@ scenario('A', '完整多轮(从空到完成)', async () => {
         ],
       },
       {
+        toolName: 'propose_scenes',
+        match: '',
+        events: [
+          {
+            type: 'tool-use',
+            toolName: 'propose_scenes',
+            input: {
+              scenes: [
+                {
+                  id: 'cafe',
+                  topic: 'cafe order',
+                  title: '咖啡点单',
+                  description: '点饮品/打包',
+                  knowledgePoint: '礼貌请求',
+                  difficulty: 'B1',
+                },
+                {
+                  id: 'travel',
+                  topic: 'travel',
+                  title: '旅行问路',
+                  description: '问方向',
+                  knowledgePoint: '介词',
+                  difficulty: 'B1',
+                },
+                {
+                  id: 'school',
+                  topic: 'school',
+                  title: '校园对话',
+                  description: '同学交流',
+                  knowledgePoint: '一般疑问句',
+                  difficulty: 'B1',
+                },
+              ],
+            },
+          },
+          { type: 'message-stop', stopReason: 'tool_use' },
+        ],
+      },
+      {
         match: 'B1',
         events: [
           { type: 'text-delta', text: '记下了 B1。' },
@@ -306,13 +345,17 @@ scenario('A', '完整多轮(从空到完成)', async () => {
     assertEq(send.status, 202, 'turn2 /send status');
     await delay(80);
     events = await collectSseEvents(app.baseUrl, send.body.data.streamId, token);
-    assertTrue(eventsByType(events, 'text-chunk').length >= 1, 'turn2 text-chunk');
+    assertTrue(eventsByType(events, 'text-chunk').length >= 2, 'turn2 text-chunk');
     const transitions = eventsByType(events, 'state-transition');
     assertEq(transitions.length, 1, 'turn2 has state-transition');
     assertEq(
       (transitions[0] as { payload: { nextLearningState: string } }).payload.nextLearningState,
       'scene_selecting',
       'turn2 transition target'
+    );
+    assertTrue(
+      eventsByType(events, 'widget-ready').length >= 1,
+      'turn2 scene-select widget ready'
     );
     assertEq(eventsByType(events, 'done').length, 1, 'turn2 done');
 
@@ -349,10 +392,47 @@ scenario('A', '完整多轮(从空到完成)', async () => {
  * ========================================================== */
 
 scenario('B', '短路(profile 已齐时不调 LLM 直接转场)', async () => {
-  // chat 函数不应被调用,若被调用就抛错 → 测试会捕获到
-  let chatCalled = false;
   const provider = new ScriptedProvider({
     chatScripts: [
+      {
+        toolName: 'propose_scenes',
+        match: '',
+        events: [
+          {
+            type: 'tool-use',
+            toolName: 'propose_scenes',
+            input: {
+              scenes: [
+                {
+                  id: 'cafe',
+                  topic: 'cafe order',
+                  title: '咖啡点单',
+                  description: '点饮品/打包',
+                  knowledgePoint: '礼貌请求',
+                  difficulty: 'B2',
+                },
+                {
+                  id: 'travel',
+                  topic: 'travel help',
+                  title: '旅行问路',
+                  description: '问方向',
+                  knowledgePoint: '介词',
+                  difficulty: 'B2',
+                },
+                {
+                  id: 'school',
+                  topic: 'school chat',
+                  title: '校园对话',
+                  description: '同学交流',
+                  knowledgePoint: '一般疑问句',
+                  difficulty: 'B2',
+                },
+              ],
+            },
+          },
+          { type: 'message-stop', stopReason: 'tool_use' },
+        ],
+      },
       {
         match: '',
         events: [
@@ -366,7 +446,6 @@ scenario('B', '短路(profile 已齐时不调 LLM 直接转场)', async () => {
     name: 'wrapped',
     route: (i) => provider.route(i),
     chat(req) {
-      chatCalled = true;
       return provider.chat!(req);
     },
   };
@@ -392,12 +471,14 @@ scenario('B', '短路(profile 已齐时不调 LLM 直接转场)', async () => {
     await delay(80);
     const events = await collectSseEvents(app.baseUrl, send.body.data.streamId, token);
 
-    assertTrue(!chatCalled, 'provider.chat 不应被调用(短路)');
     assertTrue(
-      eventsByType(events, 'text-chunk').length >= 1,
-      'short-circuit text-chunk'
+      eventsByType(events, 'widget-ready').length >= 1,
+      'short-circuit scene-select widget'
     );
-    assertEq(eventsByType(events, 'state-transition').length, 1, 'transition');
+    assertTrue(
+      eventsByType(events, 'state-transition').length >= 1,
+      'short-circuit transition'
+    );
     assertEq(eventsByType(events, 'done').length, 1, 'done');
   } finally {
     await app.cleanup();
@@ -433,7 +514,10 @@ scenario('C', 'AI 不调工具时不写库不转场', async () => {
     );
     await delay(80);
     const events = await collectSseEvents(app.baseUrl, send.body.data.streamId, token);
-    assertTrue(eventsByType(events, 'text-chunk').length >= 1, 'text-chunk');
+    const text = eventsByType(events, 'text-chunk')
+      .map((event) => (event as { payload: { text: string } }).payload.text)
+      .join('');
+    assertTrue(text.includes('怎么称呼'), 'fallback asks for name');
     assertEq(eventsByType(events, 'state-transition').length, 0, 'no transition');
     assertEq(eventsByType(events, 'done').length, 1, 'done');
 
@@ -445,6 +529,131 @@ scenario('C', 'AI 不调工具时不写库不转场', async () => {
     );
     assertEq(prof.body.data.name, null, 'profile.name 仍为空');
     assertEq(prof.body.data.level, null, 'profile.level 仍为空');
+  } finally {
+    await app.cleanup();
+  }
+});
+
+/* ============================================================
+ * Scenario C2 — 用户拒绝昵称时继续问英语水平
+ * ========================================================== */
+
+scenario('C2', '拒绝昵称时用临时称呼并继续问英语水平', async () => {
+  const provider = new ScriptedProvider({
+    chatScripts: [
+      {
+        match: '',
+        events: [
+          {
+            type: 'text-delta',
+            text: '没问题,那我们先不聊名字。你的英语水平大概在哪个阶段?',
+          },
+          { type: 'message-stop', stopReason: 'end_turn' },
+        ],
+      },
+    ],
+  });
+  const app = await startTestApp({ provider });
+  try {
+    const { token } = await registerUser(app.baseUrl);
+    const convId = await createOnboardingConv(app.baseUrl, token);
+
+    const send = await httpJson<{ data: { streamId: string } }>(
+      app.baseUrl,
+      'POST',
+      '/api/chat/send',
+      { token, body: { conversationId: convId, text: '不告诉你可以吗' } }
+    );
+    await delay(80);
+    const events = await collectSseEvents(app.baseUrl, send.body.data.streamId, token);
+    const text = eventsByType(events, 'text-chunk')
+      .map((event) => (event as { payload: { text: string } }).payload.text)
+      .join('');
+
+    assertTrue(text.includes('英语水平'), 'asks for level');
+    assertTrue(
+      !text.includes('接下来先告诉我怎么称呼你'),
+      'does not ask name again after refusal'
+    );
+    assertEq(eventsByType(events, 'state-transition').length, 0, 'no transition');
+    assertEq(eventsByType(events, 'done').length, 1, 'done');
+
+    const prof = await httpJson<{ data: { name: string | null; level: string | null } }>(
+      app.baseUrl,
+      'GET',
+      '/api/profile',
+      { token }
+    );
+    assertEq(prof.body.data.name, '小伙伴', 'temporary profile.name');
+    assertEq(prof.body.data.level, null, 'profile.level still null');
+  } finally {
+    await app.cleanup();
+  }
+});
+
+/* ============================================================
+ * Scenario C3 — 用户拒绝英语水平时必须重问,不能由 AI 兜底猜测
+ * ========================================================== */
+
+scenario('C3', '拒绝英语水平时必须重问且不调用模型猜测', async () => {
+  let chatCalled = false;
+  const provider = new ScriptedProvider({
+    chatScripts: [
+      {
+        match: '',
+        events: [
+          {
+            type: 'text-delta',
+            text: '不应该调用模型。',
+          },
+          { type: 'message-stop', stopReason: 'end_turn' },
+        ],
+      },
+    ],
+  });
+  const wrapped: AIProvider = {
+    name: 'wrapped',
+    route: (input) => provider.route(input),
+    chat(req) {
+      chatCalled = true;
+      return provider.chat!(req);
+    },
+  };
+  const app = await startTestApp({ provider: wrapped });
+  try {
+    const { token } = await registerUser(app.baseUrl);
+    await httpJson<{ data: unknown }>(app.baseUrl, 'PUT', '/api/profile', {
+      token,
+      body: { name: '小伙伴' },
+    });
+    const convId = await createOnboardingConv(app.baseUrl, token);
+
+    const send = await httpJson<{ data: { streamId: string } }>(
+      app.baseUrl,
+      'POST',
+      '/api/chat/send',
+      { token, body: { conversationId: convId, text: '你决定吧,都可以' } }
+    );
+    await delay(80);
+    const events = await collectSseEvents(app.baseUrl, send.body.data.streamId, token);
+    const text = eventsByType(events, 'text-chunk')
+      .map((event) => (event as { payload: { text: string } }).payload.text)
+      .join('');
+
+    assertTrue(!chatCalled, 'does not call provider chat for required level refusal');
+    assertTrue(text.includes('必须确认'), 'must ask level again');
+    assertTrue(text.includes('A1/A2/B1/B2/C1/C2'), 'offers concrete level choices');
+    assertEq(eventsByType(events, 'state-transition').length, 0, 'no transition');
+    assertEq(eventsByType(events, 'done').length, 1, 'done');
+
+    const prof = await httpJson<{ data: { name: string | null; level: string | null } }>(
+      app.baseUrl,
+      'GET',
+      '/api/profile',
+      { token }
+    );
+    assertEq(prof.body.data.name, '小伙伴', 'profile.name kept');
+    assertEq(prof.body.data.level, null, 'profile.level still null');
   } finally {
     await app.cleanup();
   }
@@ -484,6 +693,10 @@ scenario('D', '工具入参非法 CEFR 被 mergeProfileFields 过滤', async () 
     );
     await delay(80);
     const events = await collectSseEvents(app.baseUrl, send.body.data.streamId, token);
+    const text = eventsByType(events, 'text-chunk')
+      .map((event) => (event as { payload: { text: string } }).payload.text)
+      .join('');
+    assertTrue(text.includes('英语水平'), 'invalid level prompts for level again');
     assertEq(eventsByType(events, 'state-transition').length, 0, 'no transition (level invalid)');
     assertEq(eventsByType(events, 'done').length, 1, 'done');
 
@@ -586,11 +799,12 @@ scenario('G', 'provider.route 抛错时直接 502(无 fallback)', async () => {
   const app = await startTestApp({ provider });
   try {
     const { token } = await registerUser(app.baseUrl);
+    const convId = await createOnboardingConv(app.baseUrl, token, 'scene_selecting');
     const send = await httpJson<{
       error?: { code: string; message: string };
     }>(app.baseUrl, 'POST', '/api/chat/send', {
       token,
-      body: { text: 'hi' },
+      body: { conversationId: convId, text: 'hi' },
     });
     assertEq(send.status, 502, '/send 应 502');
     assertEq(send.body.error?.code, 'PROVIDER_ERROR', 'error code');
@@ -811,7 +1025,7 @@ scenario('J', '/send 502 时 user 消息已落库但无 assistant(行为快照)'
   const app = await startTestApp({ provider });
   try {
     const { token } = await registerUser(app.baseUrl);
-    const convId = await createOnboardingConv(app.baseUrl, token);
+    const convId = await createOnboardingConv(app.baseUrl, token, 'scene_selecting');
     const send = await httpJson<{ error?: unknown }>(
       app.baseUrl,
       'POST',

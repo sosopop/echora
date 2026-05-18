@@ -34,20 +34,19 @@ export async function* debugProviderChat(
   });
 
   let text = '';
+  let textDeltaChunks = 0;
+  let streamEventCount = 0;
   const toolUses: Array<{ toolName: string; input: Record<string, unknown> }> = [];
   try {
     for await (const ev of provider.chat({ ...req, debug })) {
-      if (ev.type === 'text-delta') text += ev.text;
+      streamEventCount += 1;
+      if (ev.type === 'text-delta') {
+        text += ev.text;
+        textDeltaChunks += 1;
+      }
       if (ev.type === 'tool-use') {
         toolUses.push({ toolName: ev.toolName, input: ev.input });
       }
-      logDebug?.({
-        level: 'debug',
-        type: 'ai_chat_event',
-        ...context,
-        provider: provider.name,
-        event: sanitizeForDebugLog(ev),
-      });
       yield ev;
     }
     logDebug?.({
@@ -58,6 +57,8 @@ export async function* debugProviderChat(
       durationMs: Date.now() - startedAt,
       text: sanitizeForDebugLog(text),
       toolUses: sanitizeForDebugLog(toolUses),
+      textDeltaChunks,
+      streamEventCount,
     });
   } catch (e) {
     logDebug?.({

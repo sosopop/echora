@@ -27,6 +27,11 @@ export interface ChatScript {
    */
   match: string;
   /**
+   * 可选:只在本次 chat 请求包含指定工具时命中。
+   * 用于同一条业务流内连续调用 update_profile / propose_scenes 等不同工具的测试。
+   */
+  toolName?: string;
+  /**
    * 当 match 命中时按顺序 yield 的事件序列。
    * 通常包含若干 text-delta + 0..N tool-use + 一个 message-stop。
    */
@@ -108,10 +113,17 @@ export class ScriptedProvider implements AIProvider {
     }
 
     const scripts = this.options.chatScripts ?? [];
+    const requestedTool = req.tools?.[0]?.name;
+    const matchesText = (s: ChatScript): boolean =>
+      s.match === '' || lastUserText.includes(s.match);
     const matched =
       scripts.find(
-        (s) => s.match === '' || lastUserText.includes(s.match)
-      ) ?? null;
+        (s) => s.toolName === requestedTool && matchesText(s)
+      ) ??
+      scripts.find(
+        (s) => s.toolName == null && matchesText(s)
+      ) ??
+      null;
 
     if (!matched) {
       // 没有匹配脚本时也产一条 message-stop,避免下游永等

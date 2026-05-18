@@ -26,6 +26,8 @@ getConfig
 
 042 起,`createApp` 会自动生成或透传 `traceId` 到 `req.traceId` 与 `X-Request-Id` 响应头,聊天流和错误响应可用同一请求标识串联排障。`agent_runs.payload` 也会持续写入 `traceId`、`finalSeq` 与 `textLength`,用于长流诊断。
 
+`debug` 级服务器日志由 `createDebugLogger(config)` 统一创建,默认写入 `./logs/server-debug.log` 的绝对路径版本,测试环境默认开启、生产环境默认关闭,并可由 `DEBUG_LOG_ENABLED` / `DEBUG_LOG_PATH` 覆盖。日志面向 AI 排障阅读,使用自然语言段落而非 JSONL;AI chat 不记录逐 token/逐 stream event,只记录请求摘要、最终文本、工具调用汇总与耗时。Skill 侧也只记录运行开始/完成、状态切换、错误事件和最终文本摘要,避免 `text-chunk` 级别日志膨胀。
+
 目录边界:
 - `server/` 后端入口 / 路由 / 服务 / 数据库 / Skills / providers / middleware
 - `src/` 前端入口 / 路由 / stores / views / components / api / styles

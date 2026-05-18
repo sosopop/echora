@@ -23,6 +23,8 @@ onboarding
                            └─ archived
 ```
 
+002 起,onboarding 在 `name + level` 采集完成后不会只发结束提示,而是会在同一条 assistant 流中直接 `state-transition('scene_selecting')` 并继续接 `scene-select` 的场景推荐结果,避免用户停在“画像已完成但不知道下一步”的空窗里。061 起,onboarding 的必填回答由 `ExpectedInputPolicy` 约束:拒绝昵称会写入临时称呼 `小伙伴` 后继续问 `level`;拒绝或要求 AI 代定英语水平会留在 `onboarding` 并重问,不会兜底猜测或推进状态。
+
 练习主线(013):
 
 ```
