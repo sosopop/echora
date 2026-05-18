@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { MessageDTO } from '@shared/api';
 import { useChatStore } from '../../stores/chat.js';
 import styles from './index.module.css';
 
@@ -9,8 +10,11 @@ export default function BranchPanel(): JSX.Element | null {
   const sourceMessageId = useChatStore((s) => s.branchSourceMessageId);
   const mainMessages = useChatStore((s) => s.messages);
   const branchMessages = useChatStore((s) => s.branchMessages);
+  const isBranchReviewing = useChatStore((s) => s.isBranchReviewing);
+  const branchReviewMessage = useChatStore((s) => s.branchReviewMessage);
   const closeBranch = useChatStore((s) => s.closeBranch);
   const sendBranchMessage = useChatStore((s) => s.sendBranchMessage);
+  const markBranchForReview = useChatStore((s) => s.markBranchForReview);
   const [draft, setDraft] = useState('');
 
   if (!isOpen) return null;
@@ -21,6 +25,7 @@ export default function BranchPanel(): JSX.Element | null {
     : source
     ? `第 ${source.seq} 条消息`
     : '当前消息';
+  const canJoinReview = canJoinSourceReview(source);
 
   async function submit(): Promise<void> {
     const text = draft.trim();
@@ -47,6 +52,19 @@ export default function BranchPanel(): JSX.Element | null {
       <div className={styles.branchSource}>
         <div className={styles.branchSourceLabel}>来自主线</div>
         <div>{sourceText}</div>
+        {canJoinReview && (
+          <button
+            className={styles.branchReviewButton}
+            type="button"
+            disabled={isBranchReviewing || isLoading}
+            onClick={() => void markBranchForReview()}
+          >
+            {isBranchReviewing ? '加入中...' : '加入复盘'}
+          </button>
+        )}
+        {branchReviewMessage && (
+          <div className={styles.branchReviewNote}>{branchReviewMessage}</div>
+        )}
       </div>
 
       <div className={styles.branchScroll}>
@@ -106,4 +124,49 @@ function truncateText(value: string, maxLength: number): string {
   return value.length <= maxLength
     ? value
     : `${value.slice(0, maxLength - 1)}…`;
+}
+
+function canJoinSourceReview(source?: MessageDTO): boolean {
+  if (!source) return false;
+  return widgetSnapshotToArray(source.widgetSnapshot).some((widget) => {
+    const data = widget.data;
+    if (widget.type === 'grading-result') {
+      const tags = data?.tags;
+      return (
+        typeof data?.attemptId === 'number' &&
+        Array.isArray(tags) &&
+        tags.length > 0
+      );
+    }
+    if (widget.type === 'follow-up-source') {
+      const context = data?.reviewContext;
+      const tags =
+        typeof context === 'object' && context !== null
+          ? (context as { tags?: unknown }).tags
+          : null;
+      return (
+        typeof context === 'object' &&
+        context !== null &&
+        typeof (context as { attemptId?: unknown }).attemptId === 'number' &&
+        Array.isArray(tags) &&
+        tags.length > 0
+      );
+    }
+    return false;
+  });
+}
+
+function widgetSnapshotToArray(
+  snapshot: unknown
+): Array<{ type?: string; data?: Record<string, unknown> }> {
+  if (Array.isArray(snapshot)) {
+    return snapshot.filter(isWidgetLike);
+  }
+  return isWidgetLike(snapshot) ? [snapshot] : [];
+}
+
+function isWidgetLike(
+  value: unknown
+): value is { type?: string; data?: Record<string, unknown> } {
+  return typeof value === 'object' && value !== null;
 }

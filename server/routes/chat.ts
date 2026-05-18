@@ -65,9 +65,16 @@ import {
 } from '../services/exerciseAttempt.js';
 import { getGradingByAttempt } from '../services/gradingResult.js';
 import {
+  ensureErrorTagEvents,
+  normalizeErrorTags,
+} from '../services/errorTagEvent.js';
+import { applyMasteryUpdate } from '../services/masteryRecord.js';
+import {
   adjustProfileLevel,
   type DifficultyFeedbackDirection,
 } from '../services/profile.js';
+import type { GradingResultDTO } from '../services/gradingResult.js';
+import type { ErrorTagEventDTO } from '../services/errorTagEvent.js';
 
 const chatActionSchema = z.discriminatedUnion('type', [
   z.object({
@@ -268,6 +275,80 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
       });
 
       res.status(201).json({ data: { userMessage, assistantMessage } });
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  router.post('/branch-threads/:threadId/review', auth, (req, res, next) => {
+    try {
+      const threadId = parsePositiveId(req.params.threadId);
+      const thread = requireBranchThread(db, threadId, req.user!.id);
+      assertConversationOwner(db, thread.conversationId, req.user!.id);
+      const source = getMessage(db, thread.sourceMessageId);
+      if (!source) {
+        throw new HttpError(
+          404,
+          ERROR_CODES.NOT_FOUND,
+          '辅助追问来源消息不存在'
+        );
+      }
+      const attemptId = extractReviewAttemptId(source);
+      if (attemptId == null) {
+        throw new HttpError(
+          400,
+          ERROR_CODES.VALIDATION_FAILED,
+          '当前支线来源不是已批改题目,不能加入复盘'
+        );
+      }
+      const grading = getGradingByAttempt(db, attemptId);
+      if (!grading) {
+        throw new HttpError(
+          400,
+          ERROR_CODES.VALIDATION_FAILED,
+          '当前来源题还没有批改结果,不能加入复盘'
+        );
+      }
+
+      const tags = normalizeErrorTags(grading.corrections.tags ?? []);
+      if (tags.length === 0) {
+        throw new HttpError(
+          400,
+          ERROR_CODES.VALIDATION_FAILED,
+          '当前批改没有可加入复盘的错误标签'
+        );
+      }
+      const result = ensureErrorTagEvents(db, {
+        attemptId,
+        gradingId: grading.id,
+        userId: req.user!.id,
+        score: grading.score,
+        tags,
+      });
+      const masteriesUpdatedCount = updateBranchReviewMasteries(
+        db,
+        req.user!.id,
+        grading,
+        result.created
+      );
+
+      res.json({
+        data: {
+          threadId,
+          sourceMessageId: source.id,
+          attemptId,
+          gradingId: grading.id,
+          tags,
+          createdEventsCount: result.created.length,
+          existingEventsCount: result.existingCount,
+          masteriesUpdatedCount,
+          message: formatBranchReviewMessage(
+            result.created.length,
+            result.existingCount,
+            masteriesUpdatedCount
+          ),
+        },
+      });
     } catch (e) {
       next(e);
     }
@@ -593,6 +674,57 @@ function requireBranchThread(
     );
   }
   return thread;
+}
+
+function extractReviewAttemptId(source: MessageDTO): number | null {
+  for (const widget of widgetSnapshotToArray(source.widgetSnapshot)) {
+    if (widget.type === 'grading-result') {
+      const attemptId = widget.data?.attemptId;
+      if (typeof attemptId === 'number') return attemptId;
+    }
+    if (widget.type === 'follow-up-source') {
+      const context = widget.data?.reviewContext;
+      if (
+        typeof context === 'object' &&
+        context !== null &&
+        typeof (context as { attemptId?: unknown }).attemptId === 'number'
+      ) {
+        return (context as { attemptId: number }).attemptId;
+      }
+    }
+  }
+  return null;
+}
+
+function updateBranchReviewMasteries(
+  db: Db,
+  userId: number,
+  grading: GradingResultDTO,
+  createdEvents: ErrorTagEventDTO[]
+): number {
+  for (const event of createdEvents) {
+    applyMasteryUpdate(db, {
+      userId,
+      tag: event.tag,
+      score: grading.score,
+      isCorrect: grading.isCorrect,
+    });
+  }
+  return createdEvents.length;
+}
+
+function formatBranchReviewMessage(
+  createdCount: number,
+  existingCount: number,
+  masteriesUpdatedCount: number
+): string {
+  if (createdCount > 0) {
+    return `已加入复盘:新增 ${createdCount} 条错因记录,同步更新 ${masteriesUpdatedCount} 个掌握度。`;
+  }
+  if (existingCount > 0) {
+    return '这条追问关联的错因已经在复盘统计中,不会重复计入。';
+  }
+  return '这条追问已检查过,暂时没有可新增的复盘记录。';
 }
 
 async function buildBranchAssistantText(

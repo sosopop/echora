@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   createBranchThread: vi.fn(),
   getBranchMessages: vi.fn(),
   sendBranchMessage: vi.fn(),
+  markBranchForReview: vi.fn(),
 }));
 
 vi.mock('../../api/chat.js', () => ({
@@ -24,6 +25,7 @@ vi.mock('../../api/chat.js', () => ({
     createBranchThread: mocks.createBranchThread,
     getBranchMessages: mocks.getBranchMessages,
     sendBranchMessage: mocks.sendBranchMessage,
+    markBranchForReview: mocks.markBranchForReview,
     send: mocks.send,
     abortStream: mocks.abortStream,
   },
@@ -99,6 +101,8 @@ describe('chat store streaming', () => {
       branchMessages: [],
       isBranchOpen: false,
       isBranchLoading: false,
+      isBranchReviewing: false,
+      branchReviewMessage: null,
       branchError: null,
       inputMode: 'chat',
       isLoading: false,
@@ -544,5 +548,32 @@ describe('chat store streaming', () => {
     state = useChatStore.getState();
     expect(state.branchMessages.map((m) => m.branchThreadId)).toEqual([31, 31]);
     expect(state.messages).toHaveLength(1);
+  });
+
+  it('加入复盘会调用支线确认接口并显示结果', async () => {
+    useChatStore.setState({
+      currentBranchThreadId: 31,
+      isBranchReviewing: false,
+      branchReviewMessage: null,
+      branchError: null,
+    });
+    mocks.markBranchForReview.mockResolvedValue({
+      threadId: 31,
+      sourceMessageId: 7,
+      attemptId: 9,
+      gradingId: 10,
+      tags: ['missing_word'],
+      createdEventsCount: 1,
+      existingEventsCount: 0,
+      masteriesUpdatedCount: 1,
+      message: '已加入复盘:新增 1 条错因记录,同步更新 1 个掌握度。',
+    });
+
+    await useChatStore.getState().markBranchForReview();
+
+    const state = useChatStore.getState();
+    expect(mocks.markBranchForReview).toHaveBeenCalledWith(31);
+    expect(state.isBranchReviewing).toBe(false);
+    expect(state.branchReviewMessage).toContain('已加入复盘');
   });
 });

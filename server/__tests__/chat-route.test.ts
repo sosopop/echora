@@ -568,6 +568,130 @@ describe('branch follow-up threads', () => {
     expect(res.status).toBe(404);
     expect(res.body.error.message).toContain('来源消息');
   });
+
+  it('加入复盘会把支线来源批改标签写入统计且重复点击不重复计数', async () => {
+    updateLearningState(db, conversationId, 'awaiting_next', null);
+    const attempt = createAttempt(db, {
+      conversationId,
+      sceneId: 'restaurant',
+      stage: 2,
+      questionNo: 1,
+      questionType: 'sentence_translation',
+      prompt: 'Translate: 我想要一杯水。',
+    });
+    const grading = createGrading(db, {
+      attemptId: attempt.id,
+      score: 55,
+      isCorrect: false,
+      corrections: {
+        explanation: '少了量词。',
+        referenceAnswer: 'I would like a glass of water.',
+        tags: ['missing_word'],
+      },
+    });
+    markGraded(db, attempt.id);
+    const source = appendMessage(db, {
+      conversationId,
+      type: 'text',
+      role: 'assistant',
+      skillName: 'grade',
+      content: '这里是批改解释',
+    });
+    appendStreamEvent(db, source.id, {
+      type: 'widget-ready',
+      payload: {
+        widgetId: 'grading-review-source',
+        patch: {
+          id: 'grading-review-source',
+          type: 'grading-result',
+          status: 'ready',
+          data: {
+            attemptId: attempt.id,
+            score: 55,
+            isCorrect: false,
+            userAnswer: 'I want one water.',
+            referenceAnswer: 'I would like a glass of water.',
+            explanation: '少了量词。',
+            tags: ['missing_word'],
+          },
+          version: 1,
+        },
+      },
+      seq: 1,
+      streamId: 'branch-review',
+      timestamp: 1,
+    });
+    const createRes = await request(app)
+      .post(`/api/chat/conversations/${conversationId}/branch-threads`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ sourceMessageId: source.id });
+    const threadId = createRes.body.data.id as number;
+
+    const res = await request(app)
+      .post(`/api/chat/branch-threads/${threadId}/review`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({
+      threadId,
+      sourceMessageId: source.id,
+      attemptId: attempt.id,
+      gradingId: grading.id,
+      tags: ['missing_word'],
+      createdEventsCount: 1,
+      masteriesUpdatedCount: 1,
+    });
+    expect(
+      db.prepare<[number], { c: number }>(
+        'SELECT COUNT(*) AS c FROM error_tag_events WHERE attempt_id = ?'
+      ).get(attempt.id)?.c
+    ).toBe(1);
+    expect(
+      db.prepare<[number, string], { attempts_count: number }>(
+        'SELECT attempts_count FROM mastery_records WHERE user_id = ? AND tag = ?'
+      ).get(userId, 'missing_word')?.attempts_count
+    ).toBe(1);
+
+    const repeat = await request(app)
+      .post(`/api/chat/branch-threads/${threadId}/review`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+
+    expect(repeat.status).toBe(200);
+    expect(repeat.body.data).toMatchObject({
+      createdEventsCount: 0,
+      existingEventsCount: 1,
+      masteriesUpdatedCount: 0,
+    });
+    expect(
+      db.prepare<[number], { c: number }>(
+        'SELECT COUNT(*) AS c FROM error_tag_events WHERE attempt_id = ?'
+      ).get(attempt.id)?.c
+    ).toBe(1);
+  });
+
+  it('普通支线来源不能加入复盘', async () => {
+    const source = appendMessage(db, {
+      conversationId,
+      type: 'text',
+      role: 'assistant',
+      skillName: 'general-chat',
+      content: '普通消息',
+    });
+    const createRes = await request(app)
+      .post(`/api/chat/conversations/${conversationId}/branch-threads`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ sourceMessageId: source.id });
+
+    const res = await request(app)
+      .post(`/api/chat/branch-threads/${createRes.body.data.id}/review`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('不能加入复盘');
+  });
 });
 
 describe('POST /api/chat/send', () => {

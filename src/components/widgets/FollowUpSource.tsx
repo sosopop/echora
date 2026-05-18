@@ -10,6 +10,11 @@ interface FollowUpSourceData {
   sourceLabel?: string;
   snippet?: string;
   canMarkForReview?: boolean;
+  reviewContext?: {
+    attemptId: number;
+    gradingId: number;
+    tags: string[];
+  };
   chainSteps?: Array<{ index: number; text: string }>;
 }
 

@@ -56,7 +56,7 @@ function rowToDTO(row: ErrorTagEventRow): ErrorTagEventDTO {
   };
 }
 
-function normalizeTags(tags: string[]): string[] {
+export function normalizeErrorTags(tags: string[]): string[] {
   const out: string[] = [];
   for (const raw of tags) {
     const tag = raw.trim();
@@ -80,11 +80,13 @@ export interface CreateErrorTagEventsInput {
   tags: string[];
 }
 
+export type EnsureErrorTagEventsInput = CreateErrorTagEventsInput;
+
 export function createErrorTagEvents(
   db: Db,
   input: CreateErrorTagEventsInput
 ): ErrorTagEventDTO[] {
-  const tags = normalizeTags(input.tags);
+  const tags = normalizeErrorTags(input.tags);
   if (tags.length === 0) return [];
   const severity = severityForScore(input.score);
   const stmt = db.prepare(
@@ -105,6 +107,29 @@ export function createErrorTagEvents(
     .map((id) => select.get(id))
     .filter((row): row is ErrorTagEventRow => row != null)
     .map(rowToDTO);
+}
+
+export function ensureErrorTagEvents(
+  db: Db,
+  input: EnsureErrorTagEventsInput
+): { created: ErrorTagEventDTO[]; existingCount: number } {
+  const tags = normalizeErrorTags(input.tags);
+  if (tags.length === 0) return { created: [], existingCount: 0 };
+  const existing = db
+    .prepare<[number, number], { tag: string }>(
+      `SELECT tag
+       FROM error_tag_events
+       WHERE attempt_id = ?
+         AND user_id = ?
+         AND included_in_stats = 1`
+    )
+    .all(input.attemptId, input.userId)
+    .map((row) => row.tag);
+  const missing = tags.filter((tag) => !existing.includes(tag));
+  return {
+    created: createErrorTagEvents(db, { ...input, tags: missing }),
+    existingCount: tags.length - missing.length,
+  };
 }
 
 export function listErrorTagSummaryByConversation(

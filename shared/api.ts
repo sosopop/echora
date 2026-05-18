@@ -195,6 +195,18 @@ export interface BranchMessageSendResp {
   assistantMessage: MessageDTO;
 }
 
+export interface BranchReviewMarkResp {
+  threadId: number;
+  sourceMessageId: number;
+  attemptId: number;
+  gradingId: number;
+  tags: string[];
+  createdEventsCount: number;
+  existingEventsCount: number;
+  masteriesUpdatedCount: number;
+  message: string;
+}
+
 /* ============================================================
  * Scene dialogue(PRD §2.5)
  * ========================================================== */

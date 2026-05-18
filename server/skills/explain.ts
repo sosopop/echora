@@ -13,6 +13,7 @@ import { decodeAttemptPrompt } from '../services/attemptPrompt.js';
 
 interface ExplainAttemptRow {
   attempt_id: number;
+  grading_id: number | null;
   stage: number;
   question_no: number;
   question_type: string;
@@ -109,6 +110,7 @@ function getLatestExplainAttempt(
   const row = ctx.db
     .prepare<[number], ExplainAttemptRow>(
       `SELECT a.id AS attempt_id,
+              g.id AS grading_id,
               a.stage,
               a.question_no,
               a.question_type,
@@ -133,6 +135,8 @@ function buildSourceData(row: ExplainAttemptRow): Record<string, unknown> {
   const sourceKind = row.score == null ? 'exercise' : 'grading';
   const label =
     row.score == null ? '来自:当前题目' : `来自:最近一次批改 · ${row.score} 分`;
+  const corrections = safeParseCorrections(row.corrections);
+  const tags = (corrections.tags ?? []).filter((tag) => TAG_HINTS[tag]);
   return {
     sourceKind,
     sourceLabel: label,
@@ -140,7 +144,15 @@ function buildSourceData(row: ExplainAttemptRow): Record<string, unknown> {
       `阶段 ${row.stage} · 第 ${row.question_no} 题 · ` +
       `${labelForQuestionType(row.question_type)}\n` +
       compactPrompt(decodeAttemptPrompt(row.prompt).prompt, 90),
-    canMarkForReview: row.score != null,
+    canMarkForReview: row.score != null && tags.length > 0,
+    reviewContext:
+      row.score != null && row.grading_id != null && tags.length > 0
+        ? {
+            attemptId: row.attempt_id,
+            gradingId: row.grading_id,
+            tags,
+          }
+        : undefined,
   };
 }
 

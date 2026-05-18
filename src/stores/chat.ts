@@ -46,6 +46,8 @@ interface ChatState {
   branchMessages: MessageDTO[];
   isBranchOpen: boolean;
   isBranchLoading: boolean;
+  isBranchReviewing: boolean;
+  branchReviewMessage: string | null;
   branchError: string | null;
   inputMode: InputMode;
   isLoading: boolean;
@@ -60,6 +62,7 @@ interface ChatState {
   openBranchForMessage(messageId: number): Promise<void>;
   closeBranch(): void;
   sendBranchMessage(text: string): Promise<void>;
+  markBranchForReview(): Promise<void>;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -76,6 +79,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   branchMessages: [],
   isBranchOpen: false,
   isBranchLoading: false,
+  isBranchReviewing: false,
+  branchReviewMessage: null,
   branchError: null,
   inputMode: 'chat',
   isLoading: false,
@@ -105,6 +110,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       branchMessages: [],
       isBranchOpen: false,
       isBranchLoading: false,
+      isBranchReviewing: false,
+      branchReviewMessage: null,
       branchError: null,
     });
     try {
@@ -143,6 +150,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         branchMessages: [],
         isBranchOpen: false,
         isBranchLoading: false,
+        isBranchReviewing: false,
+        branchReviewMessage: null,
         branchError: null,
         inputMode: conv.inputMode,
         isLoading: false,
@@ -193,6 +202,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({
       isBranchOpen: true,
       isBranchLoading: true,
+      isBranchReviewing: false,
+      branchReviewMessage: null,
       branchError: null,
       branchSourceMessageId: messageId,
     });
@@ -215,6 +226,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         branchSourceMessageId: messageId,
         branchMessages: messages,
         isBranchLoading: false,
+        isBranchReviewing: false,
+        branchReviewMessage: null,
         branchError: null,
       });
     } catch (e) {
@@ -231,6 +244,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       currentBranchThreadId: null,
       branchSourceMessageId: null,
       branchMessages: [],
+      isBranchReviewing: false,
+      branchReviewMessage: null,
       branchError: null,
     });
   },
@@ -254,6 +269,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({
         isBranchLoading: false,
         branchError: e instanceof Error ? e.message : '发送支线追问失败',
+      });
+    }
+  },
+
+  async markBranchForReview() {
+    const threadId = get().currentBranchThreadId;
+    if (!threadId) {
+      set({ branchError: '请先打开一条辅助追问' });
+      return;
+    }
+    set({ isBranchReviewing: true, branchError: null });
+    try {
+      const resp = await chatApi.markBranchForReview(threadId);
+      set({
+        isBranchReviewing: false,
+        branchReviewMessage: resp.message,
+      });
+    } catch (e) {
+      set({
+        isBranchReviewing: false,
+        branchError: e instanceof Error ? e.message : '加入复盘失败',
       });
     }
   },

@@ -50,7 +50,7 @@
 - **FollowUpSource 组件(019)**:`src/components/widgets/FollowUpSource.tsx` 正式渲染 `follow-up-source`,用于 explain 追问前标明来源。`status='ready'` 且 `sourceLabel/snippet` 完整时才显示;未批改题显示"答题前只给提示",已批改来源显示"不改变主学习流"。
 - **IntentConfirm 组件(020)**:`src/components/widgets/IntentConfirm.tsx` 正式渲染 `intent-confirm`,用于低置信度路由确认。`status='ready'` 且 `question/choices>=2` 时才显示;按钮解析 `action:*` 或 `text:*` 字符串并复用既有发送通道。
 - **LearningMenu / AccountGate 组件(040)**:`src/components/widgets/LearningMenu.tsx` 与 `AccountGate.tsx` 已注册到 `WidgetRenderer`,不再走 fallback JSON。二者与 `IntentConfirm` / `ProgressSummary` 共用 `src/components/widgets/actionProtocol.ts`,统一解析 `action:request-new-scenes`、`action:next-question`、`text:<内容>` 与 `retry:<tag>`。
-- **辅助追问右侧面板(031)**:`src/views/Chat/BranchPanel.tsx` 渲染桌面右侧支线;`MessageBubble` 在非 streaming 主线消息内显示"追问"入口,当前追问来源用 `bubbleReferenced` 高亮。桌面宽屏下 `shellWithBranch` 把主区与 360px 支线组成两列,并把固定输入栏右侧收进主区;窄屏下支线用 fixed 面板覆盖,主输入栏暂时隐藏,避免两套输入重叠。
+- **辅助追问右侧面板(031/044)**:`src/views/Chat/BranchPanel.tsx` 渲染桌面右侧支线;`MessageBubble` 在非 streaming 主线消息内显示"追问"入口,当前追问来源用 `bubbleReferenced` 高亮。桌面宽屏下 `shellWithBranch` 把主区与 360px 支线组成两列,并把固定输入栏右侧收进主区;窄屏下支线用 fixed 面板覆盖,主输入栏暂时隐藏,避免两套输入重叠。044 起,已批改且带错误标签的来源会显示"加入复盘"按钮,成功后在来源块内显示确认文案。
 - **历史会话左栏/抽屉(034/035/037/039)**:`src/views/Chat/HistoryPanel.tsx` 在 960px 以上显示左侧 260px 历史会话栏,可切换当前会话,035 起提供"新建对话"入口;037 起 Chat store 在收到 `state-transition` 后刷新 conversations,用于同步场景标题和学习态。039 起 960px 以下通过顶栏 `☰` 打开历史抽屉,切换会话或新建会话后自动关闭。主输入栏同步从左侧让出 260px。1280px 以上且支线打开时形成 260px 历史栏 + 主学习流 + 360px 支线三栏。
 
 ## 测试入口
@@ -72,7 +72,7 @@
 - intent-confirm 渲染与点击动作:`src/__tests__/components/widgets/widgets.test.tsx`
 - learning-menu / account-gate 渲染与点击动作:`src/__tests__/components/widgets/widgets.test.tsx`
 - Chat 学习菜单:`src/__tests__/views/ChatInput.test.tsx`
-- 辅助追问入口与支线 store:`src/__tests__/views/MessageList.test.tsx` + `src/__tests__/stores/chat.test.ts`
+- 辅助追问入口、加入复盘按钮与支线 store:`src/__tests__/views/MessageList.test.tsx` + `src/__tests__/views/BranchPanel.test.tsx` + `src/__tests__/stores/chat.test.ts`
 - 历史会话左栏:`src/__tests__/views/HistoryPanel.test.tsx`
 
 ## Pending

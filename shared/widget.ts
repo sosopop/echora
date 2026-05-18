@@ -334,6 +334,13 @@ export const FollowUpSourceWidgetSchema = z.object({
     chainSteps: z
       .array(z.object({ index: z.number().int().positive(), text: z.string() }))
       .optional(),
+    reviewContext: z
+      .object({
+        attemptId: z.number().int().positive(),
+        gradingId: z.number().int().positive(),
+        tags: z.array(ErrorTagSchema).default([]),
+      })
+      .optional(),
   }),
 });
 

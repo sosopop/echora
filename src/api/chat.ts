@@ -9,6 +9,7 @@ import type {
   ConversationDTO,
   MessageDTO,
   BranchMessageSendResp,
+  BranchReviewMarkResp,
   BranchThreadCreateReq,
   BranchThreadDTO,
   ChatSendReq,
@@ -62,6 +63,12 @@ export const chatApi = {
     return apiClient.post<BranchMessageSendResp>(
       `/chat/branch-threads/${threadId}/messages`,
       { text }
+    );
+  },
+  markBranchForReview(threadId: number): Promise<BranchReviewMarkResp> {
+    return apiClient.post<BranchReviewMarkResp>(
+      `/chat/branch-threads/${threadId}/review`,
+      {}
     );
   },
   send(body: ChatSendReq): Promise<ChatSendResp> {

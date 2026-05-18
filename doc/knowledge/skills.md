@@ -124,8 +124,9 @@
 - 数据模型:支线元信息写 `branch_threads`,支线聊天写 `messages.branch_thread_id`;主线历史查询只返回 `branch_thread_id IS NULL`。
 - 来源校验:创建支线时 `sourceMessageId` 必须属于当前用户当前会话;`sourceRef` 可携带 message / widget / attempt / grading 等稳定引用,由调用方决定。
 - 生成回复:032 起若 Provider 支持 `chat()`,支线会用来源上下文 + 用户追问调用真实 LLM;033 起同一支线下最多 20 条历史 user/assistant 消息会一起传给 Provider,支持连续追问。stub 或 Provider 不支持 `chat()` 时返回确定性安全提示。Provider chat 抛错会返回 `502 PROVIDER_ERROR`,不静默降级。
-- 状态隔离:支线发送不会调用 AI Router 或 Skill handler,不会生成 `agent_runs` / SSE,不会改变 `learning_state` / `active_skill` / `input_mode`,也不会写学习统计。
+- 状态隔离:支线发送不会调用 AI Router 或 Skill handler,不会生成 `agent_runs` / SSE,不会改变 `learning_state` / `active_skill` / `input_mode`,普通支线聊天也不会写学习统计。
 - 防泄露:当主会话处于 locked(`practicing` / `grading`)时,支线 prompt 不携带来源正文,回复不复述来源消息正文,只说明基于第 N 条消息解释,并声明不会泄露标准答案或完整翻译。
+- 加入复盘:044 起,支线来源若是已批改题并带错误标签,右侧面板会显示“加入复盘”。点击后调用 `/api/chat/branch-threads/:threadId/review`,幂等补写缺失的 `error_tag_events(included_in_stats=1)` 并只对新增事件更新 `mastery_records`;普通消息、未批改题或无错误标签批改不会显示按钮,后端也会拒绝加入。
 
 ## general-chat / intent-confirm(020/028 已真实接入)
 

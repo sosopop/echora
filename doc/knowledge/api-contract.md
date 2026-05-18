@@ -123,6 +123,8 @@ interface BranchThreadDTO {
 
 `POST /api/chat/conversations/:id/branch-threads` 会校验来源消息必须属于当前会话。`GET /api/chat/conversations/:id/messages` 默认只返回主线消息(`branch_thread_id IS NULL`),支线消息只能通过 `/api/chat/branch-threads/:threadId/messages` 读取。`POST /api/chat/branch-threads/:threadId/messages` 会同步写入一条支线 user message 与一条支线 assistant message,不创建 `agent_runs`,不触发 `SkillEvent`/SSE,也不改变 `learning_state` / `active_skill` / `input_mode`。032 起,支线回复在 Provider 支持 `chat()` 时使用真实 LLM 生成;stub 或 Provider 不支持 `chat()` 时保留确定性安全提示。033 起,Provider prompt 会携带同一 `branchThreadId` 下最多 20 条历史支线消息,用于连续追问。Provider chat 抛错会返回 `502 PROVIDER_ERROR`,不静默 fallback。主线锁定(`practicing` / `grading`)时,支线 prompt 与回复都不会复述来源消息正文,避免绕过历史答案脱敏。
 
+044 起,`POST /api/chat/branch-threads/:threadId/review` 支持把一条辅助追问显式加入复盘。接口只接受来源消息中能解析到 `grading-result.attemptId` 或 `follow-up-source.data.reviewContext.attemptId` 的支线,且该 attempt 必须已有批改和错误标签;普通消息、未批改题或无错误标签批改会返回 `400 VALIDATION_FAILED`。接口会幂等补写缺失的 `error_tag_events(included_in_stats=1)`,并只对新增事件更新 `mastery_records`,避免重复点击刷高统计。不新增 ChatAction。
+
 018 起,`conversations.lock_policy` 由 `learning_state` 自动维护:`practicing` / `grading` 写为 `locked`,其余学习态写为 `open`。`GET /api/chat/conversations/:id/messages` 在 locked 状态下会对历史消息做服务端脱敏:
 
 - 用户答题消息替换为 `"完成当前题后查看完整答案"`
@@ -135,6 +137,7 @@ interface BranchThreadDTO {
 
 - 未批改题:`sourceKind='exercise'`,只给提示,不返回参考答案
 - 已批改题:`sourceKind='grading'`,可使用 `user_answer`、`referenceAnswer`、`explanation`、`tags` 解释错因
+- 044 起,已批改且有错误标签时,`follow-up-source.data.reviewContext` 携带 `{ attemptId, gradingId, tags }`,供支线面板判断是否显示“加入复盘”。
 
 020 起,自由文本交给 AI Router 后,若返回 `confidence < 0.5` 且当前学习态为 `scene_selecting` / `awaiting_next` / `reviewing`,chat route 不直接执行低置信度目标 Skill,而是改写为:
 
