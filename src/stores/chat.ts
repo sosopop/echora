@@ -172,13 +172,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       const result = await chatApi.deriveConversation(id);
       const conv = result.conversation;
+      const derivedContextMessage = result.derivedContextText
+        ? {
+            id: -Math.floor(Date.now() / 1000),
+            conversationId: conv.id,
+            branchThreadId: null,
+            type: 'system' as const,
+            role: 'system' as const,
+            skillName: null,
+            content: result.derivedContextText,
+            widgetSnapshot: null,
+            seq: 0,
+            createdAt: new Date().toISOString(),
+          }
+        : null;
       set((s) => ({
         conversations: [
           conv,
           ...s.conversations.filter((c) => c.id !== conv.id),
         ],
         currentConversationId: conv.id,
-        messages: [],
+        messages: derivedContextMessage ? [derivedContextMessage] : [],
         streamingMessageId: null,
         currentStreamId: null,
         streamBuffer: {},

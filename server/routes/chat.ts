@@ -43,6 +43,7 @@ import {
   copyActiveSceneDialogueToConversation,
   getActiveSceneDialogue,
 } from '../services/sceneDialogue.js';
+import { buildDerivedConversationContextText } from '../services/deriveConversationContext.js';
 import { streamBus } from '../services/streamBus.js';
 import type { SkillRegistry } from '../skills/registry.js';
 import type { AIRouter } from '../ai/router.js';
@@ -218,6 +219,19 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
         conv.id,
         req.user!.id
       );
+      const derivedContextText = buildDerivedConversationContextText(
+        db,
+        source.id,
+        source.title
+      );
+      if (derivedContextText) {
+        appendMessage(db, {
+          conversationId: conv.id,
+          type: 'system',
+          role: 'system',
+          content: derivedContextText,
+        });
+      }
       if (copiedScene && !conv.title) {
         const title = `${copiedScene.title} · 再练`;
         updateConversationTitle(db, conv.id, title);
@@ -228,6 +242,7 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
         conversation: conv,
         sceneCopied: copiedScene != null,
         ...(copiedScene ? { sceneTitle: copiedScene.title } : {}),
+        ...(derivedContextText ? { derivedContextText } : {}),
       };
       res.status(201).json({ data: body });
     } catch (e) {

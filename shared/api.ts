@@ -174,6 +174,7 @@ export interface ConversationDeriveResp {
   conversation: ConversationDTO;
   sceneCopied: boolean;
   sceneTitle?: string;
+  derivedContextText?: string;
 }
 
 /* ============================================================

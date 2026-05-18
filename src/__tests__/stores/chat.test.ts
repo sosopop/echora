@@ -571,6 +571,8 @@ describe('chat store streaming', () => {
       sourceConversationId: 10,
       sceneCopied: true,
       sceneTitle: '售票窗口',
+      derivedContextText:
+        '继承自上一轮复盘 · 售票窗口\n结果：完全正确 4 题 / 还不错 2 题 / 错误 2 题\n薄弱点：preposition · 出现 2 次\n这轮再练会从同场景继续，重点把上一轮暴露出来的问题压下去。',
       conversation: {
         id: 88,
         title: '售票窗口 · 再练',
@@ -612,7 +614,11 @@ describe('chat store streaming', () => {
     });
     expect(state.currentConversationId).toBe(88);
     expect(state.conversations[0]?.title).toBe('售票窗口 · 再练');
-    expect(state.messages[0]?.content).toBe('下一题');
+    expect(state.messages[0]).toMatchObject({
+      role: 'system',
+      content: expect.stringContaining('继承自上一轮复盘'),
+    });
+    expect(state.messages[1]?.content).toBe('下一题');
   });
 
   it('SSE skill error 会写入 assistant 消息,避免界面空白', async () => {

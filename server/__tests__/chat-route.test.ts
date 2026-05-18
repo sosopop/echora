@@ -1340,6 +1340,55 @@ describe('POST /api/chat/send', () => {
         },
       ],
     });
+    const review = appendMessage(db, {
+      conversationId,
+      type: 'text',
+      role: 'assistant',
+      skillName: 'review',
+      content: '本轮复盘来了',
+    });
+    appendStreamEvent(db, review.id, {
+      type: 'widget-init',
+      payload: {
+        widget: {
+          id: 'progress-summary-seed',
+          type: 'progress-summary',
+          status: 'loading',
+          data: {},
+          version: 1,
+        },
+      },
+      seq: 1,
+      streamId: `stream-${review.id}-seed`,
+      timestamp: 1,
+    });
+    appendStreamEvent(db, review.id, {
+      type: 'widget-ready',
+      payload: {
+        widgetId: 'progress-summary-seed',
+        patch: {
+          status: 'ready',
+          data: {
+            title: '售票窗口 · 已达标',
+            sceneName: '售票窗口',
+            questionsCount: 8,
+            averageScore: 88,
+            categoryCounts: { exact: 4, similar: 2, incorrect: 2 },
+            weakPoints: ['preposition · 出现 2 次'],
+            strongPoints: ['sentence_translation · 第 2-1 题'],
+            nextSuggestions: [
+              {
+                title: '重练 preposition',
+                desc: '先把介词稳住',
+              },
+            ],
+          },
+        },
+      },
+      seq: 2,
+      streamId: `stream-${review.id}-seed`,
+      timestamp: 2,
+    });
     archiveConversation(db, conversationId);
 
     const res = await request(app)
@@ -1352,6 +1401,7 @@ describe('POST /api/chat/send', () => {
       sourceConversationId: conversationId,
       sceneCopied: true,
       sceneTitle: '售票窗口',
+      derivedContextText: expect.stringContaining('继承自上一轮复盘'),
       conversation: {
         status: 'active',
         learningState: 'scene_selecting',
@@ -1364,6 +1414,9 @@ describe('POST /api/chat/send', () => {
       sceneId: 'ticket-office',
       title: '售票窗口',
     });
+    const messages = getMessages(db, newConversationId);
+    expect(messages[0]?.role).toBe('system');
+    expect(messages[0]?.content).toContain('继承自上一轮复盘');
   });
 
   it('非 archived 会话不能作为模板派生', async () => {
