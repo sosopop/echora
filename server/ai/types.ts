@@ -31,6 +31,11 @@ export interface ChatRequest {
   signal: AbortSignal;
 }
 
+export interface RouteRequest {
+  input: RouterInput;
+  signal: AbortSignal;
+}
+
 export type ChatStreamEvent =
   | { type: 'text-delta'; text: string }
   | { type: 'tool-use'; toolName: string; input: Record<string, unknown> }
@@ -45,7 +50,7 @@ export interface AIProvider {
   /**
    * 路由决策:根据用户输入与上下文,选择 Skill 并给出参数。
    */
-  route(input: RouterInput): Promise<RouterDecision>;
+  route(input: RouterInput, signal?: AbortSignal): Promise<RouterDecision>;
 
   /**
    * 多轮 chat 流式调用(可选)。

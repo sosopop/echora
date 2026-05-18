@@ -191,7 +191,7 @@ interface BranchThreadDTO {
 - 心跳:每 15s 注释行 `: ping`
 - 重连:客户端用最新 `lastSeq` 续传;后端优先从内存 ring buffer(每流 200 条)replay,若 buffer 已过期或已被清空,会按 `streamId=stream-<assistantMessageId>-...` 回放 `messages.stream_events` 中已持久化的事件,确保流式历史可恢复
 - 断线恢复:前端在最终 SSE 失败后会回退到 `GET /api/chat/conversations/:id/messages` 的历史消息快照,用 `widgetSnapshot` 重建当前界面;skill 自身的 `error` 事件仍按普通助手错误显示,不触发历史快照覆盖
-- 停止生成(041):`POST /api/chat/streams/:streamId/abort` 仅能停止当前用户的活跃流。服务端 abort 对应 `AbortController`,把 `agent_runs.status` 写为 `aborted`,并补一条 `done` 事件(`payload.reason='aborted'`)让前端立刻退出流式状态;不存在或已结束的 stream 返回 `404 NOT_FOUND`。
+- 停止生成(041/051):`POST /api/chat/streams/:streamId/abort` 仅能停止当前用户的活跃流。服务端 abort 对应 `AbortController`,把 `agent_runs.status` 写为 `aborted`,并补一条 `done` 事件(`payload.reason='aborted'`)让前端立刻退出流式状态;不存在或已结束的 stream 返回 `404 NOT_FOUND`。051 起 AI Router 的 provider.route、Provider chat、主线长运行 skill helper 都接收同一类 `AbortSignal`,取消后不再把 abort 伪装成 provider 业务失败。
 
 ## AI Provider 配置
 
@@ -204,8 +204,8 @@ interface BranchThreadDTO {
 | `ANTHROPIC_BASE_URL` | `https://api.anthropic.com` | 自定义网关或中转(如 OpenRouter / Bedrock) |
 | `ANTHROPIC_MODEL` | `claude-sonnet-4-6` | 调用模型 ID |
 
-`route()` 用 `tool_use` 强制 AI 输出结构化 RouterDecision(`route_to_skill` 工具)。
-`chat()` 用 `messages.stream` 转换为 ChatStreamEvent(text-delta / tool-use / message-stop)。
+`route()` 用 `tool_use` 强制 AI 输出结构化 RouterDecision(`route_to_skill` 工具),并接收可选 `AbortSignal`。
+`chat()` 用 `messages.stream` 转换为 ChatStreamEvent(text-delta / tool-use / message-stop),必须接收 `AbortSignal`。
 
 ## 响应格式
 

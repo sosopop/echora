@@ -91,6 +91,9 @@ export const generalChatSkill: Skill = {
           }
         }
       } catch (e) {
+        if (serverCtx.signal.aborted || isAbortError(e)) {
+          return;
+        }
         yield {
           type: 'error',
           payload: {
@@ -115,3 +118,7 @@ export const generalChatSkill: Skill = {
     yield { type: 'done', payload: {} };
   },
 };
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === 'AbortError';
+}

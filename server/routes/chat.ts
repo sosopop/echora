@@ -453,6 +453,11 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
 
   // —— 发送消息 ————————————————————————————————————————————
   router.post('/send', auth, async (req, res, next) => {
+    const sendController = new AbortController();
+    const onAborted = (): void => {
+      sendController.abort();
+    };
+    req.on('aborted', onAborted);
     try {
       const body = sendSchema.parse(req.body);
       const userId = req.user!.id;
@@ -518,13 +523,20 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
           availableSkills: skillRegistry.names(),
         };
         try {
-          decision = await aiRouter.decide(routerInput);
+          decision = await aiRouter.decide(routerInput, sendController.signal);
           decision = normalizeRouterDecision(
             conv,
             normalizedInput.text ?? '',
             decision
           );
         } catch (e) {
+          if (sendController.signal.aborted || isAbortError(e)) {
+            throw new HttpError(
+              499,
+              ERROR_CODES.VALIDATION_FAILED,
+              '请求已取消,未继续生成'
+            );
+          }
           if (e instanceof HttpError) throw e;
           const reason = e instanceof Error ? e.message : String(e);
           const details = getDevErrorDetails(e);
@@ -608,6 +620,8 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
       res.status(202).json({ data: respBody });
     } catch (e) {
       next(e);
+    } finally {
+      req.removeListener('aborted', onAborted);
     }
   });
 

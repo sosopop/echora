@@ -120,11 +120,13 @@ export async function runScenePropose(
     maxTokens: 4096,
     signal,
   }) as AsyncIterable<ChatStreamEvent>) {
+    if (signal.aborted) throwAbortError();
     if (ev.type === 'tool-use' && ev.toolName === 'propose_scenes') {
       const scenes = (ev.input as { scenes?: SceneCandidate[] }).scenes ?? [];
       collected = scenes;
     }
   }
+  if (signal.aborted) throwAbortError();
   if (collected.length === 0) {
     throw new Error('LLM 未返回有效场景候选');
   }
@@ -223,6 +225,7 @@ export async function runDialogueGeneration(
     maxTokens: 4096,
     signal,
   }) as AsyncIterable<ChatStreamEvent>) {
+    if (signal.aborted) throwAbortError();
     if (ev.type === 'tool-use' && ev.toolName === 'generate_scene_dialogue') {
       const input = ev.input as { roles?: string[]; turns?: SceneDialogueTurn[] };
       result = {
@@ -231,8 +234,15 @@ export async function runDialogueGeneration(
       };
     }
   }
+  if (signal.aborted) throwAbortError();
   if (!result || result.turns.length === 0) {
     throw new Error('LLM 未返回有效场景对话');
   }
   return result;
+}
+
+function throwAbortError(): never {
+  const error = new Error('Aborted');
+  error.name = 'AbortError';
+  throw error;
 }

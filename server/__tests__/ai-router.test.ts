@@ -42,9 +42,12 @@ const baseInput: RouterInput = {
 
 describe('createAIRouter — 无 fallback', () => {
   it('正常路径返回 provider decision', async () => {
+    const ctrl = new AbortController();
+    let capturedSignal: AbortSignal | undefined;
     const provider: AIProvider = {
       name: 'mock',
-      async route() {
+      async route(_input, signal) {
+        capturedSignal = signal;
         return {
           skillName: 'onboarding',
           params: {},
@@ -55,9 +58,34 @@ describe('createAIRouter — 无 fallback', () => {
     };
     const registry = makeRegistry([onboardingSkill, generalChatSkill]);
     const router = createAIRouter(provider, registry);
-    const d = await router.decide(baseInput);
+    const d = await router.decide(baseInput, ctrl.signal);
     expect(d.skillName).toBe('onboarding');
     expect(d.confidence).toBe(0.9);
+    expect(capturedSignal).toBe(ctrl.signal);
+  });
+
+  it('signal 已取消时不调用 provider.route', async () => {
+    const ctrl = new AbortController();
+    ctrl.abort();
+    let called = false;
+    const provider: AIProvider = {
+      name: 'mock',
+      async route() {
+        called = true;
+        return {
+          skillName: 'onboarding',
+          params: {},
+          confidence: 0.9,
+          rationale: 'should not run',
+        };
+      },
+    };
+    const registry = makeRegistry([onboardingSkill, generalChatSkill]);
+    const router = createAIRouter(provider, registry);
+    await expect(router.decide(baseInput, ctrl.signal)).rejects.toThrow(
+      'Aborted'
+    );
+    expect(called).toBe(false);
   });
 
   it('provider.route 抛错时,decide 直接抛错(不 fallback)', async () => {

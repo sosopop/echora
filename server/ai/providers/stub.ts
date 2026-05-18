@@ -16,7 +16,11 @@ import { SKILL_NAMES } from '../../../shared/skill.js';
 export class StubProvider implements AIProvider {
   readonly name = 'stub';
 
-  async route(_input: RouterInput): Promise<RouterDecision> {
+  async route(
+    _input: RouterInput,
+    signal?: AbortSignal
+  ): Promise<RouterDecision> {
+    throwIfAborted(signal);
     return {
       skillName: SKILL_NAMES.generalChat,
       params: {},
@@ -26,6 +30,7 @@ export class StubProvider implements AIProvider {
   }
 
   async *chat(req: ChatRequest): AsyncIterable<ChatStreamEvent> {
+    throwIfAborted(req.signal);
     const userText = req.messages.at(-1)?.content.trim() ?? '';
     if (userText) {
       yield {
@@ -42,6 +47,13 @@ export class StubProvider implements AIProvider {
     };
     yield { type: 'message-stop', stopReason: 'end_turn' };
   }
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (!signal?.aborted) return;
+  const error = new Error('Aborted');
+  error.name = 'AbortError';
+  throw error;
 }
 
 function buildSmallTalkReply(userText: string): string {

@@ -62,7 +62,10 @@ export class OpenAIProvider implements AIProvider {
     this.omitToolChoice = shouldOmitDeepSeekToolChoice(opts.baseURL);
   }
 
-  async route(input: RouterInput): Promise<RouterDecision> {
+  async route(
+    input: RouterInput,
+    signal?: AbortSignal
+  ): Promise<RouterDecision> {
     const system = buildRouteSystemPrompt(input);
     const userMessage =
       input.userText.trim().length > 0
@@ -124,7 +127,9 @@ export class OpenAIProvider implements AIProvider {
       routeParams.thinking = DEEPSEEK_THINKING_DISABLED.thinking;
     }
 
-    const response = await this.client.chat.completions.create(routeParams);
+    const response = await this.client.chat.completions.create(routeParams, {
+      signal,
+    });
 
     const message = response.choices[0]?.message;
     const toolCall = message?.tool_calls?.[0];

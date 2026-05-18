@@ -60,7 +60,10 @@ export class AnthropicProvider implements AIProvider {
     this.omitToolChoice = shouldOmitDeepSeekToolChoice(opts.baseURL);
   }
 
-  async route(input: RouterInput): Promise<RouterDecision> {
+  async route(
+    input: RouterInput,
+    signal?: AbortSignal
+  ): Promise<RouterDecision> {
     const system = buildRouteSystemPrompt(input);
     const userMessage = input.userText.trim().length > 0
       ? input.userText
@@ -113,7 +116,9 @@ export class AnthropicProvider implements AIProvider {
       routeParams.thinking = DEEPSEEK_THINKING_DISABLED.thinking;
     }
 
-    const response = await this.client.messages.create(routeParams);
+    const response = await this.client.messages.create(routeParams, {
+      signal,
+    });
 
     const toolUseBlock = response.content.find(
       (b): b is { type: 'tool_use'; name: string; input: unknown; id: string } =>

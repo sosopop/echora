@@ -104,6 +104,9 @@ export const onboardingSkill: Skill = {
         }
       }
     } catch (err) {
+      if (ctx.signal.aborted || isAbortError(err)) {
+        return;
+      }
       yield {
         type: 'error',
         payload: {
@@ -157,4 +160,8 @@ function mergeProfileFields(
     next.level = raw.level as ProfileUpdateReq['level'];
   }
   return next;
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === 'AbortError';
 }

@@ -134,6 +134,7 @@ export async function runGrading(
     maxTokens: 1024,
     signal,
   }) as AsyncIterable<ChatStreamEvent>) {
+    if (signal.aborted) throwAbortError();
     if (ev.type === 'tool-use' && ev.toolName === 'grade_answer') {
       const input = ev.input as {
         score?: number;
@@ -167,10 +168,17 @@ export async function runGrading(
       };
     }
   }
+  if (signal.aborted) throwAbortError();
   if (!result) {
     throw new Error('LLM 未返回有效批改结果');
   }
   return result;
+}
+
+function throwAbortError(): never {
+  const error = new Error('Aborted');
+  error.name = 'AbortError';
+  throw error;
 }
 
 function normalizeCategory(

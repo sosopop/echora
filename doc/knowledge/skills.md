@@ -5,7 +5,7 @@
 - Skill 接口:`shared/skill.ts`(`Skill` / `SkillEventInput` / `SkillContext` / `RouterDecision`)
 - Skill 注册:`server/skills/registry.ts`(`registerAllSkills` 一键)
 - 8 Skill 入口:`server/skills/{onboarding,sceneSelect,practice,grade,explain,review,retry,generalChat}.ts`
-- AI Provider 接口:`server/ai/types.ts`
+- AI Provider 接口:`server/ai/types.ts`(`route(input, signal?)` / `chat({ signal })`)
 - Provider 工厂:`server/ai/providers/index.ts`(根据 `AI_PROVIDER` 选 Stub | Anthropic)
 - AI Router:`server/ai/router.ts`(`createAIRouter`)
 
@@ -28,7 +28,7 @@
 
 028 起 8 个 Skill 都已有真实或确定性实现:`general-chat` 在真实 Provider 提供 `chat()` 时会流式生成低风险闲聊;stub provider 也实现了 `chat()`,因此默认开发态同样可直接输出自然闲聊。`general-chat` 仍承担低置信度 `intent-confirm` 输出。
 
-- `StubProvider.route()` 固定返回 `{ skillName: 'general-chat', confidence: 0.6, ... }`
+- `StubProvider.route()` 固定返回 `{ skillName: 'general-chat', confidence: 0.6, ... }`,并尊重已取消的 `AbortSignal`
 - `StubProvider` 不实现 `chat()`(可选接口),onboarding / scene-select / grade 等需 LLM 的 skill 在 stub provider 下会 yield error;`general-chat` 在 stub 下会返回规则化引导文本
 - 各 stub Skill handler 产出:1-2 条 text-chunk + 必要的 mode-switch + widget-init/ready + done
 - `general-chat` 默认纯文本;当 `params.intentConfirm` 存在时输出 `intent-confirm` widget
@@ -37,7 +37,7 @@
 
 - **Anthropic**(`AnthropicProvider`):`route()` 默认用 `tool_use`(`route_to_skill` 工具)强制 JSON;`chat()` 用 `messages.stream`,转 `ChatStreamEvent`(text-delta / tool-use / message-stop)
 - **OpenAI**(`OpenAIProvider`):`route()` 默认用 function calling(`tool_choice: {type: 'function', function: {name: 'route_to_skill'}}`)强制 JSON;`chat()` 用 `chat.completions.create({stream: true})`,delta 累积成 ChatStreamEvent
-- 两者均通过相同 `AIProvider` 接口暴露,skill handler 不感知具体 provider
+- 两者均通过相同 `AIProvider` 接口暴露,skill handler 不感知具体 provider;051 起 `route()` 与 `chat()` 都接收并向 SDK 传递 `AbortSignal`
 - 缺 key / endpoint 不可达 → `createProvider` 抛错;route 失败 → `decide` 抛错 → chat.ts 返 502
 - 同时验证两个 provider:`npm run test:smoke:ai`(严格模式,任一 key 缺即报错)
 
@@ -139,13 +139,15 @@
 ## AI Router 校验链
 
 ```
-provider.route()
+provider.route(input, signal)
   → 校验 skillName ∈ skillRegistry(失败抛 RouterValidationError)
   → 校验 currentLearningState ∈ skill.allowedStates(空数组视为任意态;失败抛 RouterValidationError)
   → 任一失败 → 错误向上传播
 ```
 
 **无 fallback**(002 patch):provider 抛错或 router 校验失败不会降级到 general-chat,而是抛错。chat 路由 `/api/chat/send` catch 后返 `502 PROVIDER_ERROR`,前端看到具体原因。设计意图:让上游问题立即暴露,避免误以为系统正常。`scripts/diag-{anthropic,openai}.ts` 提供绕开 router 的直接诊断入口。007 起结构化 `action` 不走 AI Router,直接确定性映射 Skill 并校验 allowedStates。
+
+051 起,AI Router 会在调用前后检查 `AbortSignal`;若请求或用户停止已取消,直接抛 `AbortError`,不继续 provider.route。`scene-select` / `grade` / `onboarding` / `general-chat` 等长运行 skill 在 provider chat 被取消时直接停止,避免把取消误报为"LLM 未返回有效结果"或业务失败。
 
 ## 约束与失败点
 
@@ -160,7 +162,7 @@ provider.route()
 
 ## 测试入口
 
-- AI Router 校验链测试:`server/__tests__/ai-router.test.ts`(5 测试,正常路径 + 3 失败路径 + 任意 state)
+- AI Router 校验链测试:`server/__tests__/ai-router.test.ts`(6 测试,正常路径 + 3 失败路径 + 任意 state + abort signal)
 - onboarding skill 单测:`server/__tests__/skill-onboarding.test.ts`(5 测试)
 - scene-select 单测:`server/__tests__/skill-sceneSelect.test.ts`(6 测试)
 - practice 单测:`server/__tests__/skill-practice.test.ts`(12 测试,含 A1/B1/C1 动态题量)
@@ -176,4 +178,4 @@ provider.route()
 
 ## Pending
 
-- 取消信号还有少量路径待全量复核,尤其是未来继续扩展的新长运行 skill
+- 新增长运行 skill 时必须继续把 `ctx.signal` 传给 provider / helper,并为 abort 路径补单测。

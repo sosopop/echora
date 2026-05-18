@@ -85,6 +85,9 @@ export const sceneSelectSkill: Skill = {
         updateConversationTitle(ctx.db, ctx.conversationId, scene.title);
         appendSceneHistory(ctx.db, ctx.user.id, scene.topic);
       } catch (e) {
+        if (ctx.signal.aborted || isAbortError(e)) {
+          return;
+        }
         const details = getDevErrorDetails(e);
         yield {
           type: 'error',
@@ -155,6 +158,9 @@ export const sceneSelectSkill: Skill = {
         ctx.signal
       );
     } catch (e) {
+      if (ctx.signal.aborted || isAbortError(e)) {
+        return;
+      }
       const message = e instanceof Error ? e.message : String(e);
       const details = getDevErrorDetails(e);
       yield {
@@ -282,4 +288,8 @@ function pickEmoji(topic: string): string {
     if (lower.includes(k)) return v;
   }
   return '💬';
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === 'AbortError';
 }

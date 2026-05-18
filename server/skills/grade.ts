@@ -171,6 +171,9 @@ export const gradeSkill: Skill = {
         stageGoalPlan
       );
     } catch (e) {
+      if (ctx.signal.aborted || isAbortError(e)) {
+        return;
+      }
       yield {
         type: 'error',
         payload: {
@@ -408,4 +411,8 @@ function formatAutomaticDifficultyText(input: {
     return `你连续两个场景都很顺,我已把后续难度从 ${input.adjustment.previousLevel} 提高到 ${input.adjustment.nextLevel}。`;
   }
   return `你连续两个场景前半段有点吃力,我已把后续难度从 ${input.adjustment.previousLevel} 降低到 ${input.adjustment.nextLevel}。`;
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === 'AbortError';
 }

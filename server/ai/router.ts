@@ -21,7 +21,7 @@ import type {
 import type { SkillRegistry } from '../skills/registry.js';
 
 export interface AIRouter {
-  decide(input: RouterInput): Promise<RouterDecision>;
+  decide(input: RouterInput, signal?: AbortSignal): Promise<RouterDecision>;
 }
 
 export class RouterValidationError extends Error {
@@ -39,9 +39,14 @@ export function createAIRouter(
   registry: SkillRegistry
 ): AIRouter {
   return {
-    async decide(input: RouterInput): Promise<RouterDecision> {
+    async decide(
+      input: RouterInput,
+      signal?: AbortSignal
+    ): Promise<RouterDecision> {
+      throwIfAborted(signal);
       // provider.route() 失败直接传播,不 catch
-      const decision = await provider.route(input);
+      const decision = await provider.route(input, signal);
+      throwIfAborted(signal);
 
       const skill = registry.get(decision.skillName);
       if (!skill) {
@@ -61,6 +66,13 @@ export function createAIRouter(
       return decision;
     },
   };
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (!signal?.aborted) return;
+  const error = new Error('Aborted');
+  error.name = 'AbortError';
+  throw error;
 }
 
 function isStateAllowed(
