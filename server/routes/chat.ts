@@ -147,9 +147,11 @@ interface ActiveSkillRun {
   userId: number;
   conversationId: number;
   messageId: number;
+  traceId: string;
   controller: AbortController;
   startedAt: number;
   seq: number;
+  textLength: number;
   aborted: boolean;
   terminalSent: boolean;
 }
@@ -237,6 +239,11 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
   });
 
   router.post('/branch-threads/:threadId/messages', auth, async (req, res, next) => {
+    const branchController = new AbortController();
+    const onClose = (): void => {
+      branchController.abort();
+    };
+    req.on('aborted', onClose);
     try {
       const threadId = parsePositiveId(req.params.threadId);
       const thread = requireBranchThread(db, threadId, req.user!.id);
@@ -257,8 +264,12 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
         text,
         source,
         shouldLockHistory(conv),
-        branchHistory
+        branchHistory,
+        branchController.signal
       );
+      if (branchController.signal.aborted) {
+        return;
+      }
 
       const userMessage = appendMessage(db, {
         conversationId: thread.conversationId,
@@ -279,6 +290,8 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
       res.status(201).json({ data: { userMessage, assistantMessage } });
     } catch (e) {
       next(e);
+    } finally {
+      req.removeListener('aborted', onClose);
     }
   });
 
@@ -382,6 +395,7 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
             error: {
               code: ERROR_CODES.NOT_FOUND ?? 'NOT_FOUND',
               message: '当前会话没有活跃场景对话',
+              ...(req.traceId ? { details: { traceId: req.traceId } } : {}),
             },
           });
           return;
@@ -504,6 +518,7 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
 
       // 5. 记录 agent_run
       const runId = randomUUID();
+      const traceId = req.traceId ?? randomUUID();
       const runStmt = db.prepare(
         `INSERT INTO agent_runs
          (run_id, user_id, conversation_id, message_id, skill_name, status, payload)
@@ -515,7 +530,7 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
         conv.id,
         assistantMsg.id,
         decision.skillName,
-        JSON.stringify({ decision })
+        JSON.stringify({ decision, traceId })
       );
 
       // 6. 启动背景任务执行 Skill handler
@@ -531,6 +546,7 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
         userEmail: req.user!.email,
         conversationId: conv.id,
         messageId: assistantMsg.id,
+        traceId,
         learningState: conv.learningState,
       });
 
@@ -594,6 +610,7 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
         error: {
           code: ERROR_CODES.VALIDATION_FAILED,
           message: '缺少 streamId',
+          ...(req.traceId ? { details: { traceId: req.traceId } } : {}),
         },
       });
       return;
@@ -776,7 +793,8 @@ async function buildBranchAssistantText(
   question: string,
   source: MessageDTO | null,
   hideSourceContent: boolean,
-  branchHistory: MessageDTO[]
+  branchHistory: MessageDTO[],
+  signal: AbortSignal
 ): Promise<string> {
   if (provider.chat) {
     let text = '';
@@ -790,13 +808,16 @@ async function buildBranchAssistantText(
           branchHistory
         ),
         maxTokens: 700,
-        signal: new AbortController().signal,
+        signal,
       })) {
         if (ev.type === 'text-delta' && ev.text) {
           text += ev.text;
         }
       }
     } catch (e) {
+      if (signal.aborted || isAbortError(e)) {
+        return '';
+      }
       const details = getDevErrorDetails(e);
       throw new HttpError(
         502,
@@ -809,6 +830,10 @@ async function buildBranchAssistantText(
   }
 
   return buildBranchFallbackText(question, source, hideSourceContent);
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === 'AbortError';
 }
 
 function buildBranchSystemPrompt(hideSourceContent: boolean): string {
@@ -1518,6 +1543,7 @@ interface RunSkillArgs {
   decision: import('../../shared/skill.js').RouterDecision;
   streamId: string;
   runId: string;
+  traceId: string;
   userId: number;
   userEmail: string;
   conversationId: number;
@@ -1533,6 +1559,7 @@ function runSkillInBackground(args: RunSkillArgs): void {
     decision,
     streamId,
     runId,
+    traceId,
     userId,
     userEmail,
     conversationId,
@@ -1549,9 +1576,11 @@ function runSkillInBackground(args: RunSkillArgs): void {
     userId,
     conversationId,
     messageId,
+    traceId,
     controller,
     startedAt,
     seq,
+    textLength: 0,
     aborted: false,
     terminalSent: false,
   };
@@ -1573,6 +1602,31 @@ function runSkillInBackground(args: RunSkillArgs): void {
     makeWidgetId(prefix) {
       return `${prefix}-${randomUUID().slice(0, 8)}`;
     },
+  };
+
+  const updateRunPayload = (patch: Record<string, unknown>): void => {
+    try {
+      db.prepare(
+        `UPDATE agent_runs
+         SET payload = ?
+         WHERE run_id = ?`
+      ).run(
+        JSON.stringify({
+          traceId,
+          streamId,
+          conversationId,
+          messageId,
+          userId,
+          decision,
+          finalSeq: activeRun.seq,
+          textLength: activeRun.textLength,
+          ...patch,
+        }),
+        runId
+      );
+    } catch (e) {
+      console.warn('[runSkill] update agent_run payload failed', e);
+    }
   };
 
   // 处理 mode-switch / state-transition / widget-* 副作用
@@ -1617,10 +1671,14 @@ function runSkillInBackground(args: RunSkillArgs): void {
         } catch (e) {
           console.warn('[runSkill] appendStreamEvent 失败', e);
         }
+        if (fullEvent.type === 'text-chunk') {
+          activeRun.textLength += fullEvent.payload.text.length;
+        }
         // 副作用
         handleSideEffects(fullEvent);
         // 推流
         streamBus.publish(streamId, fullEvent);
+        updateRunPayload({ finalSeq: activeRun.seq, textLength: activeRun.textLength });
 
         if (fullEvent.type === 'done' || fullEvent.type === 'error') {
           sawTerminal = true;
@@ -1657,6 +1715,7 @@ function runSkillInBackground(args: RunSkillArgs): void {
         streamBus.publish(streamId, lastEvent);
         activeRun.seq = lastEvent.seq;
         activeRun.terminalSent = true;
+        updateRunPayload({ finalSeq: activeRun.seq, textLength: activeRun.textLength });
       }
 
       markAgentRunStatus(db, runId, 'done', Date.now() - startedAt, null);
@@ -1686,12 +1745,18 @@ function runSkillInBackground(args: RunSkillArgs): void {
         streamId,
         timestamp: Date.now(),
       };
+      activeRun.seq = errEvent.seq;
       try {
         appendStreamEvent(db, messageId, errEvent);
       } catch {
         /* 落盘失败不阻塞 */
       }
       streamBus.publish(streamId, errEvent);
+      updateRunPayload({
+        finalSeq: activeRun.seq,
+        textLength: activeRun.textLength,
+        error: err instanceof Error ? err.name : 'unknown',
+      });
       markAgentRunStatus(
         db,
         runId,
@@ -1725,6 +1790,27 @@ function publishAbortDone(db: Db, run: ActiveSkillRun): void {
   run.seq = event.seq;
   run.terminalSent = true;
   streamBus.publish(run.streamId, event);
+  try {
+    db.prepare(
+      `UPDATE agent_runs
+       SET payload = ?
+       WHERE run_id = ?`
+    ).run(
+      JSON.stringify({
+        traceId: run.traceId,
+        streamId: run.streamId,
+        conversationId: run.conversationId,
+        messageId: run.messageId,
+        userId: run.userId,
+        finalSeq: run.seq,
+        textLength: run.textLength,
+        aborted: true,
+      }),
+      run.runId
+    );
+  } catch (e) {
+    console.warn('[runSkill] update agent_run payload failed', e);
+  }
 }
 
 function markAgentRunStatus(

@@ -6,6 +6,7 @@
 
 import express, { type Application } from 'express';
 import cors from 'cors';
+import { randomUUID } from 'node:crypto';
 import type { Db } from './db/connect.js';
 import type { Config } from './config/getConfig.js';
 import type { SkillRegistry } from './skills/registry.js';
@@ -35,6 +36,16 @@ export function createApp(deps: AppDeps): Application {
       credentials: true,
     })
   );
+  app.use((req, res, next) => {
+    const headerValue = req.headers['x-request-id'] ?? req.headers['x-trace-id'];
+    const traceId =
+      typeof headerValue === 'string' && headerValue.trim()
+        ? headerValue.trim()
+        : randomUUID();
+    req.traceId = traceId;
+    res.setHeader('X-Request-Id', traceId);
+    next();
+  });
   app.use(express.json({ limit: '1mb' }));
 
   // —— Health ————————————————————————————————————————————

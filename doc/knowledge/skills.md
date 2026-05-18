@@ -26,7 +26,7 @@
 
 ## Stub / fallback 行为
 
-028 起 8 个 Skill 都已有真实或确定性实现:`general-chat` 在真实 Provider 提供 `chat()` 时会流式生成低风险闲聊;在 stub provider 或 provider 不支持 `chat()` 时,保留规则化 fallback 文本。`general-chat` 仍承担低置信度 `intent-confirm` 输出。
+028 起 8 个 Skill 都已有真实或确定性实现:`general-chat` 在真实 Provider 提供 `chat()` 时会流式生成低风险闲聊;stub provider 也实现了 `chat()`,因此默认开发态同样可直接输出自然闲聊。`general-chat` 仍承担低置信度 `intent-confirm` 输出。
 
 - `StubProvider.route()` 固定返回 `{ skillName: 'general-chat', confidence: 0.6, ... }`
 - `StubProvider` 不实现 `chat()`(可选接口),onboarding / scene-select / grade 等需 LLM 的 skill 在 stub provider 下会 yield error;`general-chat` 在 stub 下会返回规则化引导文本
@@ -176,6 +176,4 @@ provider.route()
 
 ## Pending
 
-- general-chat 开放闲聊内容生成待真实化(留 004+)
-- Skill 取消机制:`ctx.signal` 已传入,onboarding 已消费;其他 7 stub/真实 skill 尚未消费
-- `agent_runs.payload` 字段写入 finalSeq 与累计文本长度的细节
+- 取消信号还有少量路径待全量复核,尤其是未来继续扩展的新长运行 skill

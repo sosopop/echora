@@ -20,6 +20,7 @@ declare global {
   namespace Express {
     interface Request {
       user?: AuthedUser;
+      traceId?: string;
     }
   }
 }
@@ -55,6 +56,11 @@ export function requireAuth(config: Config) {
     res: Response,
     next: NextFunction
   ): void {
+    req.traceId ??= req.headers['x-request-id']
+      ? String(req.headers['x-request-id'])
+      : req.headers['x-trace-id']
+        ? String(req.headers['x-trace-id'])
+        : undefined;
     const header = req.headers.authorization ?? '';
     let token: string | undefined;
     if (header.startsWith('Bearer ')) {
@@ -67,7 +73,11 @@ export function requireAuth(config: Config) {
 
     if (!token) {
       res.status(401).json({
-        error: { code: ERROR_CODES.UNAUTHORIZED, message: '缺少访问令牌' },
+        error: {
+          code: ERROR_CODES.UNAUTHORIZED,
+          message: '缺少访问令牌',
+          ...(req.traceId ? { details: { traceId: req.traceId } } : {}),
+        },
       });
       return;
     }
@@ -78,6 +88,7 @@ export function requireAuth(config: Config) {
         error: {
           code: ERROR_CODES.TOKEN_EXPIRED,
           message: '访问令牌无效或已过期',
+          ...(req.traceId ? { details: { traceId: req.traceId } } : {}),
         },
       });
       return;

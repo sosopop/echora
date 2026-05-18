@@ -25,18 +25,23 @@ export class HttpError extends Error {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function errorHandler(
   err: unknown,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction
 ): void {
   if (res.headersSent) return;
+
+  const traceId = req.traceId;
 
   if (err instanceof ZodError) {
     res.status(400).json({
       error: {
         code: ERROR_CODES.VALIDATION_FAILED,
         message: '请求参数校验失败',
-        details: { issues: err.issues },
+        details: {
+          issues: err.issues,
+          ...(traceId ? { traceId } : {}),
+        },
       },
     });
     return;
@@ -46,7 +51,11 @@ export function errorHandler(
     const debug = getDevErrorDetails(err);
     const details =
       err.details || debug
-        ? { ...(err.details ?? {}), ...(debug ? { debug } : {}) }
+        ? {
+            ...(err.details ?? {}),
+            ...(traceId ? { traceId } : {}),
+            ...(debug ? { debug } : {}),
+          }
         : undefined;
     res.status(err.status).json({
       error: {
@@ -65,7 +74,14 @@ export function errorHandler(
       code: ERROR_CODES.INTERNAL_ERROR,
       message:
         err instanceof Error ? err.message : '服务器内部错误',
-      ...(details ? { details } : {}),
+      ...(details || traceId
+        ? {
+            details: {
+              ...(details ?? {}),
+              ...(traceId ? { traceId } : {}),
+            },
+          }
+        : {}),
     },
   });
 }

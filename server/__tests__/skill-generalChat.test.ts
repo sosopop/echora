@@ -65,6 +65,27 @@ describe('general-chat skill', () => {
     expect(events.some((ev) => ev.type === 'widget-init')).toBe(false);
   });
 
+  it('stub provider 也能输出自然闲聊文本', async () => {
+    const stubProvider: AIProvider = {
+      name: 'stub-chat-provider',
+      async route() {
+        throw new Error('not used');
+      },
+      async *chat(req: ChatRequest): AsyncIterable<ChatStreamEvent> {
+        yield { type: 'text-delta', text: `回复:${req.messages[0]?.content ?? ''}` };
+        yield { type: 'message-stop', stopReason: 'end_turn' };
+      },
+    };
+
+    const events = await collect({ userText: 'hello there' }, stubProvider);
+    const text = events
+      .filter((ev) => ev.type === 'text-chunk')
+      .map((ev) => ev.payload.text)
+      .join('');
+
+    expect(text).toContain('回复:hello there');
+  });
+
   it('有 provider.chat + userText 时输出真实流式文本', async () => {
     let seenRequest: ChatRequest | null = null;
     const chatProvider: AIProvider = {

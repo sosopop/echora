@@ -1203,4 +1203,48 @@ describe('POST /api/chat/send', () => {
     const user = getMessages(db, conversationId).find((m) => m.role === 'user');
     expect(user?.content).toBe('A cup of water, please.');
   });
+
+  it('响应与错误响应会携带 traceId', async () => {
+    const res = await request(app)
+      .get('/api/chat/conversations/999999/scene-dialogue')
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Request-Id', 'trace-test-001');
+
+    expect(res.status).toBe(404);
+    expect(res.headers['x-request-id']).toBe('trace-test-001');
+    expect(res.body.error.details?.traceId).toBe('trace-test-001');
+  });
+
+  it('agent_runs payload 会记录 traceId、finalSeq 与 textLength', async () => {
+    skillHandlerOverrides.set('practice', async function* () {
+      yield { type: 'text-chunk', payload: { text: 'hello ' } };
+      yield { type: 'text-chunk', payload: { text: 'world' } };
+      yield { type: 'done', payload: {} };
+    });
+
+    const res = await request(app)
+      .post('/api/chat/send')
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Request-Id', 'trace-test-002')
+      .send({ conversationId, action: { type: 'next-question' } });
+
+    expect(res.status).toBe(202);
+    const run = db
+      .prepare<
+        [number],
+        { payload: string | null; status: string; latency_ms: number | null }
+      >('SELECT payload, status, latency_ms FROM agent_runs WHERE message_id = ?')
+      .get(res.body.data.assistantMessageId);
+
+    expect(run?.status).toBe('done');
+    const payload = JSON.parse(run?.payload ?? '{}') as {
+      traceId?: string;
+      finalSeq?: number;
+      textLength?: number;
+    };
+    expect(payload.traceId).toBe('trace-test-002');
+    expect(payload.finalSeq).toBeGreaterThanOrEqual(3);
+    expect(payload.textLength).toBe(11);
+    expect(run?.latency_ms).not.toBeNull();
+  });
 });

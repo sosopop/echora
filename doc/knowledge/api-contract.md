@@ -218,6 +218,8 @@ interface BranchThreadDTO {
 
 `NODE_ENV !== 'production'` 时,HTTP 错误响应会在 `details.debug` 或 `details.upstream` 中附带错误 name/message/stack 与上游状态码等调试字段;前端 dev 模式会在控制台打印完整 API/SSE 错误并把 details 拼进错误提示。生产环境不附带这些调试细节。
 
+042 起,`X-Request-Id` / `X-Trace-Id` 请求头会在服务端透传到响应头 `X-Request-Id` 并写入错误响应 `details.traceId`;未显式提供时由服务端自动生成,用于串联前端请求、HTTP 错误与 `agent_runs.payload.traceId`。
+
 前端发送顺序(008):`useChatStore.sendMessage/sendAction` 会在 `/api/chat/send` 返回前先插入临时用户消息与空 assistant 消息;assistant 空流式消息渲染为 "Echo 正在思考中..."。服务端返回后再替换真实 messageId 并连接 SSE,随后 `text-chunk` / `widget-*` 覆盖为真实 AI 输出或小部件结果。
 
 022 起,SSE `error` 事件不再只写入全局 error state,也会写回当前 assistant 消息正文,格式为 `出错了:<code>: <message>`;dev 模式下若事件携带 `details`,会追加 JSON 调试信息。这样 `GRADE_FAILED` / `ATTEMPT_LOCKED` / provider tool_choice 错误不会在聊天列表中表现为空白回复。
@@ -235,5 +237,4 @@ interface BranchThreadDTO {
 
 ## Pending
 
-- 错误响应是否需要 traceId 字段
 - SSE 是否需要 Last-Event-ID 标准头(EventSource 自动支持)
