@@ -108,6 +108,10 @@
   text-align: left;
 }
 
+.historyItemWrap {
+  border-radius: var(--radius-md);
+}
+
 .historyItem:hover {
   background: var(--color-hover-veil);
 }
@@ -126,6 +130,22 @@
 .historyItemMeta {
   color: var(--color-muted);
   font-size: 12px;
+}
+
+.historyDeriveBtn {
+  margin: -2px 12px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--color-primary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 0;
+  text-align: left;
+}
+
+.historyDeriveBtn:hover {
+  color: var(--color-primary-active);
 }
 
 .mobileHistoryOverlay {

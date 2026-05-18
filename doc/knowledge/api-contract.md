@@ -36,6 +36,7 @@ JWT 7 天过期,V1 无刷新令牌。密钥来自 `JWT_SECRET`。
 |--------|--------------------------------------------|-----------------------------------|
 | GET    | /api/chat/conversations                    | 当前用户会话列表                   |
 | POST   | /api/chat/conversations                    | 新建空会话(可选 `learningState`)|
+| POST   | /api/chat/conversations/:id/derive         | 从 archived 会话派生新学习流       |
 | GET    | /api/chat/conversations/:id/messages       | 历史消息                           |
 | GET    | /api/chat/conversations/:id/scene-dialogue | 当前活跃 scene_dialogue(003 新增)|
 | GET    | /api/chat/conversations/:id/branch-threads | 当前会话辅助追问支线列表          |
@@ -47,6 +48,8 @@ JWT 7 天过期,V1 无刷新令牌。密钥来自 `JWT_SECRET`。
 | GET    | /api/chat/stream?streamId=&lastSeq=&token= | SSE 端点                           |
 
 POST `/api/chat/conversations` body 可选 `{ learningState?: LearningState, title?: string }`,Onboarding 视图传 `learningState='onboarding'`。
+
+049 起,`POST /api/chat/conversations/:id/derive` 仅允许 archived 会话。成功时创建新的 `scene_selecting` active 会话,复制源会话最新 `scene_dialogue` 到新会话,响应 `{ sourceConversationId, conversation, sceneCopied, sceneTitle? }`。前端收到 `sceneCopied=true` 后直接发送 `next-question`,从旧场景重新开始练习;若源会话没有场景,退回 `request-new-scenes`。
 
 POST `/api/chat/send` body(003 起 text 与 action 二选一):
 

@@ -15,6 +15,7 @@ import type {
   ChatSendReq,
   ChatSendResp,
   ChatAbortStreamResp,
+  ConversationDeriveResp,
   SceneDialogueDTO,
 } from '@shared/api';
 import type { LearningState } from '@shared/skill';
@@ -30,6 +31,12 @@ export const chatApi = {
     return apiClient.post<ConversationDTO>(
       '/chat/conversations',
       opts ?? {}
+    );
+  },
+  deriveConversation(conversationId: number): Promise<ConversationDeriveResp> {
+    return apiClient.post<ConversationDeriveResp>(
+      `/chat/conversations/${conversationId}/derive`,
+      {}
     );
   },
   getMessages(conversationId: number): Promise<MessageDTO[]> {

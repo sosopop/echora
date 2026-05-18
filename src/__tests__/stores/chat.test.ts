@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   send: vi.fn(),
   abortStream: vi.fn(),
   createConversation: vi.fn(),
+  deriveConversation: vi.fn(),
   openStream: vi.fn(),
   profileGet: vi.fn(),
   getMessages: vi.fn(),
@@ -21,6 +22,7 @@ vi.mock('../../api/chat.js', () => ({
   chatApi: {
     listConversations: mocks.listConversations,
     createConversation: mocks.createConversation,
+    deriveConversation: mocks.deriveConversation,
     getMessages: mocks.getMessages,
     listBranchThreads: mocks.listBranchThreads,
     createBranchThread: mocks.createBranchThread,
@@ -562,6 +564,55 @@ describe('chat store streaming', () => {
     expect(state.currentConversationId).toBe(77);
     expect(state.conversations[0]?.id).toBe(77);
     expect(state.messages[0]?.content).toBe('换一批场景');
+  });
+
+  it('从归档会话派生新会话后基于复制场景出第一题', async () => {
+    mocks.deriveConversation.mockResolvedValue({
+      sourceConversationId: 10,
+      sceneCopied: true,
+      sceneTitle: '售票窗口',
+      conversation: {
+        id: 88,
+        title: '售票窗口 · 再练',
+        status: 'active',
+        learningState: 'scene_selecting',
+        activeSkill: null,
+        inputMode: 'chat',
+        lockPolicy: 'open',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        archivedAt: null,
+      },
+    });
+    mocks.send.mockResolvedValue({
+      conversationId: 88,
+      userMessageId: 881,
+      assistantMessageId: 882,
+      streamId: 'stream-derived',
+      decision: {
+        skillName: 'practice',
+        params: {},
+        confidence: 1,
+        rationale: 'test',
+      },
+    });
+    mocks.openStream.mockImplementation((_streamId, opts) => {
+      opts.onEvent(event('done', {}, 1));
+      opts.onDone();
+      return { close: vi.fn() };
+    });
+
+    await useChatStore.getState().deriveConversationFromArchived(10);
+
+    const state = useChatStore.getState();
+    expect(mocks.deriveConversation).toHaveBeenCalledWith(10);
+    expect(mocks.send).toHaveBeenCalledWith({
+      conversationId: 88,
+      action: { type: 'next-question' },
+    });
+    expect(state.currentConversationId).toBe(88);
+    expect(state.conversations[0]?.title).toBe('售票窗口 · 再练');
+    expect(state.messages[0]?.content).toBe('下一题');
   });
 
   it('SSE skill error 会写入 assistant 消息,避免界面空白', async () => {

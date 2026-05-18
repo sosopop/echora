@@ -56,6 +56,7 @@ interface ChatState {
   loadConversations(): Promise<void>;
   selectConversation(id: number): Promise<void>;
   startNewConversation(): Promise<void>;
+  deriveConversationFromArchived(id: number): Promise<void>;
   sendMessage(text: string): Promise<void>;
   sendAction(action: ChatAction): Promise<void>;
   stopGenerating(): Promise<void>;
@@ -162,6 +163,52 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({
         isLoading: false,
         error: e instanceof Error ? e.message : '新建会话失败',
+      });
+    }
+  },
+
+  async deriveConversationFromArchived(id: number) {
+    set({ isLoading: true, error: null });
+    try {
+      const result = await chatApi.deriveConversation(id);
+      const conv = result.conversation;
+      set((s) => ({
+        conversations: [
+          conv,
+          ...s.conversations.filter((c) => c.id !== conv.id),
+        ],
+        currentConversationId: conv.id,
+        messages: [],
+        streamingMessageId: null,
+        currentStreamId: null,
+        streamBuffer: {},
+        activeWidgets: {},
+        branchThreads: [],
+        currentBranchThreadId: null,
+        branchSourceMessageId: null,
+        branchMessages: [],
+        isBranchOpen: false,
+        isBranchLoading: false,
+        isBranchReviewing: false,
+        branchReviewMessage: null,
+        branchError: null,
+        inputMode: conv.inputMode,
+        isLoading: false,
+      }));
+      useLearningStateStore.getState().setState(conv.learningState);
+      await sendInternal(
+        {
+          action: result.sceneCopied
+            ? { type: 'next-question' }
+            : { type: 'request-new-scenes' },
+        },
+        get,
+        set
+      );
+    } catch (e) {
+      set({
+        isLoading: false,
+        error: e instanceof Error ? e.message : '基于历史会话再练失败',
       });
     }
   },

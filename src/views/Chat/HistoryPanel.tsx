@@ -25,6 +25,9 @@ export default function HistoryPanel({
   const currentId = useChatStore((s) => s.currentConversationId);
   const selectConversation = useChatStore((s) => s.selectConversation);
   const startNewConversation = useChatStore((s) => s.startNewConversation);
+  const deriveConversationFromArchived = useChatStore(
+    (s) => s.deriveConversationFromArchived
+  );
 
   return (
     <aside
@@ -65,31 +68,44 @@ export default function HistoryPanel({
           <div className={styles.historyEmpty}>暂无历史</div>
         ) : (
           conversations.map((conversation) => (
-            <button
-              key={conversation.id}
-              className={[
-                styles.historyItem,
-                currentId === conversation.id ? styles.historyItemActive : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              type="button"
-              onClick={() => {
-                if (conversation.id !== currentId) {
-                  void selectConversation(conversation.id);
-                  onClose?.();
-                }
-              }}
-            >
-              <span className={styles.historyItemTitle}>
-                {conversationTitle(conversation)}
-              </span>
-              <span className={styles.historyItemMeta}>
-                {STATE_LABELS[conversation.learningState] ??
-                  conversation.learningState}
-                {conversation.status === 'archived' ? ' · 已归档' : ''}
-              </span>
-            </button>
+            <div key={conversation.id} className={styles.historyItemWrap}>
+              <button
+                className={[
+                  styles.historyItem,
+                  currentId === conversation.id ? styles.historyItemActive : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                type="button"
+                onClick={() => {
+                  if (conversation.id !== currentId) {
+                    void selectConversation(conversation.id);
+                    onClose?.();
+                  }
+                }}
+              >
+                <span className={styles.historyItemTitle}>
+                  {conversationTitle(conversation)}
+                </span>
+                <span className={styles.historyItemMeta}>
+                  {STATE_LABELS[conversation.learningState] ??
+                    conversation.learningState}
+                  {conversation.status === 'archived' ? ' · 已归档' : ''}
+                </span>
+              </button>
+              {conversation.status === 'archived' && (
+                <button
+                  className={styles.historyDeriveBtn}
+                  type="button"
+                  onClick={() => {
+                    void deriveConversationFromArchived(conversation.id);
+                    onClose?.();
+                  }}
+                >
+                  基于此再练
+                </button>
+              )}
+            </div>
           ))
         )}
       </div>

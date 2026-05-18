@@ -52,6 +52,7 @@
 - **LearningMenu / AccountGate 组件(040)**:`src/components/widgets/LearningMenu.tsx` 与 `AccountGate.tsx` 已注册到 `WidgetRenderer`,不再走 fallback JSON。二者与 `IntentConfirm` / `ProgressSummary` 共用 `src/components/widgets/actionProtocol.ts`,统一解析 `action:request-new-scenes`、`action:next-question`、`text:<内容>` 与 `retry:<tag>`。
 - **辅助追问右侧面板(031/044)**:`src/views/Chat/BranchPanel.tsx` 渲染桌面右侧支线;`MessageBubble` 在非 streaming 主线消息内显示"追问"入口,当前追问来源用 `bubbleReferenced` 高亮。桌面宽屏下 `shellWithBranch` 把主区与 360px 支线组成两列,并把固定输入栏右侧收进主区;窄屏下支线用 fixed 面板覆盖,主输入栏暂时隐藏,避免两套输入重叠。044 起,已批改且带错误标签的来源会显示"加入复盘"按钮,成功后在来源块内显示确认文案。
 - **新一轮会话切换(046)**:`useChatStore` 在 `/chat/send` 返回新的 `conversationId` 时会切换当前消息列表,清空上一轮 active widget 与支线面板状态,并刷新历史栏;旧会话在历史栏显示为 `已归档`,新会话显示正在生成的新一轮场景内容。
+- **归档会话再练入口(049)**:历史栏中 archived 会话会显示“基于此再练”轻按钮。点击后调用派生接口创建新会话,若旧会话有场景则直接发 `next-question` 从同场景重新出题,否则退回生成新场景。
 - **历史会话左栏/抽屉(034/035/037/039)**:`src/views/Chat/HistoryPanel.tsx` 在 960px 以上显示左侧 260px 历史会话栏,可切换当前会话,035 起提供"新建对话"入口;037 起 Chat store 在收到 `state-transition` 后刷新 conversations,用于同步场景标题和学习态。039 起 960px 以下通过顶栏 `☰` 打开历史抽屉,切换会话或新建会话后自动关闭。主输入栏同步从左侧让出 260px。1280px 以上且支线打开时形成 260px 历史栏 + 主学习流 + 360px 支线三栏。
 
 ## 测试入口

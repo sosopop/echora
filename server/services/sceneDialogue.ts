@@ -108,3 +108,22 @@ export function getActiveSceneDialogue(
     .get(conversationId);
   return row ? rowToDTO(row) : null;
 }
+
+export function copyActiveSceneDialogueToConversation(
+  db: Db,
+  sourceConversationId: number,
+  targetConversationId: number,
+  userId: number
+): SceneDialogueDTO | null {
+  const source = getActiveSceneDialogue(db, sourceConversationId);
+  if (!source) return null;
+  return createSceneDialogue(db, {
+    userId,
+    conversationId: targetConversationId,
+    sceneId: source.sceneId,
+    title: source.title,
+    difficulty: source.difficulty,
+    roles: source.roles,
+    turns: source.turns,
+  });
+}

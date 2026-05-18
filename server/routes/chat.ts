@@ -22,6 +22,7 @@ import {
   createConversation,
   getConversation,
   listConversations,
+  updateConversationTitle,
   updateInputMode,
   updateLearningState,
 } from '../services/conversation.js';
@@ -38,7 +39,10 @@ import {
   getBranchThread,
   listBranchThreads,
 } from '../services/branchThread.js';
-import { getActiveSceneDialogue } from '../services/sceneDialogue.js';
+import {
+  copyActiveSceneDialogueToConversation,
+  getActiveSceneDialogue,
+} from '../services/sceneDialogue.js';
 import { streamBus } from '../services/streamBus.js';
 import type { SkillRegistry } from '../skills/registry.js';
 import type { AIRouter } from '../ai/router.js';
@@ -57,6 +61,7 @@ import {
   type BranchThreadDTO,
   type ChatAction,
   type ConversationDTO,
+  type ConversationDeriveResp,
   type MessageDTO,
   type ChatSendResp,
 } from '../../shared/api.js';
@@ -186,6 +191,44 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
         learningState: body.learningState,
       });
       res.status(201).json({ data: conv });
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  router.post('/conversations/:id/derive', auth, (req, res, next) => {
+    try {
+      const id = parsePositiveId(req.params.id);
+      const source = assertConversationOwner(db, id, req.user!.id);
+      if (!isArchivedConversation(source)) {
+        throw new HttpError(
+          400,
+          ERROR_CODES.VALIDATION_FAILED,
+          '只有已归档会话可以作为新学习流模板。'
+        );
+      }
+      const conv = createConversation(db, req.user!.id, {
+        title: source.title ? `${source.title} · 再练` : undefined,
+        learningState: 'scene_selecting',
+      });
+      const copiedScene = copyActiveSceneDialogueToConversation(
+        db,
+        source.id,
+        conv.id,
+        req.user!.id
+      );
+      if (copiedScene && !conv.title) {
+        const title = `${copiedScene.title} · 再练`;
+        updateConversationTitle(db, conv.id, title);
+        conv.title = title;
+      }
+      const body: ConversationDeriveResp = {
+        sourceConversationId: source.id,
+        conversation: conv,
+        sceneCopied: copiedScene != null,
+        ...(copiedScene ? { sceneTitle: copiedScene.title } : {}),
+      };
+      res.status(201).json({ data: body });
     } catch (e) {
       next(e);
     }

@@ -30,7 +30,10 @@ import {
   getConversation,
   updateLearningState,
 } from '../services/conversation.js';
-import { createSceneDialogue } from '../services/sceneDialogue.js';
+import {
+  createSceneDialogue,
+  getActiveSceneDialogue,
+} from '../services/sceneDialogue.js';
 import { getProfile, upsertProfile, ensureProfile } from '../services/profile.js';
 import type { Config } from '../config/getConfig.js';
 import type { AIRouter } from '../ai/router.js';
@@ -1246,5 +1249,59 @@ describe('POST /api/chat/send', () => {
     expect(payload.finalSeq).toBeGreaterThanOrEqual(3);
     expect(payload.textLength).toBe(11);
     expect(run?.latency_ms).not.toBeNull();
+  });
+
+  it('可从 archived 会话派生新会话并复制最近场景', async () => {
+    createSceneDialogue(db, {
+      userId,
+      conversationId,
+      sceneId: 'ticket-office',
+      title: '售票窗口',
+      difficulty: 'A1',
+      roles: ['Customer', 'Clerk'],
+      turns: [
+        {
+          role: 'Customer',
+          en: 'Hello. I would like a ticket.',
+          zh: '你好。我想买一张票。',
+        },
+      ],
+    });
+    archiveConversation(db, conversationId);
+
+    const res = await request(app)
+      .post(`/api/chat/conversations/${conversationId}/derive`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+
+    expect(res.status).toBe(201);
+    expect(res.body.data).toMatchObject({
+      sourceConversationId: conversationId,
+      sceneCopied: true,
+      sceneTitle: '售票窗口',
+      conversation: {
+        status: 'active',
+        learningState: 'scene_selecting',
+        title: '售票窗口 · 再练',
+      },
+    });
+    const newConversationId = res.body.data.conversation.id as number;
+    expect(newConversationId).not.toBe(conversationId);
+    expect(getActiveSceneDialogue(db, newConversationId)).toMatchObject({
+      sceneId: 'ticket-office',
+      title: '售票窗口',
+    });
+  });
+
+  it('非 archived 会话不能作为模板派生', async () => {
+    const res = await request(app)
+      .post(`/api/chat/conversations/${conversationId}/derive`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatchObject({
+      code: 'VALIDATION_FAILED',
+    });
   });
 });

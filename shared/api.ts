@@ -169,6 +169,13 @@ export interface ChatAbortStreamResp {
   aborted: boolean;
 }
 
+export interface ConversationDeriveResp {
+  sourceConversationId: number;
+  conversation: ConversationDTO;
+  sceneCopied: boolean;
+  sceneTitle?: string;
+}
+
 /* ============================================================
  * Branch follow-up threads(PRD §3.2)
  * ========================================================== */

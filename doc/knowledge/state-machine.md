@@ -58,7 +58,7 @@ awaiting_next
   → reviewing + progress-summary
 ```
 
-`reviewing` 下再次输入复盘类文本会重新生成当前场景的学习报告;输入 `重练` 仍进入专项重练。025 起,`archived` 会话中只有 `复盘` / `总结` / `学习报告` / `review` 会被允许进入 `review`;继续练习、换场景、提交答案等请求会在 `/api/chat/send` 入口被拒绝,且不会创建用户消息或 assistant 占位消息。046 起,active 会话在 `awaiting_next` / `reviewing` 下收到继续下一轮/换场景请求(`request-new-scenes`)时,会先把原会话归档为 `archived`,再创建新的 `scene_selecting` 会话承接本次请求;下一轮不会继续追加到上一轮复盘会话里。
+`reviewing` 下再次输入复盘类文本会重新生成当前场景的学习报告;输入 `重练` 仍进入专项重练。025 起,`archived` 会话中只有 `复盘` / `总结` / `学习报告` / `review` 会被允许进入 `review`;继续练习、换场景、提交答案等请求会在 `/api/chat/send` 入口被拒绝,且不会创建用户消息或 assistant 占位消息。046 起,active 会话在 `awaiting_next` / `reviewing` 下收到继续下一轮/换场景请求(`request-new-scenes`)时,会先把原会话归档为 `archived`,再创建新的 `scene_selecting` 会话承接本次请求;下一轮不会继续追加到上一轮复盘会话里。049 起,archived 会话可通过专门派生入口复制最近场景到新 `scene_selecting` 会话,再由前端触发 `next-question` 从同场景重新开始练习。
 
 难度反馈(042):
 
@@ -134,4 +134,4 @@ reviewing / awaiting_next
 
 ## Pending
 
-- `archived` 转出场景(从 archived 复制为新会话作为模板)的逻辑未定
+- archived 派生目前复制最近场景并重新练习,尚未把旧复盘摘要作为显式上下文提示展示在新会话首屏

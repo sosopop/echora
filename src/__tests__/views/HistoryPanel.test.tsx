@@ -7,12 +7,13 @@ import type { ConversationDTO } from '@shared/api';
 function conversation(
   id: number,
   title: string | null,
-  learningState: ConversationDTO['learningState'] = 'practicing'
+  learningState: ConversationDTO['learningState'] = 'practicing',
+  status: ConversationDTO['status'] = 'active'
 ): ConversationDTO {
   return {
     id,
     title,
-    status: 'active',
+    status,
     learningState,
     activeSkill: null,
     inputMode: 'chat',
@@ -92,6 +93,23 @@ describe('HistoryPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /新建对话/ }));
     expect(startNewConversation).toHaveBeenCalled();
+  });
+
+  it('归档会话显示基于此再练入口', () => {
+    const deriveConversationFromArchived = vi.fn();
+    useChatStore.setState({
+      conversations: [
+        conversation(1, '餐厅点餐'),
+        conversation(2, '售票窗口', 'archived', 'archived'),
+      ],
+      currentConversationId: 1,
+      deriveConversationFromArchived,
+    });
+
+    render(<HistoryPanel />);
+
+    fireEvent.click(screen.getByRole('button', { name: '基于此再练' }));
+    expect(deriveConversationFromArchived).toHaveBeenCalledWith(2);
   });
 
   it('抽屉模式点击关闭和切换会话会触发 onClose', () => {
