@@ -735,6 +735,40 @@ describe('POST /api/chat/send', () => {
     expect(res.text).not.toContain('"seq":1');
   });
 
+  it('SSE 只回放当前 streamId 对应的持久化事件', async () => {
+    const assistant = appendMessage(db, {
+      conversationId,
+      type: 'text',
+      role: 'assistant',
+      skillName: 'practice',
+      content: '',
+    });
+    const currentStreamId = `stream-${assistant.id}-current`;
+    appendStreamEvent(db, assistant.id, {
+      type: 'text-chunk',
+      payload: { text: '旧流内容' },
+      seq: 1,
+      streamId: `stream-${assistant.id}-old`,
+      timestamp: 1,
+    });
+    appendStreamEvent(db, assistant.id, {
+      type: 'done',
+      payload: {},
+      seq: 2,
+      streamId: currentStreamId,
+      timestamp: 2,
+    });
+
+    const res = await request(app)
+      .get('/api/chat/stream')
+      .query({ streamId: currentStreamId })
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('"type":"done"');
+    expect(res.text).not.toContain('旧流内容');
+  });
+
   it('SSE 会轮询数据库补回不经 streamBus 发布的新事件', async () => {
     const assistant = appendMessage(db, {
       conversationId,
@@ -791,6 +825,52 @@ describe('POST /api/chat/send', () => {
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
+  });
+
+  it('SSE 非法 streamId 在打开事件流前返回 400', async () => {
+    const res = await request(app)
+      .get('/api/chat/stream')
+      .query({ streamId: 'stream-query-token' })
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatchObject({
+      code: 'VALIDATION_FAILED',
+    });
+  });
+
+  it('SSE 不允许读取其他用户会话的 stream', async () => {
+    const otherUser = db
+      .prepare("INSERT INTO users (email, password_hash) VALUES (?, ?)")
+      .run('stream-owner@test.com', 'x');
+    const otherUserId = Number(otherUser.lastInsertRowid);
+    const otherConv = createConversation(db, otherUserId, {
+      learningState: 'practicing',
+    });
+    const assistant = appendMessage(db, {
+      conversationId: otherConv.id,
+      type: 'text',
+      role: 'assistant',
+      skillName: 'practice',
+      content: '',
+    });
+    appendStreamEvent(db, assistant.id, {
+      type: 'done',
+      payload: {},
+      seq: 1,
+      streamId: `stream-${assistant.id}-foreign`,
+      timestamp: 1,
+    });
+
+    const res = await request(app)
+      .get('/api/chat/stream')
+      .query({ streamId: `stream-${assistant.id}-foreign` })
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatchObject({
+      code: 'STREAM_NOT_FOUND',
+    });
   });
 
   it('SSE 不再接受 query token 认证', async () => {

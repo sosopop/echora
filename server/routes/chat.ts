@@ -31,7 +31,6 @@ import {
   appendStreamEvent,
   getBranchMessages,
   getMessage,
-  getMessageStreamEvents,
   getMessages,
 } from '../services/message.js';
 import {
@@ -45,6 +44,12 @@ import {
 } from '../services/sceneDialogue.js';
 import { buildDerivedConversationContextText } from '../services/deriveConversationContext.js';
 import { streamBus } from '../services/streamBus.js';
+import {
+  extractStreamMessageId,
+  getPersistedStreamEventsAfter,
+  resolveStreamEventSource,
+  type StreamEventSource,
+} from '../services/streamEventSource.js';
 import type { SkillRegistry } from '../skills/registry.js';
 import type { AIRouter } from '../ai/router.js';
 import type { AIProvider } from '../ai/types.js';
@@ -688,6 +693,29 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
       return;
     }
 
+    if (!extractStreamMessageId(streamId)) {
+      res.status(400).json({
+        error: {
+          code: ERROR_CODES.VALIDATION_FAILED,
+          message: '非法 streamId',
+          ...(req.traceId ? { details: { traceId: req.traceId } } : {}),
+        },
+      });
+      return;
+    }
+
+    const streamSource = resolveStreamEventSource(db, streamId, req.user!.id);
+    if (!streamSource) {
+      res.status(404).json({
+        error: {
+          code: ERROR_CODES.STREAM_NOT_FOUND,
+          message: '流不存在或无权访问',
+          ...(req.traceId ? { details: { traceId: req.traceId } } : {}),
+        },
+      });
+      return;
+    }
+
     res.status(200);
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -729,7 +757,11 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
 
     const replayPersisted = (): void => {
       if (ended) return;
-      const persistedEvents = replayPersistedStreamEvents(db, streamId, lastSentSeq);
+      const persistedEvents = replayPersistedStreamEvents(
+        db,
+        streamSource,
+        lastSentSeq
+      );
       for (const event of persistedEvents) {
         send(event);
         if (ended) break;
@@ -776,19 +808,10 @@ function parsePositiveSeq(raw: string | null): number {
 
 function replayPersistedStreamEvents(
   db: Db,
-  streamId: string,
+  source: StreamEventSource,
   lastSeq: number
 ): SkillEvent[] {
-  const messageId = extractStreamMessageId(streamId);
-  if (!messageId) return [];
-  return getMessageStreamEvents(db, messageId).filter((event) => event.seq > lastSeq);
-}
-
-function extractStreamMessageId(streamId: string): number | null {
-  const match = /^stream-(\d+)-[A-Za-z0-9]+$/.exec(streamId);
-  if (!match) return null;
-  const messageId = Number(match[1]);
-  return Number.isInteger(messageId) && messageId > 0 ? messageId : null;
+  return getPersistedStreamEventsAfter(db, source, lastSeq);
 }
 
 function parsePositiveId(raw: string | string[] | undefined): number {

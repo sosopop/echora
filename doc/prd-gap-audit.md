@@ -9,16 +9,18 @@
 
 ## 剩余缺口
 
-1. **SSE 传输现代化与多副本恢复**（PRD §2.8 / §3.4 / §5.1）
-   - 现状: 前端已切到 `fetch + ReadableStream`,SSE 认证改为 `Authorization` 头,并支持 `Last-Event-ID` 重连。
-   - 缺口: 多副本场景下仍依赖进程内 `streamBus` + DB 轮询补回,尚未升级为 Redis Streams 或等价共享流。
-   - 价值: 继续降低对单进程内存的依赖,把断线恢复和部署弹性一起补齐。
-
-2. **Widget 样式目录拆分**（工程收尾项）
+1. **Widget 样式目录拆分**（工程收尾项）
    - 现状: widget 相关样式还集中在现有公共样式与少量模块里。
    - 缺口: 是否拆出 `src/styles/widgets/` 子目录仍未最终定案。
    - 价值: 提高 widget 体系后续扩展时的样式可维护性。
 
+## 已关闭缺口
+
+1. **SSE 传输现代化与多副本恢复**（PRD §2.8 / §3.4 / §5.1）
+   - 完成: 前端已切到 `fetch + ReadableStream`,SSE 认证使用 `Authorization` 头,重连使用 `Last-Event-ID`。
+   - 完成: 053 起后端明确以 `messages.stream_events` 作为跨实例权威事件源,`streamBus` 只保留为本进程低延迟快路径;SSE 会先校验 stream 所有权,再按 streamId + seq 回放和轮询补回。
+   - 说明: 本轮按产品决策不引入 Redis;高并发多副本可在 V2 评估 Redis Streams 或独立 append-only stream 表。
+
 ## 结论
 
-截至当前,PRD 的核心主干已经完成,剩余项主要集中在多副本流恢复和少量工程收尾。后续推进可以优先从 **进程间共享流** 和 **Widget 样式目录拆分** 继续。
+截至当前,PRD 的核心主干已经完成,剩余项只剩少量工程收尾。后续推进优先从 **Widget 样式目录拆分** 继续。

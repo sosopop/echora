@@ -22,7 +22,7 @@ getConfig
   → app.listen(port)
 ```
 
-`createApp` 装配 `/api/auth` `/api/profile` `/api/chat` 三组路由。chat router 的 deps 包含 provider,因为 skill handler 可在 ServerSkillContext 中拿到 provider 调 chat()。`/api/chat/stream` 采用 fetch + ReadableStream 的客户端读取方式,服务端仍返回 SSE 文本流;它先按 `Last-Event-ID` / `lastSeq` replay 内存 ring buffer,若对应 assistant 消息的 `stream_events` 已持久化且内存缓存不可用,会先从数据库回放已落盘事件,再通过轮询补回新写入事件,以覆盖多副本或内存丢失场景。
+`createApp` 装配 `/api/auth` `/api/profile` `/api/chat` 三组路由。chat router 的 deps 包含 provider,因为 skill handler 可在 ServerSkillContext 中拿到 provider 调 chat()。`/api/chat/stream` 采用 fetch + ReadableStream 的客户端读取方式,服务端仍返回 SSE 文本流;`server/services/streamEventSource.ts` 把 `messages.stream_events` 作为跨实例权威事件源,`streamBus` 只作为本进程低延迟快路径。SSE 打开前会校验 `stream-<assistantMessageId>-...` 指向的 assistant message 属于当前用户,随后先按 `Last-Event-ID` / `lastSeq` replay 已落盘事件,再订阅本进程 `streamBus` 并轮询数据库补回其他实例写入的新事件。
 
 042 起,`createApp` 会自动生成或透传 `traceId` 到 `req.traceId` 与 `X-Request-Id` 响应头,聊天流和错误响应可用同一请求标识串联排障。`agent_runs.payload` 也会持续写入 `traceId`、`finalSeq` 与 `textLength`,用于长流诊断。
 
@@ -68,4 +68,4 @@ getConfig
 
 ## Pending
 
-- 进程内 streamBus 升级到 Redis Streams(多副本部署需要)
+- 若未来要承载更高并发多副本部署,可评估把 `streamEventSource` 的权威事件源从 SQLite JSON array 升级为 Redis Streams 或独立 append-only stream 表。
