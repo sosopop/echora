@@ -88,7 +88,8 @@
 - 015 起批改后调用 `recordGradingLearningSignals`:根据 `corrections.tags` 写入 `error_tag_events`,并用错误 tag 或题型 fallback 更新 `mastery_records`。正确且无错误标签的题不会生成错误事件,但会更新对应题型掌握度。
 - 主线错题 retry:错答 `incrementRetry`;第 1 次错保持当前题可再次提交,第 2 次错 `markNeedsReview` 后立即调用 `retry` 的 `replacement` 模式生成同知识点降难替换题。替换题通过后 `grade` 自动回到 `practice`,主线根据 `countStageHandled` 继续同阶段下一题。替换题不计入 3 题专项重练额度。
 - 批改分档:021 起 `grade_answer` 输出 `category=exact/similar/incorrect`;`exact` 表示与参考表达完全匹配(忽略大小写、首尾空格、句末标点),`similar` 表示意思相近且语法可接受,`incorrect` 表示语法、拼写或意思不一致。`isCorrect` 仍保留给数据闭环,规则为 `exact/similar=true`,`incorrect=false`;百分制 `score` 只用于内部统计,前端批改卡不展示。
-- 阶段判断:本题为 `exact/similar` 后,若本阶段未完成会立即调用 `practice` 自动出下一题;若本阶段完成但未到阶段 4,自动进入下一阶段第一题;若 `countStagePassed >= STAGE_GOAL` 且 `stage >= MAX_STAGE_MVP(4)` → state-transition('awaiting_next')。阶段 4 答对时如存在下一句对方回应,会在批改后追加自然文本展示。
+- 阶段判断:本题为 `exact/similar` 后,若本阶段未完成会立即调用 `practice` 自动出下一题;若本阶段完成但未到阶段 4,自动进入下一阶段第一题;若 `countStagePassed >= STAGE_GOAL` 且 `stage >= MAX_STAGE_MVP(4)` → 先检查自动难度升降,再 state-transition('awaiting_next')。阶段 4 答对时如存在下一句对方回应,会在批改后追加自然文本展示。
+- 043 起,阶段 4 完成后调用 `server/services/difficultyAdaptation.ts`:最近 2 个完整场景都 1-4 阶段全题一次通过时,`user_profiles.level` 自动上调一档;最近 2 个完整场景在阶段 1-2 中多数题 `retry_count>=2` 或 `needs_review` 时,自动下调一档。完整场景要求每个主线阶段至少 `STAGE_GOAL=2` 道已处理题,避免半截数据误触发。
 
 ## review Skill(015 已真实接入)
 

@@ -35,6 +35,7 @@ import {
   buildQuestionFromTurn,
 } from './_helpers/practiceFsm.js';
 import { recordGradingLearningSignals } from '../services/learningSignals.js';
+import { maybeAdjustDifficultyAfterSceneCompletion } from '../services/difficultyAdaptation.js';
 import { practiceSkill } from './practice.js';
 import { retrySkill } from './retry.js';
 import { decodeAttemptPrompt } from '../services/attemptPrompt.js';
@@ -330,11 +331,23 @@ export const gradeSkill: Skill = {
     }
 
     if (stageComplete && attempt.stage >= MAX_STAGE_MVP) {
+      const autoDifficulty = maybeAdjustDifficultyAfterSceneCompletion(
+        ctx.db,
+        ctx.user.id
+      );
       // 整场 4 阶段完成
       yield {
         type: 'text-chunk',
         payload: { text: '本场景 4 个阶段练习完成!' },
       };
+      if (autoDifficulty) {
+        yield {
+          type: 'text-chunk',
+          payload: {
+            text: formatAutomaticDifficultyText(autoDifficulty),
+          },
+        };
+      }
       yield {
         type: 'state-transition',
         payload: { nextLearningState: 'awaiting_next', activeSkill: null },
@@ -366,3 +379,22 @@ export const gradeSkill: Skill = {
     yield { type: 'done', payload: {} };
   },
 };
+
+function formatAutomaticDifficultyText(input: {
+  reason: 'two_scene_first_pass' | 'two_scene_early_struggle';
+  adjustment: {
+    previousLevel: string;
+    nextLevel: string;
+    changed: boolean;
+  };
+}): string {
+  if (!input.adjustment.changed) {
+    return input.reason === 'two_scene_first_pass'
+      ? `你已经连续两个场景一次通过,但当前已经是 ${input.adjustment.previousLevel} 最高档附近,我会继续保持挑战。`
+      : `你连续两个场景前半段有点吃力,但当前已经是 ${input.adjustment.previousLevel} 最低档附近,我会继续用更慢的节奏带你练。`;
+  }
+  if (input.reason === 'two_scene_first_pass') {
+    return `你连续两个场景都很顺,我已把后续难度从 ${input.adjustment.previousLevel} 提高到 ${input.adjustment.nextLevel}。`;
+  }
+  return `你连续两个场景前半段有点吃力,我已把后续难度从 ${input.adjustment.previousLevel} 降低到 ${input.adjustment.nextLevel}。`;
+}

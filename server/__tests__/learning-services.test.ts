@@ -41,6 +41,15 @@ import {
   createGrading,
   getGradingByAttempt,
 } from '../services/gradingResult.js';
+import {
+  maybeAdjustDifficultyAfterSceneCompletion,
+  listRecentCompletedSceneOutcomes,
+} from '../services/difficultyAdaptation.js';
+import {
+  ensureProfile,
+  getProfile,
+  upsertProfile,
+} from '../services/profile.js';
 
 let db: Db;
 let tmpDir: string;
@@ -67,6 +76,54 @@ afterEach(() => {
     /* Windows lock */
   }
 });
+
+function seedSceneOutcome(
+  sceneId: string,
+  title: string,
+  kind: 'first-pass' | 'early-struggle'
+): void {
+  const conv = createConversation(db, userId, { learningState: 'awaiting_next' });
+  createSceneDialogue(db, {
+    userId,
+    conversationId: conv.id,
+    sceneId,
+    title,
+    difficulty: 'B1',
+    roles: ['A', 'B'],
+    turns: [
+      { role: 'A', en: 'Hello.', zh: '你好。' },
+      { role: 'B', en: 'Hi.', zh: '嗨。' },
+      { role: 'A', en: 'Thanks.', zh: '谢谢。' },
+      { role: 'B', en: 'Bye.', zh: '再见。' },
+    ],
+  });
+
+  for (const stage of [1, 2, 3, 4]) {
+    for (const questionNo of [1, 2]) {
+      const attempt = createAttempt(db, {
+        conversationId: conv.id,
+        sceneId,
+        stage,
+        questionNo,
+        questionType: stage === 1 ? 'fill_word' : 'sentence_translation',
+        prompt: `stage-${stage}-${questionNo}`,
+      });
+      if (kind === 'early-struggle' && stage <= 2) {
+        incrementRetry(db, attempt.id);
+        incrementRetry(db, attempt.id);
+        markNeedsReview(db, attempt.id);
+        continue;
+      }
+      createGrading(db, {
+        attemptId: attempt.id,
+        score: 92,
+        isCorrect: true,
+        corrections: { explanation: 'ok' },
+      });
+      markGraded(db, attempt.id);
+    }
+  }
+}
 
 describe('sceneDialogue service', () => {
   it('create + getActive 返回最新一条', () => {
@@ -130,6 +187,91 @@ describe('conversation service lock policy', () => {
     expect(archived?.learningState).toBe('archived');
     expect(archived?.lockPolicy).toBe('open');
     expect(archived?.archivedAt).toBeTruthy();
+  });
+});
+
+describe('difficultyAdaptation service', () => {
+  it('连续两个场景全主线题一次通过 → 自动提难', () => {
+    ensureProfile(db, userId);
+    upsertProfile(db, userId, { name: 'Test', level: 'B1' });
+    seedSceneOutcome('first-pass-1', '第一次顺利', 'first-pass');
+    seedSceneOutcome('first-pass-2', '第二次顺利', 'first-pass');
+
+    const result = maybeAdjustDifficultyAfterSceneCompletion(db, userId);
+
+    expect(result?.reason).toBe('two_scene_first_pass');
+    expect(result?.adjustment).toMatchObject({
+      previousLevel: 'B1',
+      nextLevel: 'B2',
+      changed: true,
+    });
+    expect(getProfile(db, userId)?.level).toBe('B2');
+  });
+
+  it('连续两个场景阶段 1-2 多数进入二次重试 → 自动降难', () => {
+    ensureProfile(db, userId);
+    upsertProfile(db, userId, { name: 'Test', level: 'B1' });
+    seedSceneOutcome('struggle-1', '第一次吃力', 'early-struggle');
+    seedSceneOutcome('struggle-2', '第二次吃力', 'early-struggle');
+
+    const result = maybeAdjustDifficultyAfterSceneCompletion(db, userId);
+
+    expect(result?.reason).toBe('two_scene_early_struggle');
+    expect(result?.adjustment).toMatchObject({
+      previousLevel: 'B1',
+      nextLevel: 'A2',
+      changed: true,
+    });
+    expect(getProfile(db, userId)?.level).toBe('A2');
+  });
+
+  it('最近两个已完成场景表现混合时不调整', () => {
+    ensureProfile(db, userId);
+    upsertProfile(db, userId, { name: 'Test', level: 'B1' });
+    seedSceneOutcome('first-pass', '顺利', 'first-pass');
+    seedSceneOutcome('struggle', '吃力', 'early-struggle');
+
+    const outcomes = listRecentCompletedSceneOutcomes(db, userId, 2);
+    const result = maybeAdjustDifficultyAfterSceneCompletion(db, userId);
+
+    expect(outcomes).toHaveLength(2);
+    expect(result).toBeNull();
+    expect(getProfile(db, userId)?.level).toBe('B1');
+  });
+
+  it('主线阶段题量不完整时不计入已完成场景', () => {
+    const conv = createConversation(db, userId, { learningState: 'awaiting_next' });
+    createSceneDialogue(db, {
+      userId,
+      conversationId: conv.id,
+      sceneId: 'partial-scene',
+      title: '半截练习',
+      difficulty: 'B1',
+      roles: ['A', 'B'],
+      turns: [
+        { role: 'A', en: 'Hello.', zh: '你好。' },
+        { role: 'B', en: 'Hi.', zh: '嗨。' },
+      ],
+    });
+    for (const stage of [1, 2, 3, 4]) {
+      const attempt = createAttempt(db, {
+        conversationId: conv.id,
+        sceneId: 'partial-scene',
+        stage,
+        questionNo: 1,
+        questionType: 'sentence_translation',
+        prompt: `partial-${stage}`,
+      });
+      createGrading(db, {
+        attemptId: attempt.id,
+        score: 90,
+        isCorrect: true,
+        corrections: { explanation: 'ok' },
+      });
+      markGraded(db, attempt.id);
+    }
+
+    expect(listRecentCompletedSceneOutcomes(db, userId, 2)).toHaveLength(0);
   });
 });
 

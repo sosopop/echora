@@ -82,6 +82,8 @@ type ChatAction =
 
 008 起,`practicing` 态下的自由文本会先检查当前会话最新 attempt:若最新题仍是 `pending/submitted`,或已 `graded` 但结果错误且 `retry_count < 2`,后端会把非控制指令文本规范化为 `submit-answer` action 并走 `grade`。010 起 answer 绑定只看当前活跃 `scene_dialogue.sceneId` 下的 latest attempt,避免换场景后误提交旧场景题目。`出题` / `开始练习` / `继续` / `下一题` / `go` / `next` 等继续指令在 `practicing` 中确定性映射为 `next-question`,`awaiting_next` / `scene_selecting` / `reviewing` 中映射为 `request-new-scenes`;012 起 `换场景` / `换一批` / `重新生成场景` 在 `practicing` 中也确定性映射为 `request-new-scenes`,避免绕回 AI Router 或被误判为答案。015 起,`awaiting_next` / `reviewing` 下的 `复盘` / `总结` / `学习报告` / `review` 会直接形成 `RouterDecision { skillName: 'review' }`,不新增 ChatAction。042 起,`scene_selecting` / `practicing` / `awaiting_next` / `reviewing` 下的 `太难` / `简单一点` / `too hard` / `easier` 会把用户画像 `level` 下调一档并路由到 `scene-select + request-new-scenes`;`太简单` / `难一点` / `too easy` / `harder` 会上调一档。`decision.params.difficultyFeedback` 携带 `{ direction, previousLevel, nextLevel, changed }`,供 `scene-select` 输出自然解释。
 
+043 起,阶段 4 达标后的 `grade` 流会在进入 `awaiting_next` 前自动评估最近 2 个完整场景表现并更新 `user_profiles.level`。该能力不新增 ChatAction、路由参数或 widget schema;若触发升/降级,只是在同一条 assistant 事件流中追加自然语言说明,客户端按普通 `text-chunk` 渲染即可。
+
 `review` 返回的 `progress-summary` widget 继续使用 `shared/widget.ts` 既有 schema。批改后服务端会把 `grading_results.corrections.tags` 写入 `error_tag_events`,并更新 `mastery_records`;正确且无 tag 的题不会写错误事件,但会以题型作为 fallback tag 更新掌握度。
 
 029 起,`progress-summary.data` 增加 `categoryCounts?: { exact; similar; incorrect }`;`averageScore` 继续保留为兼容字段,但正式前端组件优先展示三档分布,不再把平均分作为用户可见主指标。
