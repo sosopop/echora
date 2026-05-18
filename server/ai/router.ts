@@ -19,9 +19,16 @@ import type {
   LearningState,
 } from '../../shared/skill.js';
 import type { SkillRegistry } from '../skills/registry.js';
+import type { DebugContext } from './types.js';
+import { debugFromContext, sanitizeForDebugLog } from '../utils/debugLog.js';
+import type { DebugLogger } from '../utils/debugLog.js';
 
 export interface AIRouter {
-  decide(input: RouterInput, signal?: AbortSignal): Promise<RouterDecision>;
+  decide(
+    input: RouterInput,
+    signal?: AbortSignal,
+    debug?: DebugContext
+  ): Promise<RouterDecision>;
 }
 
 export class RouterValidationError extends Error {
@@ -36,16 +43,40 @@ export class RouterValidationError extends Error {
 
 export function createAIRouter(
   provider: AIProvider,
-  registry: SkillRegistry
+  registry: SkillRegistry,
+  logDebug?: DebugLogger
 ): AIRouter {
   return {
     async decide(
       input: RouterInput,
-      signal?: AbortSignal
+      signal?: AbortSignal,
+      debug?: DebugContext
     ): Promise<RouterDecision> {
       throwIfAborted(signal);
       // provider.route() 失败直接传播,不 catch
-      const decision = await provider.route(input, signal);
+      const startedAt = Date.now();
+      const context = debugFromContext(debug);
+      logDebug?.({
+        level: 'debug',
+        type: 'ai_provider_route_input',
+        ...context,
+        provider: provider.name,
+        input: sanitizeForDebugLog(input),
+      });
+      let decision: RouterDecision;
+      try {
+        decision = await provider.route(input, signal, debug);
+      } catch (e) {
+        logDebug?.({
+          level: 'error',
+          type: 'ai_provider_route_error',
+          ...context,
+          provider: provider.name,
+          durationMs: Date.now() - startedAt,
+          error: sanitizeForDebugLog(e),
+        });
+        throw e;
+      }
       throwIfAborted(signal);
 
       const skill = registry.get(decision.skillName);
@@ -63,6 +94,14 @@ export function createAIRouter(
         );
       }
 
+      logDebug?.({
+        level: 'debug',
+        type: 'ai_provider_route_output',
+        ...context,
+        provider: provider.name,
+        durationMs: Date.now() - startedAt,
+        decision: sanitizeForDebugLog(decision),
+      });
       return decision;
     },
   };

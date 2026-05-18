@@ -41,6 +41,52 @@ const baseInput: RouterInput = {
 };
 
 describe('createAIRouter — 无 fallback', () => {
+  it('记录 provider route 输入输出日志', async () => {
+    const entries: Array<Record<string, unknown>> = [];
+    const provider: AIProvider = {
+      name: 'mock',
+      async route() {
+        return {
+          skillName: 'onboarding',
+          params: { foo: 'bar' },
+          confidence: 0.9,
+          rationale: 'ok',
+        };
+      },
+    };
+    const registry = makeRegistry([onboardingSkill, generalChatSkill]);
+    const router = createAIRouter(provider, registry, (entry) => {
+      entries.push(entry);
+    });
+
+    await router.decide(baseInput, undefined, {
+      traceId: 'trace-ai-router',
+      userId: 7,
+      conversationId: 8,
+      messageId: 9,
+      phase: 'unit-test',
+    });
+
+    expect(entries.map((e) => e.type)).toEqual([
+      'ai_provider_route_input',
+      'ai_provider_route_output',
+    ]);
+    expect(entries[0]).toMatchObject({
+      traceId: 'trace-ai-router',
+      userId: 7,
+      conversationId: 8,
+      messageId: 9,
+      provider: 'mock',
+      phase: 'unit-test',
+    });
+    expect(entries[1]).toMatchObject({
+      decision: {
+        skillName: 'onboarding',
+        params: { foo: 'bar' },
+      },
+    });
+  });
+
   it('正常路径返回 provider decision', async () => {
     const ctrl = new AbortController();
     let capturedSignal: AbortSignal | undefined;

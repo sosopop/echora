@@ -45,6 +45,8 @@ const DEFAULT_TEST_CONFIG: Config = {
   port: 0,
   databasePath: '',
   jwtSecret: 'test-secret',
+  debugLogEnabled: false,
+  debugLogPath: '',
   aiProvider: 'stub',
   anthropicApiKey: null,
   anthropicBaseURL: 'https://api.anthropic.com',
@@ -71,6 +73,7 @@ export async function startTestApp(
   const config: Config = {
     ...DEFAULT_TEST_CONFIG,
     databasePath: dbPath,
+    debugLogPath: path.join(tmpDir, 'debug.log'),
     ...opts.configOverrides,
   };
 

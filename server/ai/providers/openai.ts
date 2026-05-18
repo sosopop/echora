@@ -18,6 +18,7 @@ import type {
   AIProvider,
   ChatRequest,
   ChatStreamEvent,
+  DebugContext,
 } from '../types.js';
 import type { RouterInput, RouterDecision } from '../../../shared/skill.js';
 import {
@@ -64,7 +65,8 @@ export class OpenAIProvider implements AIProvider {
 
   async route(
     input: RouterInput,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    _debug?: DebugContext
   ): Promise<RouterDecision> {
     const system = buildRouteSystemPrompt(input);
     const userMessage =

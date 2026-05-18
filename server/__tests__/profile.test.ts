@@ -21,11 +21,14 @@ import { createProvider } from '../ai/providers/index.js';
 import { createAIRouter } from '../ai/router.js';
 import { createApp } from '../createApp.js';
 import type { Config } from '../config/getConfig.js';
+import { signToken } from '../middleware/auth.js';
+import { ERROR_CODES } from '../../shared/errors.js';
 
 let app: Application;
 let db: Db;
 let tmpDir: string;
 let token: string;
+let config: Config;
 
 beforeAll(async () => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'echora-test-'));
@@ -34,10 +37,12 @@ beforeAll(async () => {
   migrate(db);
 
   const skillRegistry = await registerAllSkills();
-  const config: Config = {
+  config = {
     port: 0,
     databasePath: dbPath,
     jwtSecret: 'test-secret',
+    debugLogEnabled: false,
+    debugLogPath: path.join(tmpDir, 'debug.log'),
     aiProvider: 'stub',
     anthropicApiKey: null,
     anthropicBaseURL: 'https://api.anthropic.com',
@@ -86,6 +91,26 @@ describe('GET /api/profile', () => {
     const res = await request(app).get('/api/profile');
     expect(res.status).toBe(401);
   });
+
+  it('旧 token 指向不存在用户时返 401,不创建孤儿 profile', async () => {
+    const staleUserId = 99999;
+    const staleToken = signToken(
+      { id: staleUserId, email: 'ghost@test.com' },
+      config.jwtSecret
+    );
+
+    const res = await request(app)
+      .get('/api/profile')
+      .set('Authorization', `Bearer ${staleToken}`);
+
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe(ERROR_CODES.TOKEN_EXPIRED);
+    expect(res.body.error.message).toContain('用户不存在');
+    const profileRow = db
+      .prepare('SELECT * FROM user_profiles WHERE user_id = ?')
+      .get(staleUserId);
+    expect(profileRow).toBeUndefined();
+  });
 });
 
 describe('PUT /api/profile', () => {
@@ -130,5 +155,35 @@ describe('GET /api/auth/me', () => {
     expect(res.body.data.profile).not.toBeNull();
     expect(res.body.data.profile.name).toBe('小李');
     expect(res.body.data.onboardingCompleted).toBe(true);
+  });
+
+  it('旧 token 指向不存在用户时返 401', async () => {
+    const staleToken = signToken(
+      { id: 100000, email: 'ghost-me@test.com' },
+      config.jwtSecret
+    );
+
+    const res = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${staleToken}`);
+
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe(ERROR_CODES.TOKEN_EXPIRED);
+  });
+});
+
+describe('GET /api/chat/conversations', () => {
+  it('旧 token 指向不存在用户时返 401', async () => {
+    const staleToken = signToken(
+      { id: 100001, email: 'ghost-chat@test.com' },
+      config.jwtSecret
+    );
+
+    const res = await request(app)
+      .get('/api/chat/conversations')
+      .set('Authorization', `Bearer ${staleToken}`);
+
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe(ERROR_CODES.TOKEN_EXPIRED);
   });
 });

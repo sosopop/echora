@@ -4,11 +4,18 @@
 
 import type { ExerciseAttemptDTO } from '../../services/exerciseAttempt.js';
 import type { SceneDialogueDTO } from '../../../shared/api.js';
-import type { ToolDef, AIProvider, ChatStreamEvent } from '../../ai/types.js';
+import type {
+  ToolDef,
+  AIProvider,
+  ChatStreamEvent,
+  DebugContext,
+} from '../../ai/types.js';
 import type { GradingCorrections } from '../../services/gradingResult.js';
 import { buildQuestionFromTurn } from './practiceFsm.js';
 import type { StageGoalPlan } from '../../services/stageGoal.js';
 import { decodeAttemptPrompt } from '../../services/attemptPrompt.js';
+import { debugProviderChat } from '../../ai/debugChat.js';
+import type { DebugLogger } from '../../utils/debugLog.js';
 
 const ALLOWED_TAGS = [
   'spelling',
@@ -119,21 +126,28 @@ export async function runGrading(
   dialogue: SceneDialogueDTO | null,
   userAnswer: string,
   signal: AbortSignal,
-  stageGoalPlan?: StageGoalPlan
+  stageGoalPlan?: StageGoalPlan,
+  logDebug?: DebugLogger,
+  debug?: DebugContext
 ): Promise<GradeResult> {
   if (!provider.chat) {
     throw new Error('Provider does not support chat()');
   }
   const system = buildGradePrompt(attempt, dialogue, userAnswer, stageGoalPlan);
   let result: GradeResult | null = null;
-  for await (const ev of provider.chat({
-    system,
-    messages: [{ role: 'user', content: userAnswer }],
-    tools: [gradeAnswerTool],
-    toolChoice: { type: 'tool', name: 'grade_answer' },
-    maxTokens: 1024,
-    signal,
-  }) as AsyncIterable<ChatStreamEvent>) {
+  for await (const ev of debugProviderChat(
+    provider,
+    {
+      system,
+      messages: [{ role: 'user', content: userAnswer }],
+      tools: [gradeAnswerTool],
+      toolChoice: { type: 'tool', name: 'grade_answer' },
+      maxTokens: 1024,
+      signal,
+    },
+    logDebug,
+    { ...debug, phase: debug?.phase ?? 'grade' }
+  ) as AsyncIterable<ChatStreamEvent>) {
     if (signal.aborted) throwAbortError();
     if (ev.type === 'tool-use' && ev.toolName === 'grade_answer') {
       const input = ev.input as {

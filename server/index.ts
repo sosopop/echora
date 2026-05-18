@@ -18,12 +18,17 @@ import { registerAllSkills } from './skills/registry.js';
 import { createProvider } from './ai/providers/index.js';
 import { createAIRouter } from './ai/router.js';
 import { createApp } from './createApp.js';
+import { createDebugLogger } from './utils/debugLog.js';
 
 async function main(): Promise<void> {
   const config = getConfig();
+  const logDebug = createDebugLogger(config);
   console.log(`[server] NODE_ENV=${config.nodeEnv}`);
   console.log(`[server] DATABASE_PATH=${config.databasePath}`);
   console.log(`[server] AI_PROVIDER=${config.aiProvider}`);
+  console.log(
+    `[server] DEBUG_LOG=${config.debugLogEnabled ? config.debugLogPath : 'off'}`
+  );
 
   const db = connect(config.databasePath);
   const migration = migrate(db);
@@ -41,9 +46,9 @@ async function main(): Promise<void> {
   const provider = createProvider(config);
   console.log(`[server] AI Provider = ${provider.name}`);
 
-  const aiRouter = createAIRouter(provider, skillRegistry);
+  const aiRouter = createAIRouter(provider, skillRegistry, logDebug);
 
-  const app = createApp({ config, db, skillRegistry, aiRouter, provider });
+  const app = createApp({ config, db, skillRegistry, aiRouter, provider, logDebug });
 
   app.listen(config.port, () => {
     console.log(`[server] Listening on http://localhost:${config.port}`);

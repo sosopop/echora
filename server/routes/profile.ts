@@ -31,7 +31,7 @@ export interface ProfileRouterDeps {
 export function createProfileRouter(deps: ProfileRouterDeps): Router {
   const router = Router();
   const { db, config } = deps;
-  const auth = requireAuth(config);
+  const auth = requireAuth(config, db);
 
   router.get('/', auth, (req, res) => {
     const profile = ensureProfile(db, req.user!.id);

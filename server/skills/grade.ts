@@ -168,7 +168,19 @@ export const gradeSkill: Skill = {
         dialogue,
         answer,
         ctx.signal,
-        stageGoalPlan
+        stageGoalPlan,
+        ctx.logDebug,
+        {
+          traceId: ctx.traceId,
+          userId: ctx.user.id,
+          conversationId: ctx.conversationId,
+          messageId: ctx.messageId,
+          streamId: ctx.streamId,
+          runId: ctx.runId,
+          skillName: SKILL_NAMES.grade,
+          learningState: ctx.learningState,
+          phase: 'grade',
+        }
       );
     } catch (e) {
       if (ctx.signal.aborted || isAbortError(e)) {

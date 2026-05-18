@@ -21,6 +21,7 @@ import { SKILL_NAMES } from '../../shared/skill.js';
 import type { ServerSkillContext } from './types.js';
 import type { ProfileUpdateReq } from '../../shared/api.js';
 import type { ChatMessage } from '../ai/types.js';
+import { debugProviderChat } from '../ai/debugChat.js';
 import {
   ensureProfile,
   upsertProfile,
@@ -97,14 +98,29 @@ export const onboardingSkill: Skill = {
     // 4. 流式调用
     let collected: ProfileUpdateReq = {};
     try {
-      for await (const ev of ctx.provider.chat({
-        system,
-        messages,
-        tools: [updateProfileTool],
-        toolChoice: 'auto',
-        maxTokens: 1024,
-        signal: ctx.signal,
-      })) {
+      for await (const ev of debugProviderChat(
+        ctx.provider,
+        {
+          system,
+          messages,
+          tools: [updateProfileTool],
+          toolChoice: 'auto',
+          maxTokens: 1024,
+          signal: ctx.signal,
+        },
+        ctx.logDebug,
+        {
+          traceId: ctx.traceId,
+          userId: ctx.user.id,
+          conversationId: ctx.conversationId,
+          messageId: ctx.messageId,
+          streamId: ctx.streamId,
+          runId: ctx.runId,
+          skillName: SKILL_NAMES.onboarding,
+          learningState: ctx.learningState,
+          phase: 'onboarding',
+        }
+      )) {
         if (ctx.signal.aborted) break;
         if (ev.type === 'text-delta') {
           yield { type: 'text-chunk', payload: { text: ev.text } };

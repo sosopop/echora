@@ -3,7 +3,14 @@
  */
 
 import type { CefrLevel, ProfileDTO, SceneDialogueTurn } from '../../../shared/api.js';
-import type { ToolDef, AIProvider, ChatStreamEvent } from '../../ai/types.js';
+import type {
+  ToolDef,
+  AIProvider,
+  ChatStreamEvent,
+  DebugContext,
+} from '../../ai/types.js';
+import { debugProviderChat } from '../../ai/debugChat.js';
+import type { DebugLogger } from '../../utils/debugLog.js';
 
 export interface SceneCandidate {
   id: string;
@@ -105,21 +112,28 @@ export async function runScenePropose(
   profile: ProfileDTO,
   usedTopics: string[],
   count: number,
-  signal: AbortSignal
+  signal: AbortSignal,
+  logDebug?: DebugLogger,
+  debug?: DebugContext
 ): Promise<SceneCandidate[]> {
   if (!provider.chat) {
     throw new Error('Provider does not support chat()');
   }
   const system = buildProposeScenesPrompt(profile, usedTopics, count);
   let collected: SceneCandidate[] = [];
-  for await (const ev of provider.chat({
-    system,
-    messages: [{ role: 'user', content: '请生成场景候选' }],
-    tools: [proposeScenesTool],
-    toolChoice: { type: 'tool', name: 'propose_scenes' },
-    maxTokens: 4096,
-    signal,
-  }) as AsyncIterable<ChatStreamEvent>) {
+  for await (const ev of debugProviderChat(
+    provider,
+    {
+      system,
+      messages: [{ role: 'user', content: '请生成场景候选' }],
+      tools: [proposeScenesTool],
+      toolChoice: { type: 'tool', name: 'propose_scenes' },
+      maxTokens: 4096,
+      signal,
+    },
+    logDebug,
+    { ...debug, phase: debug?.phase ?? 'scene-propose' }
+  ) as AsyncIterable<ChatStreamEvent>) {
     if (signal.aborted) throwAbortError();
     if (ev.type === 'tool-use' && ev.toolName === 'propose_scenes') {
       const scenes = (ev.input as { scenes?: SceneCandidate[] }).scenes ?? [];
@@ -210,21 +224,28 @@ export async function runDialogueGeneration(
   provider: AIProvider,
   profile: ProfileDTO,
   scene: SceneCandidate,
-  signal: AbortSignal
+  signal: AbortSignal,
+  logDebug?: DebugLogger,
+  debug?: DebugContext
 ): Promise<{ roles: string[]; turns: SceneDialogueTurn[] }> {
   if (!provider.chat) {
     throw new Error('Provider does not support chat()');
   }
   const system = buildGenerateDialoguePrompt(scene, profile);
   let result: { roles: string[]; turns: SceneDialogueTurn[] } | null = null;
-  for await (const ev of provider.chat({
-    system,
-    messages: [{ role: 'user', content: `请生成「${scene.title}」场景对话` }],
-    tools: [generateDialogueTool],
-    toolChoice: { type: 'tool', name: 'generate_scene_dialogue' },
-    maxTokens: 4096,
-    signal,
-  }) as AsyncIterable<ChatStreamEvent>) {
+  for await (const ev of debugProviderChat(
+    provider,
+    {
+      system,
+      messages: [{ role: 'user', content: `请生成「${scene.title}」场景对话` }],
+      tools: [generateDialogueTool],
+      toolChoice: { type: 'tool', name: 'generate_scene_dialogue' },
+      maxTokens: 4096,
+      signal,
+    },
+    logDebug,
+    { ...debug, phase: debug?.phase ?? 'scene-dialogue' }
+  ) as AsyncIterable<ChatStreamEvent>) {
     if (signal.aborted) throwAbortError();
     if (ev.type === 'tool-use' && ev.toolName === 'generate_scene_dialogue') {
       const input = ev.input as { roles?: string[]; turns?: SceneDialogueTurn[] };

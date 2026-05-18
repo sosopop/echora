@@ -13,6 +13,7 @@ import type {
   AIProvider,
   ChatRequest,
   ChatStreamEvent,
+  DebugContext,
 } from '../types.js';
 import type {
   RouterInput,
@@ -62,7 +63,8 @@ export class AnthropicProvider implements AIProvider {
 
   async route(
     input: RouterInput,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    _debug?: DebugContext
   ): Promise<RouterDecision> {
     const system = buildRouteSystemPrompt(input);
     const userMessage = input.userText.trim().length > 0

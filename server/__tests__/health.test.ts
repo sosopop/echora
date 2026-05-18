@@ -32,6 +32,8 @@ beforeAll(async () => {
     port: 0,
     databasePath: dbPath,
     jwtSecret: 'test-secret',
+    debugLogEnabled: false,
+    debugLogPath: path.join(tmpDir, 'debug.log'),
     aiProvider: 'stub' as const,
     anthropicApiKey: null,
     anthropicBaseURL: 'https://api.anthropic.com',

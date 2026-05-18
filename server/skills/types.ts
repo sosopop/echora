@@ -12,8 +12,12 @@
 import type { SkillContext } from '../../shared/skill.js';
 import type { AIProvider } from '../ai/types.js';
 import type { Db } from '../db/connect.js';
+import type { DebugLogger } from '../utils/debugLog.js';
 
 export interface ServerSkillContext extends SkillContext {
   provider: AIProvider;
   db: Db;
+  logDebug?: DebugLogger;
+  traceId?: string;
+  runId?: string;
 }

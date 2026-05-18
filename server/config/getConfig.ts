@@ -17,6 +17,8 @@ export interface Config {
   port: number;
   databasePath: string;
   jwtSecret: string;
+  debugLogEnabled: boolean;
+  debugLogPath: string;
   aiProvider: AIProviderKind;
   anthropicApiKey: string | null;
   anthropicBaseURL: string;
@@ -32,6 +34,8 @@ const DEFAULTS: Config = {
   port: 8787,
   databasePath: './db/echora.db',
   jwtSecret: 'echora-dev-secret-change-me',
+  debugLogEnabled: false,
+  debugLogPath: './logs/server-debug.log',
   aiProvider: 'stub',
   anthropicApiKey: null,
   anthropicBaseURL: 'https://api.anthropic.com',
@@ -66,6 +70,15 @@ function asNumber(v: unknown): number | undefined {
   if (v === undefined || v === null || v === '') return undefined;
   const n = Number(v);
   return Number.isFinite(n) ? n : undefined;
+}
+
+function asBoolean(v: unknown): boolean | undefined {
+  if (v === undefined || v === null || v === '') return undefined;
+  if (typeof v === 'boolean') return v;
+  const normalized = String(v).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return undefined;
 }
 
 function asStringArray(v: unknown): string[] | undefined {
@@ -117,6 +130,18 @@ export function getConfig(opts?: { reload?: boolean }): Config {
   const jwtSecret =
     asString(pick(src, 'JWT_SECRET', 'jwtSecret')) ?? DEFAULTS.jwtSecret;
 
+  const nodeEnv =
+    asString(pick(src, 'NODE_ENV', 'nodeEnv')) ?? DEFAULTS.nodeEnv;
+
+  const debugLogEnabled =
+    asBoolean(pick(src, 'DEBUG_LOG_ENABLED', 'debugLogEnabled')) ??
+    nodeEnv === 'test';
+
+  const debugLogPathRaw =
+    asString(pick(src, 'DEBUG_LOG_PATH', 'debugLogPath')) ??
+    DEFAULTS.debugLogPath;
+  const debugLogPath = path.resolve(process.cwd(), debugLogPathRaw);
+
   const providerRaw =
     asString(pick(src, 'AI_PROVIDER', 'aiProvider'))?.toLowerCase() ??
     DEFAULTS.aiProvider;
@@ -153,9 +178,6 @@ export function getConfig(opts?: { reload?: boolean }): Config {
   const corsOrigin =
     asStringArray(pick(src, 'CORS_ORIGIN', 'corsOrigin')) ?? DEFAULTS.corsOrigin;
 
-  const nodeEnv =
-    asString(pick(src, 'NODE_ENV', 'nodeEnv')) ?? DEFAULTS.nodeEnv;
-
   // 生产环境默认密钥告警(不阻断启动)
   if (nodeEnv === 'production' && jwtSecret === DEFAULTS.jwtSecret) {
     console.warn(
@@ -179,6 +201,8 @@ export function getConfig(opts?: { reload?: boolean }): Config {
     port,
     databasePath,
     jwtSecret,
+    debugLogEnabled,
+    debugLogPath,
     aiProvider,
     anthropicApiKey,
     anthropicBaseURL,

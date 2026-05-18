@@ -102,7 +102,7 @@ export function createAuthRouter(deps: { db: Db; config: Config }): Router {
   });
 
   // —— 当前用户 ——————————————————————————————————————————————
-  router.get('/me', requireAuth(config), (req, res) => {
+  router.get('/me', requireAuth(config, db), (req, res) => {
     const user = req.user!;
     const profile = getProfile(db, user.id);
     const body: MeResp = {

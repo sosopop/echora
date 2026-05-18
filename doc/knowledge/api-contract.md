@@ -19,7 +19,7 @@
 
 `/me` 的 `onboardingCompleted` = `!!(profile.name && profile.level)`,前端 RouteGuard 用此字段决策是否跳转 onboarding。
 
-JWT 7 天过期,V1 无刷新令牌。密钥来自 `JWT_SECRET`。
+JWT 7 天过期,V1 无刷新令牌。密钥来自 `JWT_SECRET`。鉴权中间件除校验 JWT 签名/过期外,还会查询 `users.id`;若 token 指向的用户在当前数据库中不存在(例如本地重建 SQLite 后浏览器仍保留旧 token),统一返回 `401 TOKEN_EXPIRED`,前端应清空登录态并要求重新登录,业务路由不得继续执行或自动创建 profile。
 
 ### 用户画像(`server/routes/profile.ts`,002 新增)
 

@@ -9,6 +9,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { ERROR_CODES, type ErrorCode } from '../../shared/errors.js';
 import { getDevErrorDetails } from '../utils/devError.js';
+import type { DebugLogger } from '../utils/debugLog.js';
 
 export class HttpError extends Error {
   constructor(
@@ -34,6 +35,19 @@ export function errorHandler(
   const traceId = req.traceId;
 
   if (err instanceof ZodError) {
+    const logDebug = req.app.get('debugLogger') as DebugLogger | undefined;
+    logDebug?.({
+      level: 'error',
+      type: 'handled_error',
+      traceId,
+      method: req.method,
+      path: req.path,
+      statusCode: 400,
+      errorCode: ERROR_CODES.VALIDATION_FAILED,
+      errorName: 'ZodError',
+      errorMessage: '请求参数校验失败',
+      errorDetails: err.issues,
+    });
     res.status(400).json({
       error: {
         code: ERROR_CODES.VALIDATION_FAILED,
@@ -57,6 +71,20 @@ export function errorHandler(
             ...(debug ? { debug } : {}),
           }
         : undefined;
+    const logDebug = req.app.get('debugLogger') as DebugLogger | undefined;
+    logDebug?.({
+      level: err.status >= 500 ? 'error' : 'debug',
+      type: 'handled_error',
+      traceId,
+      method: req.method,
+      path: req.path,
+      statusCode: err.status,
+      errorCode: err.code,
+      errorName: err.name,
+      errorMessage: err.message,
+      errorDetails: err.details,
+      debug,
+    });
     res.status(err.status).json({
       error: {
         code: err.code,
@@ -69,6 +97,20 @@ export function errorHandler(
 
   console.error('[errorHandler] 未捕获错误', err);
   const details = getDevErrorDetails(err);
+  const logDebug = req.app.get('debugLogger') as DebugLogger | undefined;
+  logDebug?.({
+    level: 'error',
+    type: 'unhandled_error',
+    traceId,
+    method: req.method,
+    path: req.path,
+    statusCode: 500,
+    errorCode: ERROR_CODES.INTERNAL_ERROR,
+    errorName: err instanceof Error ? err.name : undefined,
+    errorMessage: err instanceof Error ? err.message : String(err),
+    errorStack: err instanceof Error ? err.stack : undefined,
+    debug: details,
+  });
   res.status(500).json({
     error: {
       code: ERROR_CODES.INTERNAL_ERROR,

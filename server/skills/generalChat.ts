@@ -5,6 +5,7 @@
 import type { Skill } from '../../shared/skill.js';
 import { SKILL_NAMES } from '../../shared/skill.js';
 import type { ServerSkillContext } from './types.js';
+import { debugProviderChat } from '../ai/debugChat.js';
 
 interface IntentConfirmParams {
   question?: string;
@@ -76,15 +77,29 @@ export const generalChatSkill: Skill = {
     if (userText && serverCtx.provider.chat) {
       let emitted = false;
       try {
-        for await (const ev of serverCtx.provider.chat({
-          system:
-            '你是 Echora 的英语学习教练。当前不是练习或批改锁定态,可以进行低风险闲聊。' +
-            '回复要简短、温和,优先把用户自然引导回英语场景练习、复盘或重练。' +
-            '不要声称已经执行系统动作;如果用户想练习,建议他说"开始练习"或"换场景"。',
-          messages: [{ role: 'user', content: userText }],
-          maxTokens: 500,
-          signal: serverCtx.signal,
-        })) {
+        for await (const ev of debugProviderChat(
+          serverCtx.provider,
+          {
+            system:
+              '你是 Echora 的英语学习教练。当前不是练习或批改锁定态,可以进行低风险闲聊。' +
+              '回复要简短、温和,优先把用户自然引导回英语场景练习、复盘或重练。' +
+              '不要声称已经执行系统动作;如果用户想练习,建议他说"开始练习"或"换场景"。',
+            messages: [{ role: 'user', content: userText }],
+            maxTokens: 500,
+            signal: serverCtx.signal,
+          },
+          serverCtx.logDebug,
+          {
+            traceId: serverCtx.traceId,
+            userId: serverCtx.user.id,
+            conversationId: serverCtx.conversationId,
+            messageId: serverCtx.messageId,
+            streamId: serverCtx.streamId,
+            skillName: SKILL_NAMES.generalChat,
+            learningState: serverCtx.learningState,
+            phase: 'general-chat',
+          }
+        )) {
           if (ev.type === 'text-delta' && ev.text) {
             emitted = true;
             yield { type: 'text-chunk', payload: { text: ev.text } };

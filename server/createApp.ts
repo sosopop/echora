@@ -16,6 +16,11 @@ import { createAuthRouter } from './routes/auth.js';
 import { createChatRouter } from './routes/chat.js';
 import { createProfileRouter } from './routes/profile.js';
 import { errorHandler } from './middleware/error.js';
+import {
+  createDebugLogger,
+  debugRequestLogger,
+  type DebugLogger,
+} from './utils/debugLog.js';
 
 export interface AppDeps {
   config: Config;
@@ -23,13 +28,17 @@ export interface AppDeps {
   skillRegistry: SkillRegistry;
   aiRouter: AIRouter;
   provider: AIProvider;
+  logDebug?: DebugLogger;
 }
 
 export function createApp(deps: AppDeps): Application {
   const app = express();
   const { config } = deps;
+  const debugLogger = deps.logDebug ?? createDebugLogger(config);
 
+  app.set('config', config);
   app.disable('x-powered-by');
+  app.set('debugLogger', debugLogger);
   app.use(
     cors({
       origin: config.corsOrigin,
@@ -46,6 +55,7 @@ export function createApp(deps: AppDeps): Application {
     res.setHeader('X-Request-Id', traceId);
     next();
   });
+  app.use(debugRequestLogger(config, debugLogger));
   app.use(express.json({ limit: '1mb' }));
 
   // —— Health ————————————————————————————————————————————
@@ -64,6 +74,7 @@ export function createApp(deps: AppDeps): Application {
       skillRegistry: deps.skillRegistry,
       aiRouter: deps.aiRouter,
       provider: deps.provider,
+      logDebug: debugLogger,
     })
   );
 

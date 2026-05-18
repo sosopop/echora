@@ -65,6 +65,8 @@ const config: Config = {
   port: 0,
   databasePath: ':memory:',
   jwtSecret: 'chat-route-test-secret',
+  debugLogEnabled: false,
+  debugLogPath: ':memory:',
   aiProvider: 'stub',
   anthropicApiKey: null,
   anthropicBaseURL: 'https://api.anthropic.com',

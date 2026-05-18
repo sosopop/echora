@@ -6,6 +6,7 @@
 
 import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import type { Db } from '../db/connect.js';
 import type { Config } from '../config/getConfig.js';
 import { ERROR_CODES } from '../../shared/errors.js';
 
@@ -31,6 +32,11 @@ interface JwtPayload {
   exp?: number;
 }
 
+interface UserRow {
+  id: number;
+  email: string;
+}
+
 export function signToken(user: AuthedUser, secret: string): string {
   return jwt.sign({ id: user.id, email: user.email }, secret, {
     expiresIn: '7d',
@@ -49,7 +55,7 @@ export function verifyToken(token: string, secret: string): AuthedUser | null {
   }
 }
 
-export function requireAuth(config: Config) {
+export function requireAuth(config: Config, db?: Db) {
   return function authMiddleware(
     req: Request,
     res: Response,
@@ -88,7 +94,24 @@ export function requireAuth(config: Config) {
       return;
     }
 
-    req.user = user;
+    if (db) {
+      const existing = db
+        .prepare<[number], UserRow>('SELECT id, email FROM users WHERE id = ?')
+        .get(user.id);
+      if (!existing) {
+        res.status(401).json({
+          error: {
+            code: ERROR_CODES.TOKEN_EXPIRED,
+            message: '访问令牌对应的用户不存在，请重新登录',
+            ...(req.traceId ? { details: { traceId: req.traceId } } : {}),
+          },
+        });
+        return;
+      }
+      req.user = { id: existing.id, email: existing.email };
+    } else {
+      req.user = user;
+    }
     next();
   };
 }

@@ -88,6 +88,10 @@ import {
 } from '../services/profile.js';
 import type { GradingResultDTO } from '../services/gradingResult.js';
 import type { ErrorTagEventDTO } from '../services/errorTagEvent.js';
+import type { DebugContext } from '../ai/types.js';
+import { debugProviderChat } from '../ai/debugChat.js';
+import type { DebugLogger } from '../utils/debugLog.js';
+import { sanitizeForDebugLog } from '../utils/debugLog.js';
 
 const chatActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('start-onboarding') }),
@@ -177,12 +181,13 @@ export interface ChatRouterDeps {
   skillRegistry: SkillRegistry;
   aiRouter: AIRouter;
   provider: AIProvider;
+  logDebug?: DebugLogger;
 }
 
 export function createChatRouter(deps: ChatRouterDeps): Router {
   const router = Router();
-  const { db, config, skillRegistry, aiRouter, provider } = deps;
-  const auth = requireAuth(config);
+  const { db, config, skillRegistry, aiRouter, provider, logDebug } = deps;
+  const auth = requireAuth(config, db);
 
   // —— 会话列表 ————————————————————————————————————————————
   router.get('/conversations', auth, (req, res) => {
@@ -330,7 +335,17 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
         source,
         shouldLockHistory(conv),
         branchHistory,
-        branchController.signal
+        branchController.signal,
+        logDebug,
+        {
+          traceId: req.traceId,
+          userId: req.user!.id,
+          conversationId: thread.conversationId,
+          messageId: body.sourceMessageId,
+          skillName: 'branch-follow-up',
+          learningState: conv.learningState,
+          phase: 'branch-follow-up',
+        }
       );
       if (branchController.signal.aborted) {
         return;
@@ -527,6 +542,23 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
         role: normalizedInput.userMessageRole ?? 'user',
         content: normalizedInput.userMessageContent,
       });
+      logDebug?.({
+        level: 'debug',
+        type: 'chat_send_user_message',
+        traceId: req.traceId,
+        userId,
+        conversationId: conv.id,
+        messageId: userMsg.id,
+        learningState: conv.learningState,
+        activeSkill: conv.activeSkill,
+        inputMode: conv.inputMode,
+        archivedConversationId,
+        userMessageType: normalizedInput.userMessageType ?? 'text',
+        userMessageRole: normalizedInput.userMessageRole ?? 'user',
+        userMessage: sanitizeForDebugLog(normalizedInput.userMessageContent),
+        normalizedInput: sanitizeForDebugLog(normalizedInput),
+        requestBody: sanitizeForDebugLog(req.body),
+      });
 
       // 3. 调度决策
       //    结构化 action 走确定性路由;自由文本才交给 AI Router。
@@ -544,7 +576,34 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
           availableSkills: skillRegistry.names(),
         };
         try {
-          decision = await aiRouter.decide(routerInput, sendController.signal);
+          logDebug?.({
+            level: 'debug',
+            type: 'ai_route_input',
+            traceId: req.traceId,
+            userId,
+            conversationId: conv.id,
+            messageId: userMsg.id,
+            learningState: conv.learningState,
+            input: sanitizeForDebugLog(routerInput),
+          });
+          decision = await aiRouter.decide(routerInput, sendController.signal, {
+            traceId: req.traceId,
+            userId,
+            conversationId: conv.id,
+            messageId: userMsg.id,
+            learningState: conv.learningState,
+            phase: 'chat-route',
+          });
+          logDebug?.({
+            level: 'debug',
+            type: 'ai_route_output',
+            traceId: req.traceId,
+            userId,
+            conversationId: conv.id,
+            messageId: userMsg.id,
+            learningState: conv.learningState,
+            decision: sanitizeForDebugLog(decision),
+          });
           decision = normalizeRouterDecision(
             conv,
             normalizedInput.text ?? '',
@@ -569,6 +628,19 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
           );
         }
       }
+      logDebug?.({
+        level: 'debug',
+        type: 'chat_route_decision',
+        traceId: req.traceId,
+        userId,
+        conversationId: conv.id,
+        messageId: userMsg.id,
+        learningState: conv.learningState,
+        activeSkill: conv.activeSkill,
+        inputMode: conv.inputMode,
+        decision: sanitizeForDebugLog(decision),
+        normalizedInput: sanitizeForDebugLog(normalizedInput),
+      });
       const skill = skillRegistry.get(decision.skillName);
       if (!skill) {
         throw new HttpError(
@@ -591,6 +663,18 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
         type: 'text',
         role: 'assistant',
         skillName: decision.skillName,
+      });
+      logDebug?.({
+        level: 'debug',
+        type: 'chat_assistant_message_created',
+        traceId: req.traceId,
+        userId,
+        conversationId: conv.id,
+        messageId: assistantMsg.id,
+        skillName: decision.skillName,
+        learningState: conv.learningState,
+        activeSkill: conv.activeSkill,
+        inputMode: conv.inputMode,
       });
 
       // 5. 记录 agent_run
@@ -625,6 +709,7 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
         messageId: assistantMsg.id,
         traceId,
         learningState: conv.learningState,
+        logDebug,
       });
 
       // 7. 同步返回
@@ -915,22 +1000,29 @@ async function buildBranchAssistantText(
   source: MessageDTO | null,
   hideSourceContent: boolean,
   branchHistory: MessageDTO[],
-  signal: AbortSignal
+  signal: AbortSignal,
+  logDebug?: DebugLogger,
+  debug?: DebugContext
 ): Promise<string> {
   if (provider.chat) {
     let text = '';
     try {
-      for await (const ev of provider.chat({
-        system: buildBranchSystemPrompt(hideSourceContent),
-        messages: buildBranchProviderMessages(
-          question,
-          source,
-          hideSourceContent,
-          branchHistory
-        ),
-        maxTokens: 700,
-        signal,
-      })) {
+      for await (const ev of debugProviderChat(
+        provider,
+        {
+          system: buildBranchSystemPrompt(hideSourceContent),
+          messages: buildBranchProviderMessages(
+            question,
+            source,
+            hideSourceContent,
+            branchHistory
+          ),
+          maxTokens: 700,
+          signal,
+        },
+        logDebug,
+        debug ?? { phase: 'branch-follow-up' }
+      )) {
         if (ev.type === 'text-delta' && ev.text) {
           text += ev.text;
         }
@@ -1698,6 +1790,7 @@ interface RunSkillArgs {
   conversationId: number;
   messageId: number;
   learningState: import('../../shared/skill.js').LearningState;
+  logDebug?: DebugLogger;
 }
 
 function runSkillInBackground(args: RunSkillArgs): void {
@@ -1714,6 +1807,7 @@ function runSkillInBackground(args: RunSkillArgs): void {
     conversationId,
     messageId,
     learningState,
+    logDebug,
   } = args;
 
   const startedAt = Date.now();
@@ -1745,6 +1839,9 @@ function runSkillInBackground(args: RunSkillArgs): void {
     signal: controller.signal,
     provider,
     db,
+    logDebug,
+    traceId,
+    runId,
     emit() {
       // 占位:Skill 通过 yield 产事件,emit 接口暂不使用
     },
@@ -1783,6 +1880,19 @@ function runSkillInBackground(args: RunSkillArgs): void {
     if (event.type === 'mode-switch') {
       try {
         updateInputMode(db, conversationId, event.payload.mode);
+        logDebug?.({
+          level: 'debug',
+          type: 'workflow_mode_switch',
+          traceId,
+          userId,
+          conversationId,
+          messageId,
+          streamId,
+          runId,
+          skillName: skill.name,
+          fromLearningState: learningState,
+          mode: event.payload.mode,
+        });
       } catch (e) {
         console.warn('[runSkill] updateInputMode 失败', e);
       }
@@ -1794,6 +1904,20 @@ function runSkillInBackground(args: RunSkillArgs): void {
           event.payload.nextLearningState,
           event.payload.activeSkill
         );
+        logDebug?.({
+          level: 'debug',
+          type: 'workflow_state_transition',
+          traceId,
+          userId,
+          conversationId,
+          messageId,
+          streamId,
+          runId,
+          skillName: skill.name,
+          fromLearningState: learningState,
+          nextLearningState: event.payload.nextLearningState,
+          nextActiveSkill: event.payload.activeSkill,
+        });
       } catch (e) {
         console.warn('[runSkill] updateLearningState 失败', e);
       }
@@ -1803,6 +1927,19 @@ function runSkillInBackground(args: RunSkillArgs): void {
   (async () => {
     let sawTerminal = false;
     try {
+      logDebug?.({
+        level: 'debug',
+        type: 'skill_run_started',
+        traceId,
+        userId,
+        conversationId,
+        messageId,
+        streamId,
+        runId,
+        skillName: skill.name,
+        learningState,
+        decision: sanitizeForDebugLog(decision),
+      });
       for await (const partial of skill.handler(ctx)) {
         if (activeRun.aborted || controller.signal.aborted) break;
         seq += 1;
@@ -1813,6 +1950,19 @@ function runSkillInBackground(args: RunSkillArgs): void {
           streamId,
           timestamp: Date.now(),
         } as SkillEvent;
+        logDebug?.({
+          level: fullEvent.type === 'error' ? 'error' : 'debug',
+          type: 'skill_event',
+          traceId,
+          userId,
+          conversationId,
+          messageId,
+          streamId,
+          runId,
+          skillName: skill.name,
+          learningState,
+          event: sanitizeForDebugLog(fullEvent),
+        });
 
         // 落盘
         try {
@@ -1856,6 +2006,20 @@ function runSkillInBackground(args: RunSkillArgs): void {
           streamId,
           timestamp: Date.now(),
         };
+        logDebug?.({
+          level: 'debug',
+          type: 'skill_event',
+          traceId,
+          userId,
+          conversationId,
+          messageId,
+          streamId,
+          runId,
+          skillName: skill.name,
+          learningState,
+          event: sanitizeForDebugLog(lastEvent),
+          autoInserted: true,
+        });
         try {
           appendStreamEvent(db, messageId, lastEvent);
         } catch {
@@ -1868,6 +2032,21 @@ function runSkillInBackground(args: RunSkillArgs): void {
       }
 
       markAgentRunStatus(db, runId, 'done', Date.now() - startedAt, null);
+      logDebug?.({
+        level: 'debug',
+        type: 'skill_run_finished',
+        traceId,
+        userId,
+        conversationId,
+        messageId,
+        streamId,
+        runId,
+        skillName: skill.name,
+        status: 'done',
+        latencyMs: Date.now() - startedAt,
+        finalSeq: activeRun.seq,
+        textLength: activeRun.textLength,
+      });
 
       // grade skill 003 已自身 yield state-transition,不再需要兼容分支
     } catch (err) {
@@ -1883,6 +2062,22 @@ function runSkillInBackground(args: RunSkillArgs): void {
         return;
       }
       const details = getDevErrorDetails(err);
+      logDebug?.({
+        level: 'error',
+        type: 'skill_run_failed',
+        traceId,
+        userId,
+        conversationId,
+        messageId,
+        streamId,
+        runId,
+        skillName: skill.name,
+        learningState,
+        errorName: err instanceof Error ? err.name : undefined,
+        errorMessage: err instanceof Error ? err.message : String(err),
+        errorStack: err instanceof Error ? err.stack : undefined,
+        debug: details,
+      });
       const errEvent: SkillEvent = {
         type: 'error',
         payload: {
@@ -1895,6 +2090,19 @@ function runSkillInBackground(args: RunSkillArgs): void {
         timestamp: Date.now(),
       };
       activeRun.seq = errEvent.seq;
+      logDebug?.({
+        level: 'error',
+        type: 'skill_event',
+        traceId,
+        userId,
+        conversationId,
+        messageId,
+        streamId,
+        runId,
+        skillName: skill.name,
+        learningState,
+        event: sanitizeForDebugLog(errEvent),
+      });
       try {
         appendStreamEvent(db, messageId, errEvent);
       } catch {
@@ -1919,6 +2127,19 @@ function runSkillInBackground(args: RunSkillArgs): void {
     }
   })().catch((e) => {
     console.error('[runSkill] 后台任务崩溃', e);
+    logDebug?.({
+      level: 'error',
+      type: 'skill_run_crashed',
+      traceId,
+      userId,
+      conversationId,
+      messageId,
+      streamId,
+      runId,
+      skillName: skill.name,
+      learningState,
+      error: sanitizeForDebugLog(e),
+    });
   });
 }
 

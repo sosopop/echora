@@ -7,6 +7,18 @@
 
 import type { RouterInput, RouterDecision } from '../../shared/skill.js';
 
+export interface DebugContext {
+  traceId?: string;
+  userId?: number;
+  conversationId?: number;
+  messageId?: number;
+  streamId?: string;
+  runId?: string;
+  skillName?: string;
+  learningState?: string;
+  phase?: string;
+}
+
 /* ============================================================
  * Chat 多轮对话契约
  * ========================================================== */
@@ -29,11 +41,13 @@ export interface ChatRequest {
   toolChoice?: 'auto' | { type: 'tool'; name: string };
   maxTokens?: number;
   signal: AbortSignal;
+  debug?: DebugContext;
 }
 
 export interface RouteRequest {
   input: RouterInput;
   signal: AbortSignal;
+  debug?: DebugContext;
 }
 
 export type ChatStreamEvent =
@@ -50,7 +64,11 @@ export interface AIProvider {
   /**
    * 路由决策:根据用户输入与上下文,选择 Skill 并给出参数。
    */
-  route(input: RouterInput, signal?: AbortSignal): Promise<RouterDecision>;
+  route(
+    input: RouterInput,
+    signal?: AbortSignal,
+    debug?: DebugContext
+  ): Promise<RouterDecision>;
 
   /**
    * 多轮 chat 流式调用(可选)。

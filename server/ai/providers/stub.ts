@@ -10,7 +10,7 @@ import type {
   RouterInput,
   RouterDecision,
 } from '../../../shared/skill.js';
-import type { ChatRequest, ChatStreamEvent } from '../types.js';
+import type { ChatRequest, ChatStreamEvent, DebugContext } from '../types.js';
 import { SKILL_NAMES } from '../../../shared/skill.js';
 
 export class StubProvider implements AIProvider {
@@ -18,7 +18,8 @@ export class StubProvider implements AIProvider {
 
   async route(
     _input: RouterInput,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    _debug?: DebugContext
   ): Promise<RouterDecision> {
     throwIfAborted(signal);
     return {

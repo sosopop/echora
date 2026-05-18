@@ -71,7 +71,19 @@ export const sceneSelectSkill: Skill = {
           ctx.provider,
           profile,
           scene,
-          ctx.signal
+          ctx.signal,
+          ctx.logDebug,
+          {
+            traceId: ctx.traceId,
+            userId: ctx.user.id,
+            conversationId: ctx.conversationId,
+            messageId: ctx.messageId,
+            streamId: ctx.streamId,
+            runId: ctx.runId,
+            skillName: SKILL_NAMES.sceneSelect,
+            learningState: ctx.learningState,
+            phase: 'scene-dialogue',
+          }
         );
         createSceneDialogue(ctx.db, {
           userId: ctx.user.id,
@@ -155,7 +167,19 @@ export const sceneSelectSkill: Skill = {
         profile,
         used,
         PROPOSE_COUNT,
-        ctx.signal
+        ctx.signal,
+        ctx.logDebug,
+        {
+          traceId: ctx.traceId,
+          userId: ctx.user.id,
+          conversationId: ctx.conversationId,
+          messageId: ctx.messageId,
+          streamId: ctx.streamId,
+          runId: ctx.runId,
+          skillName: SKILL_NAMES.sceneSelect,
+          learningState: ctx.learningState,
+          phase: 'scene-propose',
+        }
       );
     } catch (e) {
       if (ctx.signal.aborted || isAbortError(e)) {
