@@ -309,6 +309,43 @@ describe('chat store streaming', () => {
     });
   });
 
+  it('start-onboarding action creates a system kickoff instead of visible user hi', async () => {
+    mocks.send.mockResolvedValue({
+      conversationId: 10,
+      userMessageId: 211,
+      assistantMessageId: 212,
+      streamId: 'stream-onboarding',
+      decision: {
+        skillName: 'onboarding',
+        params: { action: { type: 'start-onboarding' } },
+        confidence: 1,
+        rationale: 'test',
+      },
+    });
+    mocks.openStream.mockImplementation((_streamId, opts) => {
+      opts.onEvent(event('text-chunk', { text: '先告诉我你的名字吧。' }, 1));
+      opts.onEvent(event('done', {}, 2));
+      opts.onDone();
+      return { close: vi.fn() };
+    });
+
+    await useChatStore.getState().sendAction({ type: 'start-onboarding' });
+
+    expect(mocks.send).toHaveBeenCalledWith({
+      action: { type: 'start-onboarding' },
+    });
+    const state = useChatStore.getState();
+    expect(state.messages.find((m) => m.role === 'system')).toMatchObject({
+      id: 211,
+      type: 'system',
+      content: '开始画像采集',
+    });
+    expect(state.messages.find((m) => m.role === 'user')).toBeUndefined();
+    expect(state.messages.find((m) => m.id === 212)?.content).toBe(
+      '先告诉我你的名字吧。'
+    );
+  });
+
   it('state-transition 后刷新会话列表,同步历史栏标题和状态', async () => {
     useLearningStateStore.setState({ state: 'scene_selecting' });
     mocks.listConversations.mockResolvedValue([

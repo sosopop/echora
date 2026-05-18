@@ -6,7 +6,7 @@
  * 挂载时:
  *   - 若没有 onboarding 状态会话 → createConversation({ learningState: 'onboarding' })
  *   - 选中该会话
- *   - 若该会话无消息 → 自动 sendMessage('hi') 触发 onboarding skill 第一句
+ *   - 若该会话无消息 → 自动 sendAction({ type: 'start-onboarding' }) 触发 onboarding skill 第一句
  *
  * 注意:严格 mount 一次(useRef 标记防 StrictMode 重复触发)
  */
@@ -52,7 +52,7 @@ export default function Onboarding(): JSX.Element {
       await useChatStore.getState().selectConversation(conv.id);
       const msgs = useChatStore.getState().messages;
       if (msgs.length === 0) {
-        await useChatStore.getState().sendMessage('hi');
+        await useChatStore.getState().sendAction({ type: 'start-onboarding' });
       }
     })();
   }, []);

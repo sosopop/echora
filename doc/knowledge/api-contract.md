@@ -62,6 +62,7 @@ POST `/api/chat/send` body(003 起 text 与 action 二选一):
 }
 
 type ChatAction =
+  | { type: 'start-onboarding' }
   | {
       type: 'select-scene';
       payload: {
@@ -80,6 +81,8 @@ type ChatAction =
 ```
 
 `action` 与 `text` 二选一,zod refine 校验。前端 widget 交互(点击场景卡片、提交答案、下一题等)统一走 `action` 路径。007 起 action 不再交给 AI Router,而是由后端确定性映射到 Skill:`request-new-scenes` / `select-scene` → `scene-select`,`submit-answer` → `grade`,`next-question` / `skip-question` → `practice`;随后仍校验目标 Skill 是否允许当前 `learningState`。
+
+`start-onboarding` 为 onboarding 页面的内部启动动作,仅用于首次进入 `/onboarding` 时触发 onboarding skill 第一轮采集。服务端会将该启动消息按 `system` 角色落库,前端不展示为普通用户气泡。onboarding 状态下的自由文本也会确定性路由到 `onboarding`,不经过 AI Router 或 `general-chat` 兜底。
 
 046 起,`POST /api/chat/send` 响应可能包含 `archivedConversationId?: number`。当当前 active 会话处于 `awaiting_next` 或 `reviewing`,且用户选择继续下一轮/换场景(`request-new-scenes`)时,后端会先归档当前会话,再新建一个 `scene_selecting` 会话执行本次请求;响应中的 `conversationId` 是新会话 id,`archivedConversationId` 是刚归档的旧会话 id。前端收到不同 `conversationId` 时切换当前消息列表,清空旧 active widgets/支线状态,并刷新历史会话列表。
 

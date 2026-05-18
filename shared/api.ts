@@ -112,6 +112,7 @@ export interface MessageDTO {
  * 与 ChatSendReq.text 二选一(由 zod refine 保证)。
  */
 export type ChatAction =
+  | { type: 'start-onboarding' }
   | {
       type: 'select-scene';
       payload: {
@@ -131,6 +132,8 @@ export type ChatAction =
 export function describeChatAction(action: ChatAction | undefined): string {
   if (!action) return '执行操作';
   switch (action.type) {
+    case 'start-onboarding':
+      return '开始画像采集';
     case 'select-scene':
       return `选择场景:${action.payload.title ?? action.payload.sceneId}`;
     case 'request-new-scenes':

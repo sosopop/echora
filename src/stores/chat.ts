@@ -375,6 +375,8 @@ async function sendInternal(
   }
   const conversationId = get().currentConversationId ?? undefined;
   const optimisticContent = getUserMessageContent(body);
+  const optimisticRole = getUserMessageRole(body);
+  const optimisticType = optimisticRole === 'system' ? 'system' : 'text';
   const optimisticConversationId = conversationId ?? 0;
   const optimisticUserId = nextOptimisticId();
   const optimisticAssistantId = nextOptimisticId();
@@ -382,8 +384,8 @@ async function sendInternal(
     id: optimisticUserId,
     conversationId: optimisticConversationId,
     branchThreadId: null,
-    type: 'text',
-    role: 'user',
+    type: optimisticType,
+    role: optimisticRole,
     skillName: null,
     content: optimisticContent,
     widgetSnapshot: null,
@@ -509,6 +511,12 @@ function getUserMessageContent(
     return body.action.payload.answer;
   }
   return describeChatAction(body.action);
+}
+
+function getUserMessageRole(
+  body: Pick<ChatSendReq, 'text' | 'action'>
+): 'user' | 'system' {
+  return body.action?.type === 'start-onboarding' ? 'system' : 'user';
 }
 
 function handleStreamEvent(

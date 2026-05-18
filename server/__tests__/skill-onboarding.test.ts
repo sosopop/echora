@@ -162,6 +162,29 @@ describe('onboarding skill', () => {
     expect(events[0].type).toBe('error');
   });
 
+  it('stub provider uses deterministic onboarding prompt instead of smalltalk', async () => {
+    const provider: AIProvider = {
+      name: 'stub',
+      async route() {
+        throw new Error('not used');
+      },
+      async *chat(): AsyncIterable<ChatStreamEvent> {
+        throw new Error('stub chat should not be called by onboarding');
+      },
+    };
+
+    const events = await collect(onboardingSkill, makeCtx(provider));
+    const text = events
+      .filter((event) => event.type === 'text-chunk')
+      .map((event) => (event as { payload: { text: string } }).payload.text)
+      .join('');
+
+    expect(text).toContain('Echo');
+    expect(text).toContain('称呼');
+    expect(text).not.toContain('复盘');
+    expect(text).not.toContain('换个新场景');
+  });
+
   it('signal abort 后立即中断', async () => {
     const ctrl = new AbortController();
     const provider: AIProvider = {

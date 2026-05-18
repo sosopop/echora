@@ -90,6 +90,7 @@ import type { GradingResultDTO } from '../services/gradingResult.js';
 import type { ErrorTagEventDTO } from '../services/errorTagEvent.js';
 
 const chatActionSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('start-onboarding') }),
   z.object({
     type: z.literal('select-scene'),
     payload: z.object({
@@ -522,8 +523,8 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
       //    text 直接落 content;action 落自然文案;submit-answer 落用户真实答案。
       const userMsg = appendMessage(db, {
         conversationId: conv.id,
-        type: 'text',
-        role: 'user',
+        type: normalizedInput.userMessageType ?? 'text',
+        role: normalizedInput.userMessageRole ?? 'user',
         content: normalizedInput.userMessageContent,
       });
 
@@ -1150,6 +1151,8 @@ interface NormalizedChatSendInput {
   action?: ChatAction;
   decision?: RouterDecision;
   userMessageContent: string;
+  userMessageType?: 'text' | 'system';
+  userMessageRole?: 'user' | 'system';
 }
 
 function normalizeChatSendInput(
@@ -1162,10 +1165,21 @@ function normalizeChatSendInput(
     return {
       action: body.action,
       userMessageContent: describeUserMessageForAction(body.action),
+      userMessageType: body.action.type === 'start-onboarding' ? 'system' : 'text',
+      userMessageRole: body.action.type === 'start-onboarding' ? 'system' : 'user',
     };
   }
 
   const text = body.text?.trim() ?? '';
+  const onboardingDecision = createTextOnboardingDecision(conv, text);
+  if (onboardingDecision) {
+    return {
+      text,
+      decision: onboardingDecision,
+      userMessageContent: text,
+    };
+  }
+
   const reviewDecision = createTextReviewDecision(conv, text);
   if (reviewDecision) {
     return {
@@ -1280,6 +1294,19 @@ function describeUserMessageForAction(action: ChatAction): string {
   return action.type === 'submit-answer'
     ? action.payload.answer
     : describeChatAction(action);
+}
+
+function createTextOnboardingDecision(
+  conv: ConversationDTO,
+  text: string
+): RouterDecision | null {
+  if (conv.learningState !== 'onboarding' || !text) return null;
+  return {
+    skillName: 'onboarding',
+    params: { userText: text },
+    confidence: 1,
+    rationale: 'deterministic text route:onboarding',
+  };
 }
 
 function createTextReviewDecision(
@@ -1520,7 +1547,9 @@ function createActionDecision(
   conv?: ConversationDTO
 ): RouterDecision {
   const skillName =
-    action.type === 'request-new-scenes' || action.type === 'select-scene'
+    action.type === 'start-onboarding'
+      ? 'onboarding'
+      : action.type === 'request-new-scenes' || action.type === 'select-scene'
       ? 'scene-select'
       : action.type === 'next-question' && conv?.activeSkill === 'retry'
       ? 'retry'

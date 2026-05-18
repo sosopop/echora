@@ -113,6 +113,7 @@ beforeEach(() => {
   skillHandlerOverrides = new Map();
 
   const skillRegistry = new SkillRegistry();
+  skillRegistry.register(fakeSkill('onboarding', ['onboarding']));
   skillRegistry.register(fakeSkill('grade', ['practicing', 'grading']));
   skillRegistry.register(
     fakeSkill('practice', ['scene_selecting', 'practicing', 'awaiting_next'])
@@ -1221,6 +1222,52 @@ describe('POST /api/chat/send', () => {
       params: { source: 'deterministic-text' },
     });
     expect(decideCalls).toHaveLength(0);
+  });
+
+  it('onboarding text routes directly to onboarding skill without AI Router', async () => {
+    updateLearningState(db, conversationId, 'onboarding', null);
+
+    const res = await request(app)
+      .post('/api/chat/send')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ conversationId, text: 'hi' });
+
+    expect(res.status).toBe(202);
+    expect(res.body.data.decision).toMatchObject({
+      skillName: 'onboarding',
+      params: { userText: 'hi' },
+    });
+    expect(decideCalls).toHaveLength(0);
+    const messages = getMessages(db, conversationId);
+    expect(messages.find((m) => m.role === 'user')?.content).toBe('hi');
+    expect(messages.find((m) => m.role === 'assistant')?.skillName).toBe(
+      'onboarding'
+    );
+  });
+
+  it('start-onboarding action is stored as system kickoff and runs onboarding', async () => {
+    updateLearningState(db, conversationId, 'onboarding', null);
+
+    const res = await request(app)
+      .post('/api/chat/send')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ conversationId, action: { type: 'start-onboarding' } });
+
+    expect(res.status).toBe(202);
+    expect(res.body.data.decision).toMatchObject({
+      skillName: 'onboarding',
+      params: { action: { type: 'start-onboarding' } },
+    });
+    expect(decideCalls).toHaveLength(0);
+    const messages = getMessages(db, conversationId);
+    expect(messages.find((m) => m.role === 'system')).toMatchObject({
+      type: 'system',
+      content: '开始画像采集',
+    });
+    expect(messages.find((m) => m.role === 'user')).toBeUndefined();
+    expect(messages.find((m) => m.role === 'assistant')?.skillName).toBe(
+      'onboarding'
+    );
   });
 
   it('activeSkill=retry 时 next-question 继续走 retry', async () => {

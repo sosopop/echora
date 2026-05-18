@@ -71,6 +71,15 @@ export const onboardingSkill: Skill = {
       return;
     }
 
+    if (ctx.provider.name === 'stub') {
+      yield {
+        type: 'text-chunk',
+        payload: { text: buildStubOnboardingReply(promptMissing) },
+      };
+      yield { type: 'done', payload: {} };
+      return;
+    }
+
     // 3. 拼 system + 历史消息
     const system = buildSystemPrompt(profile, promptMissing);
     const history = getMessages(ctx.db, ctx.conversationId)
@@ -160,6 +169,22 @@ function mergeProfileFields(
     next.level = raw.level as ProfileUpdateReq['level'];
   }
   return next;
+}
+
+function buildStubOnboardingReply(
+  missing: ReturnType<typeof decidePromptMissingFields>
+): string {
+  const next = missing[0];
+  if (next === 'name') {
+    return '在的，我是 Echo。先告诉我怎么称呼你吧。';
+  }
+  if (next === 'grade') {
+    return '收到。你现在是几年级，或者在读/在职的阶段是什么？不想说也可以跳过。';
+  }
+  if (next === 'level') {
+    return '最后确认一下你的英语水平：A1/A2/B1/B2/C1/C2，或者直接说“初学”“四级左右”“能流畅交流”也行。';
+  }
+  return '画像信息已经够用了，我准备给你推荐合适的练习场景。';
 }
 
 function isAbortError(err: unknown): boolean {
