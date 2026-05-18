@@ -7,6 +7,7 @@ import type { SceneDialogueDTO } from '../../../shared/api.js';
 import type { ToolDef, AIProvider, ChatStreamEvent } from '../../ai/types.js';
 import type { GradingCorrections } from '../../services/gradingResult.js';
 import { buildQuestionFromTurn } from './practiceFsm.js';
+import type { StageGoalPlan } from '../../services/stageGoal.js';
 import { decodeAttemptPrompt } from '../../services/attemptPrompt.js';
 
 const ALLOWED_TAGS = [
@@ -59,14 +60,20 @@ export const gradeAnswerTool: ToolDef = {
 export function buildGradePrompt(
   attempt: ExerciseAttemptDTO,
   dialogue: SceneDialogueDTO | null,
-  userAnswer: string
+  userAnswer: string,
+  stageGoalPlan?: StageGoalPlan
 ): string {
   const ctxLine = dialogue
     ? `场景:${dialogue.title} (${dialogue.difficulty}) · 角色:${dialogue.roles.join(' / ')}`
     : '(场景上下文缺失)';
   const promptInfo = decodeAttemptPrompt(attempt.prompt);
   const reference = promptInfo.referenceAnswer ?? (dialogue
-    ? buildQuestionFromTurn(dialogue, attempt.stage, attempt.questionNo)
+    ? buildQuestionFromTurn(
+        dialogue,
+        attempt.stage,
+        attempt.questionNo,
+        stageGoalPlan
+      )
         ?.referenceAnswer
     : null);
   return [
@@ -111,12 +118,13 @@ export async function runGrading(
   attempt: ExerciseAttemptDTO,
   dialogue: SceneDialogueDTO | null,
   userAnswer: string,
-  signal: AbortSignal
+  signal: AbortSignal,
+  stageGoalPlan?: StageGoalPlan
 ): Promise<GradeResult> {
   if (!provider.chat) {
     throw new Error('Provider does not support chat()');
   }
-  const system = buildGradePrompt(attempt, dialogue, userAnswer);
+  const system = buildGradePrompt(attempt, dialogue, userAnswer, stageGoalPlan);
   let result: GradeResult | null = null;
   for await (const ev of provider.chat({
     system,

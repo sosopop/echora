@@ -7,14 +7,20 @@
  *   3. 对话接龙(dialogue_chain):给上一句英文,要求用户接下一句
  *   4. 角色互换(role_reversal):用户扮演指定角色主动说一句
  *
- * 每阶段出 2 题,通过 countStagePassed 推进。
+ * 阶段题量按用户等级确定,总计保持在 PRD §2.6 的 5-10 题范围。
  */
 
 import type { Db } from '../../db/connect.js';
 import type { SceneDialogueDTO } from '../../../shared/api.js';
 import { countStageHandled } from '../../services/exerciseAttempt.js';
+import {
+  type StageGoalPlan,
+  DEFAULT_STAGE_GOAL_PLAN,
+  getStageGoalFromPlan,
+  LEGACY_STAGE_GOAL,
+} from '../../services/stageGoal.js';
 
-export const STAGE_GOAL = 2; // 每阶段 2 题,整场 8 题
+export const STAGE_GOAL = LEGACY_STAGE_GOAL; // 兼容旧测试和文档引用;运行时请使用 getStageGoal
 export const MAX_STAGE_MVP = 4;
 
 export interface NextQuestion {
@@ -27,18 +33,20 @@ export interface NextQuestion {
 /**
  * 根据当前 attempts 推断下一题应是哪个阶段、第几题。
  * 规则:
- *   - 从阶段 1 起:countStageHandled(stage) 达到 STAGE_GOAL → 进下一阶段
+ *   - 从阶段 1 起:countStageHandled(stage) 达到动态 stageGoal → 进下一阶段
  *   - 阶段内题号由"已处理数量 + 1"决定,避免未答/错题/重复点击把题号推到模板之外
  *   - needs_review 算已处理,避免同题 2 次失败后被永久卡住
  */
 export function decideNextQuestion(
   db: Db,
   conversationId: number,
+  stageGoalPlan: StageGoalPlan,
   sceneId?: string | null
 ): NextQuestion {
   for (let stage = 1; stage <= MAX_STAGE_MVP; stage++) {
     const handled = countStageHandled(db, conversationId, stage, sceneId);
-    if (handled < STAGE_GOAL) {
+    const stageGoal = getStageGoalFromPlan(stageGoalPlan, stage);
+    if (handled < stageGoal) {
       return { stage, questionNo: handled + 1 };
     }
   }
@@ -179,10 +187,11 @@ function lastAdjacentPair(
 
 function dialogueChainPair(
   turns: SceneDialogueDTO['turns'],
-  questionNo: number
+  questionNo: number,
+  stageGoalPlan: StageGoalPlan
 ): [{ role: string; en: string; zh: string }, { role: string; en: string; zh: string }] | null {
   if (turns.length < 2) return null;
-  const targetIdx = 2 * STAGE_GOAL + (questionNo - 1);
+  const targetIdx = stageGoalPlan[1] + stageGoalPlan[2] + (questionNo - 1);
   if (targetIdx < turns.length) {
     return [turns[Math.max(0, targetIdx - 1)], turns[targetIdx]];
   }
@@ -207,10 +216,11 @@ function roleReversalTarget(
 export function buildQuestionFromTurn(
   dialogue: SceneDialogueDTO,
   stage: number,
-  questionNo: number
+  questionNo: number,
+  stageGoalPlan: StageGoalPlan = DEFAULT_STAGE_GOAL_PLAN
 ): BuiltQuestion | null {
   if (stage === 1 || stage === 2) {
-    const baseIdx = stage === 1 ? 0 : STAGE_GOAL;
+    const baseIdx = stage === 1 ? 0 : stageGoalPlan[1];
     const turnIdx = baseIdx + (questionNo - 1);
     if (turnIdx >= dialogue.turns.length) return null;
     const turn = dialogue.turns[turnIdx];
@@ -218,7 +228,7 @@ export function buildQuestionFromTurn(
   }
 
   if (stage === 3) {
-    const pair = dialogueChainPair(dialogue.turns, questionNo);
+    const pair = dialogueChainPair(dialogue.turns, questionNo, stageGoalPlan);
     return pair ? buildDialogueChain(pair[0], pair[1]) : null;
   }
 

@@ -89,6 +89,7 @@ export const ExerciseCardWidgetSchema = z.object({
     totalStages: z.number().int().positive().optional(),
     questionNo: z.number().int().positive().optional(),
     stageGoal: z.number().int().positive().optional(),
+    totalQuestions: z.number().int().positive().optional(),
     questionType: QuestionTypeSchema,
     prompt: z.string().optional(),
     context: z.string().optional(),

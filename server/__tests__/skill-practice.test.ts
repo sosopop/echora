@@ -28,6 +28,7 @@ import { createSceneDialogue } from '../services/sceneDialogue.js';
 import { createAttempt, markNeedsReview } from '../services/exerciseAttempt.js';
 import { createGrading } from '../services/gradingResult.js';
 import type { SkillEventInput } from '../../shared/skill.js';
+import type { CefrLevel } from '../../shared/api.js';
 
 let db: Db;
 let tmpDir: string;
@@ -82,7 +83,7 @@ async function collect(): Promise<SkillEventInput[]> {
   return out;
 }
 
-function seedDialogue(turnCount: number): void {
+function seedDialogue(turnCount: number, difficulty: CefrLevel = 'B1'): void {
   const turns = Array.from({ length: turnCount }, (_, i) => ({
     role: i % 2 === 0 ? 'Customer' : 'Waiter',
     en: `Sentence number ${i + 1} please.`,
@@ -91,7 +92,7 @@ function seedDialogue(turnCount: number): void {
   createSceneDialogue(db, {
     userId, conversationId,
     sceneId: 'test-scene', title: '测试场景',
-    difficulty: 'B1',
+    difficulty,
     roles: ['Customer', 'Waiter'],
     turns,
   });
@@ -142,6 +143,7 @@ describe('practice skill', () => {
             stage: number;
             totalStages: number;
             stageGoal: number;
+            totalQuestions: number;
             questionType: string;
           };
         };
@@ -150,6 +152,7 @@ describe('practice skill', () => {
     expect(ready.payload.patch.data.stage).toBe(1);
     expect(ready.payload.patch.data.totalStages).toBe(4);
     expect(ready.payload.patch.data.stageGoal).toBe(2);
+    expect(ready.payload.patch.data.totalQuestions).toBe(8);
     expect(ready.payload.patch.data.questionType).toBe('fill_word');
     expect(ready.payload.patch.data.attemptId).toBeGreaterThan(0);
 
@@ -179,6 +182,58 @@ describe('practice skill', () => {
     };
     expect(ready.payload.patch.data.stage).toBe(2);
     expect(ready.payload.patch.data.questionType).toBe('sentence_translation');
+  });
+
+  it('A1 场景阶段 2 只需 1 题,总题量为 5', async () => {
+    seedDialogue(5, 'A1');
+    seedPassed(1, 2);
+    const events = await collect();
+    const ready = events.find((e) => e.type === 'widget-ready') as {
+      payload: {
+        patch: {
+          data: {
+            stage: number;
+            questionNo: number;
+            stageGoal: number;
+            totalQuestions: number;
+          };
+        };
+      };
+    };
+    expect(ready.payload.patch.data.stage).toBe(2);
+    expect(ready.payload.patch.data.questionNo).toBe(1);
+    expect(ready.payload.patch.data.stageGoal).toBe(1);
+    expect(ready.payload.patch.data.totalQuestions).toBe(5);
+
+    seedPassed(2, 1);
+    const nextEvents = await collect();
+    const nextReady = nextEvents.find((e) => e.type === 'widget-ready') as {
+      payload: { patch: { data: { stage: number; stageGoal: number } } };
+    };
+    expect(nextReady.payload.patch.data.stage).toBe(3);
+    expect(nextReady.payload.patch.data.stageGoal).toBe(1);
+  });
+
+  it('C1 场景阶段 1-2 各 3 题,第 2 题后仍停在阶段 1', async () => {
+    seedDialogue(10, 'C1');
+    seedPassed(1, 2);
+    const events = await collect();
+    const ready = events.find((e) => e.type === 'widget-ready') as {
+      payload: {
+        patch: {
+          data: {
+            stage: number;
+            questionNo: number;
+            stageGoal: number;
+            totalQuestions: number;
+          };
+        };
+      };
+    };
+    expect(ready.payload.patch.data.stage).toBe(1);
+    expect(ready.payload.patch.data.questionNo).toBe(3);
+    expect(ready.payload.patch.data.stageGoal).toBe(3);
+    expect(ready.payload.patch.data.totalQuestions).toBe(10);
   });
 
   it('未通过/重复题不把 question_no 推到模板之外', async () => {

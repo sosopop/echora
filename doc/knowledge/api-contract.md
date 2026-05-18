@@ -94,7 +94,7 @@ type ChatAction =
 
 024 起,`exercise-card` widget 的 `data` 支持 `remediationKind?: 'retry' | 'replacement'`。内部 `stage=5` 的专项重练题使用 `remediationKind='retry'` 或省略时前端显示"重练";主线题第 2 次错误后自动生成的降难替换题使用 `remediationKind='replacement'`,前端显示"替换题"。
 
-027 起,`exercise-card` widget 的 `data` 支持 `totalStages?: number` 与 `stageGoal?: number`。主线 `practice` 下发 `totalStages=4`、`stageGoal=2`,用于显示"阶段 1/4 · 第 1/2 题";`retry` 下发 `stageGoal=3`,替换题下发 `stageGoal=1`。
+027 起,`exercise-card` widget 的 `data` 支持 `totalStages?: number` 与 `stageGoal?: number`。045 起主线 `practice` 还会下发 `totalQuestions?: number`,并按当前 `scene_dialogues.difficulty` 动态设置 `stageGoal`:A1/A2 总 5 题(2/1/1/1),B1/B2 总 8 题(2/2/2/2),C1/C2 总 10 题(3/3/2/2)。`retry` 下发 `stageGoal=3`,替换题下发 `stageGoal=1`。
 
 017 起,`review` 同一条 assistant 消息会连续返回 `progress-summary` 与 `answer-review` 两个 widget。`messages.widget_snapshot` 兼容两种形态:历史单 widget object,以及多 widget array。前端 `MessageList` 会按数组顺序渲染多个 `WidgetSlot`;后端 `appendStreamEvent` 也会按 widget id upsert,避免后一个 widget 覆盖前一个 widget。
 

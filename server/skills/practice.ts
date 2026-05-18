@@ -19,10 +19,14 @@ import type { ServerSkillContext } from './types.js';
 import { getActiveSceneDialogue } from '../services/sceneDialogue.js';
 import { createAttempt } from '../services/exerciseAttempt.js';
 import {
+  getStageGoalFromPlan,
+  getStageGoalPlan,
+  getTotalStageGoal,
+} from '../services/stageGoal.js';
+import {
   decideNextQuestion,
   buildQuestionFromTurn,
   MAX_STAGE_MVP,
-  STAGE_GOAL,
 } from './_helpers/practiceFsm.js';
 
 export const practiceSkill: Skill = {
@@ -45,9 +49,11 @@ export const practiceSkill: Skill = {
       return;
     }
 
+    const stageGoalPlan = getStageGoalPlan(dialogue.difficulty);
     const next = decideNextQuestion(
       ctx.db,
       ctx.conversationId,
+      stageGoalPlan,
       dialogue.sceneId
     );
 
@@ -68,7 +74,12 @@ export const practiceSkill: Skill = {
     }
 
     // 取出本题模板
-    const q = buildQuestionFromTurn(dialogue, next.stage, next.questionNo);
+    const q = buildQuestionFromTurn(
+      dialogue,
+      next.stage,
+      next.questionNo,
+      stageGoalPlan
+    );
     if (!q) {
       yield {
         type: 'error',
@@ -124,7 +135,8 @@ export const practiceSkill: Skill = {
             stage: next.stage,
             totalStages: MAX_STAGE_MVP,
             questionNo: next.questionNo,
-            stageGoal: STAGE_GOAL,
+            stageGoal: getStageGoalFromPlan(stageGoalPlan, next.stage),
+            totalQuestions: getTotalStageGoal(stageGoalPlan),
             questionType: q.questionType,
             prompt: q.prompt,
             contextZh: q.display.contextZh,

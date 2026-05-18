@@ -44,7 +44,7 @@
 - **ProgressSummary 组件(015/016/029)**:`src/components/widgets/ProgressSummary.tsx` 正式渲染 `progress-summary`,展示题数、三档分布(完全正确/还不错/错误)、薄弱点、掌握度条、强弱项与建议。016 起建议卡片有"开始"按钮:`retry:<tag>` 转成文本 `重练 <tag>`,`request-new-scenes` 继续走结构化 action。029 起不展示平均分;`status='loading'` 或缺少 `questionsCount/averageScore` 时返回 `null`,不走 fallback JSON。
 - **重练/替换题卡标签(016/024)**:`ExerciseCard` 收到内部 `stage=5` 时显示为"重练",避免把系统内部阶段编号暴露给用户;若 `data.remediationKind='replacement'`,则显示为"替换题",用于单题 2 次失败后的自动降难补救。
 - **目标句块(023/026)**:`ExerciseCard` 支持 `targetZh`,用于阶段 4 `role_reversal` 和阶段 3 `dialogue_chain` 单独展示"请表达「中文目标句」"块;角色信息留在题干/提示中,避免 `Your role` 或目标意思说明比目标句更醒目。
-- **题卡进度(027)**:`ExerciseCard` 支持 `totalStages/stageGoal`,主线显示"阶段 N/4 · 第 N/2 题"并渲染短进度条;重练显示"第 N/3 题";替换题显示"第 1/1 题"。
+- **题卡进度(027/045)**:`ExerciseCard` 支持 `totalStages/stageGoal/totalQuestions`,主线显示"阶段 N/4 · 第 N/M 题"并渲染短进度条;`stageGoal` 按场景难度动态变化(A1/A2:2/1/1/1,B1/B2:2/2/2/2,C1/C2:3/3/2/2)。重练显示"第 N/3 题";替换题显示"第 1/1 题"。
 - **AnswerReview 组件(017)**:`src/components/widgets/AnswerReview.tsx` 正式渲染 `answer-review`,展示逐题短题干、分数 badge、题型和错误标签。`status='loading'` 或 items 为空时返回 `null`。017 起 `MessageList` 支持同一 assistant 消息多个 widget snapshot,用于复盘总览 + 单题回看连续呈现。
 - **ConversationLock 组件(018)**:`src/components/widgets/ConversationLock.tsx` 正式渲染 `conversation-lock`,用于 locked 历史里的答案/批改详情占位。沿用 amber 左边框和 `--color-surface-soft`,在 `status='ready'` 且 `title/description` 完整时才显示,避免 fallback JSON。
 - **FollowUpSource 组件(019)**:`src/components/widgets/FollowUpSource.tsx` 正式渲染 `follow-up-source`,用于 explain 追问前标明来源。`status='ready'` 且 `sourceLabel/snippet` 完整时才显示;未批改题显示"答题前只给提示",已批改来源显示"不改变主学习流"。

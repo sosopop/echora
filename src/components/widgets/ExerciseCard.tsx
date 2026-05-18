@@ -16,6 +16,7 @@ interface ExerciseCardData {
   totalStages?: number;
   questionNo?: number;
   stageGoal?: number;
+  totalQuestions?: number;
   questionType?: string;
   contextZh?: string;
   contextEn?: string;

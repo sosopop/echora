@@ -73,7 +73,7 @@
 
 - 入口:`server/skills/practice.ts` + `server/skills/_helpers/practiceFsm.ts`
 - 流程:`getActiveSceneDialogue` → `decideNextQuestion`(基于 `countStageHandled` 推进)→ `buildQuestionFromTurn`(阶段 1 挖词填空 / 阶段 2 中→英翻译 / 阶段 3 对话接龙 / 阶段 4 角色互换)→ `createAttempt` → widget exercise-card + mode-switch
-- 阶段推进:每阶段 `STAGE_GOAL=2` 题,`MAX_STAGE_MVP=4`;`stage > MAX` 时 yield state-transition('awaiting_next')。027 起题卡 data 会下发 `totalStages=4` 和 `stageGoal=2`,前端可直接显示阶段/题内进度。
+- 阶段推进:阶段题量由当前 `scene_dialogues.difficulty` 决定,`MAX_STAGE_MVP=4`;A1/A2 为 5 题计划 `{1:2,2:1,3:1,4:1}`,B1/B2 为 8 题计划 `{1:2,2:2,3:2,4:2}`,C1/C2 为 10 题计划 `{1:3,2:3,3:2,4:2}`。`stage > MAX` 时 yield state-transition('awaiting_next')。027 起题卡 data 会下发 `totalStages=4`、动态 `stageGoal` 与 `totalQuestions`,前端可直接显示阶段/题内进度。
 - 009/024 修正:阶段内下一题号按"当前阶段已处理数量 + 1"计算,不再按最大 `question_no + 1`;`graded + is_correct=1` 与 `needs_review` 都算已处理,避免旧的未答/错题/重复点击记录把阶段 2 推到第 6/7 题后找不到模板,也避免单题 2 次失败后永久卡在原题。
 - 010 修正:阶段通过数按当前活跃 `scene_dialogue.sceneId` 统计,换新场景后不会继承旧场景的通过进度;`findLatestAttempt` 也支持按 sceneId 限定,避免新场景答案误绑定旧题。
 - 013 扩展:阶段 3 `dialogue_chain` 展示上一句英文与目标中文意思,用户用英文接下一句;阶段 4 `role_reversal` 让用户扮演目标角色主动开口,答对后可追加展示下一句对方回应。023 起阶段 4 widget data 会单独下发 `targetZh`;026 起阶段 3 也用 `targetZh` 单独突出目标意思。前端以"请表达"目标句块突出用户需要用英文说出的中文句,角色只放在说明/提示里。阶段 3/4 在短对话中允许复用最后一组相邻 turn,减少后半场断流。
@@ -88,8 +88,8 @@
 - 015 起批改后调用 `recordGradingLearningSignals`:根据 `corrections.tags` 写入 `error_tag_events`,并用错误 tag 或题型 fallback 更新 `mastery_records`。正确且无错误标签的题不会生成错误事件,但会更新对应题型掌握度。
 - 主线错题 retry:错答 `incrementRetry`;第 1 次错保持当前题可再次提交,第 2 次错 `markNeedsReview` 后立即调用 `retry` 的 `replacement` 模式生成同知识点降难替换题。替换题通过后 `grade` 自动回到 `practice`,主线根据 `countStageHandled` 继续同阶段下一题。替换题不计入 3 题专项重练额度。
 - 批改分档:021 起 `grade_answer` 输出 `category=exact/similar/incorrect`;`exact` 表示与参考表达完全匹配(忽略大小写、首尾空格、句末标点),`similar` 表示意思相近且语法可接受,`incorrect` 表示语法、拼写或意思不一致。`isCorrect` 仍保留给数据闭环,规则为 `exact/similar=true`,`incorrect=false`;百分制 `score` 只用于内部统计,前端批改卡不展示。
-- 阶段判断:本题为 `exact/similar` 后,若本阶段未完成会立即调用 `practice` 自动出下一题;若本阶段完成但未到阶段 4,自动进入下一阶段第一题;若 `countStagePassed >= STAGE_GOAL` 且 `stage >= MAX_STAGE_MVP(4)` → 先检查自动难度升降,再 state-transition('awaiting_next')。阶段 4 答对时如存在下一句对方回应,会在批改后追加自然文本展示。
-- 043 起,阶段 4 完成后调用 `server/services/difficultyAdaptation.ts`:最近 2 个完整场景都 1-4 阶段全题一次通过时,`user_profiles.level` 自动上调一档;最近 2 个完整场景在阶段 1-2 中多数题 `retry_count>=2` 或 `needs_review` 时,自动下调一档。完整场景要求每个主线阶段至少 `STAGE_GOAL=2` 道已处理题,避免半截数据误触发。
+- 阶段判断:本题为 `exact/similar` 后,若本阶段未完成会立即调用 `practice` 自动出下一题;若本阶段完成但未到阶段 4,自动进入下一阶段第一题;若 `countStagePassed >= 当前场景阶段题量` 且 `stage >= MAX_STAGE_MVP(4)` → 先检查自动难度升降,再 state-transition('awaiting_next')。阶段 4 答对时如存在下一句对方回应,会在批改后追加自然文本展示。
+- 043 起,阶段 4 完成后调用 `server/services/difficultyAdaptation.ts`:最近 2 个完整场景都 1-4 阶段全题一次通过时,`user_profiles.level` 自动上调一档;最近 2 个完整场景在阶段 1-2 中多数题 `retry_count>=2` 或 `needs_review` 时,自动下调一档。045 起完整场景按该场景自身难度对应的阶段题量判断,避免用户自动升/降级后用新等级重新解释旧场景。
 
 ## review Skill(015 已真实接入)
 
@@ -163,8 +163,8 @@ provider.route()
 - AI Router 校验链测试:`server/__tests__/ai-router.test.ts`(5 测试,正常路径 + 3 失败路径 + 任意 state)
 - onboarding skill 单测:`server/__tests__/skill-onboarding.test.ts`(5 测试)
 - scene-select 单测:`server/__tests__/skill-sceneSelect.test.ts`(6 测试)
-- practice 单测:`server/__tests__/skill-practice.test.ts`(10 测试)
-- grade 单测:`server/__tests__/skill-grade.test.ts`(16 测试)
+- practice 单测:`server/__tests__/skill-practice.test.ts`(12 测试,含 A1/B1/C1 动态题量)
+- grade 单测:`server/__tests__/skill-grade.test.ts`(19 测试,含 A1/C1 阶段完成边界)
 - review 单测:`server/__tests__/skill-review.test.ts`(2 测试,覆盖 progress-summary + answer-review)
 - retry 单测:`server/__tests__/skill-retry.test.ts`(5 测试)
 - explain 单测:`server/__tests__/skill-explain.test.ts`(3 测试,覆盖已批改解释、未批改不泄露答案、无上下文提示)

@@ -11,8 +11,8 @@ import {
   adjustProfileLevel,
   type DifficultyAdjustmentResult,
 } from './profile.js';
+import { getStageGoalPlan } from './stageGoal.js';
 
-const MAINLINE_STAGE_GOAL = 2;
 const MAINLINE_STAGES = [1, 2, 3, 4];
 
 interface SceneDialogueRow {
@@ -20,6 +20,7 @@ interface SceneDialogueRow {
   conversation_id: number;
   scene_id: string;
   title: string;
+  difficulty: string;
 }
 
 interface AttemptOutcomeRow {
@@ -77,7 +78,7 @@ export function listRecentCompletedSceneOutcomes(
 ): SceneDifficultyOutcome[] {
   const rows = db
     .prepare<[number], SceneDialogueRow>(
-      `SELECT id, conversation_id, scene_id, title
+      `SELECT id, conversation_id, scene_id, title, difficulty
        FROM scene_dialogues
        WHERE user_id = ?
        ORDER BY id DESC`
@@ -87,7 +88,7 @@ export function listRecentCompletedSceneOutcomes(
   const out: SceneDifficultyOutcome[] = [];
   for (const row of rows) {
     const attempts = listSceneAttempts(db, row.conversation_id, row.scene_id);
-    if (!isSceneCompleted(attempts)) continue;
+    if (!isSceneCompleted(attempts, row)) continue;
     out.push({
       conversationId: row.conversation_id,
       sceneId: row.scene_id,
@@ -122,9 +123,13 @@ function listSceneAttempts(
     .all(conversationId, sceneId);
 }
 
-function isSceneCompleted(attempts: AttemptOutcomeRow[]): boolean {
+function isSceneCompleted(
+  attempts: AttemptOutcomeRow[],
+  scene: SceneDialogueRow
+): boolean {
+  const goals = getStageGoalPlan(scene.difficulty);
   return MAINLINE_STAGES.every(
-    (stage) => countHandledMainlineAttempts(attempts, stage) >= MAINLINE_STAGE_GOAL
+    (stage) => countHandledMainlineAttempts(attempts, stage) >= goals[stage]
   );
 }
 

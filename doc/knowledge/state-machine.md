@@ -27,14 +27,14 @@ onboarding
 
 ```
 practicing
-  → 阶段 1 fill_word(2 题通过)
-  → 阶段 2 sentence_translation(2 题通过)
-  → 阶段 3 dialogue_chain(2 题通过)
-  → 阶段 4 role_reversal(2 题通过)
+  → 阶段 1 fill_word(按场景难度 2-3 题通过)
+  → 阶段 2 sentence_translation(按场景难度 1-3 题通过)
+  → 阶段 3 dialogue_chain(按场景难度 1-2 题通过)
+  → 阶段 4 role_reversal(按场景难度 1-2 题通过)
   → awaiting_next
 ```
 
-021 起,阶段内答对不再等待用户点击"下一题":`grade` 会在同一条 assistant 流里先返回批改结果,再自动串接下一张 `exercise-card`。阶段 1-3 达标后自动进入下一阶段第一题;阶段 4 达标后才转 `awaiting_next`。043 起,阶段 4 达标到 `awaiting_next` 之间会根据最近 2 个完整场景的表现自动升/降 `user_profiles.level`,并在同一条 assistant 回复里追加难度变化说明。阶段内第 1 次答错保持 `practicing` 并允许改句重交;024 起同题第 2 次未通过会标记 `needs_review`,并立即生成一张同知识点降难替换题,通过替换题后自动回主线下一题。
+021 起,阶段内答对不再等待用户点击"下一题":`grade` 会在同一条 assistant 流里先返回批改结果,再自动串接下一张 `exercise-card`。阶段 1-3 达标后自动进入下一阶段第一题;阶段 4 达标后才转 `awaiting_next`。045 起阶段题量绑定当前 `scene_dialogues.difficulty`:A1/A2 共 5 题(2/1/1/1),B1/B2 共 8 题(2/2/2/2),C1/C2 共 10 题(3/3/2/2)。043 起,阶段 4 达标到 `awaiting_next` 之间会根据最近 2 个完整场景的表现自动升/降 `user_profiles.level`,并在同一条 assistant 回复里追加难度变化说明。阶段内第 1 次答错保持 `practicing` 并允许改句重交;024 起同题第 2 次未通过会标记 `needs_review`,并立即生成一张同知识点降难替换题,通过替换题后自动回主线下一题。
 
 错题替换主线(024):
 
@@ -86,7 +86,7 @@ stage 4 complete
   → awaiting_next
 ```
 
-`firstPass` 要求主线 1-4 阶段所有题 `graded + is_correct=1 + retry_count=0`;`earlyStruggle` 要求阶段 1-2 中超过半数题 `retry_count>=2` 或 `needs_review`。完整场景要求每个主线阶段至少 2 道已处理题,因此只有阶段 4 单题正确的异常数据不会参与自动调级。
+`firstPass` 要求主线 1-4 阶段所有题 `graded + is_correct=1 + retry_count=0`;`earlyStruggle` 要求阶段 1-2 中超过半数题 `retry_count>=2` 或 `needs_review`。045 起完整场景要求每个主线阶段达到该场景难度对应的题量,因此 A1/A2 的 5 题、B1/B2 的 8 题、C1/C2 的 10 题都能正确参与自动调级,半截数据不会误触发。
 
 重练主线(016):
 

@@ -10,7 +10,7 @@
  *   6. yield text-chunk + widget-init/ready(grading-result)
  *   7. 错答 → incrementRetry,若达 2 次 → markNeedsReview;保持 practicing
  *   8. 对答/相近 → 阶段完成判断并自动串接下一题:
- *      - 阶段 1-4 全部 STAGE_GOAL 满足 → state-transition('awaiting_next')
+ *      - 阶段 1-4 全部动态 stageGoal 满足 → state-transition('awaiting_next')
  *      - 否则继续调用 practice/retry 出下一题,不需要用户点击
  */
 
@@ -30,10 +30,13 @@ import {
 import { createGrading } from '../services/gradingResult.js';
 import { runGrading } from './_helpers/gradeFsm.js';
 import {
-  STAGE_GOAL,
   MAX_STAGE_MVP,
   buildQuestionFromTurn,
 } from './_helpers/practiceFsm.js';
+import {
+  getStageGoalFromPlan,
+  getStageGoalPlan,
+} from '../services/stageGoal.js';
 import { recordGradingLearningSignals } from '../services/learningSignals.js';
 import { maybeAdjustDifficultyAfterSceneCompletion } from '../services/difficultyAdaptation.js';
 import { practiceSkill } from './practice.js';
@@ -141,6 +144,7 @@ export const gradeSkill: Skill = {
 
     // 调 LLM 批改
     const dialogue = getActiveSceneDialogue(ctx.db, ctx.conversationId);
+    const stageGoalPlan = getStageGoalPlan(dialogue?.difficulty);
     yield { type: 'text-chunk', payload: { text: '正在批改…' } };
     const widgetId = ctx.makeWidgetId('grading-result');
     yield {
@@ -163,7 +167,8 @@ export const gradeSkill: Skill = {
         attempt,
         dialogue,
         answer,
-        ctx.signal
+        ctx.signal,
+        stageGoalPlan
       );
     } catch (e) {
       yield {
@@ -312,10 +317,16 @@ export const gradeSkill: Skill = {
       attempt.stage,
       attempt.sceneId
     );
-    const stageComplete = passedInStage >= STAGE_GOAL;
+    const stageGoal = getStageGoalFromPlan(stageGoalPlan, attempt.stage);
+    const stageComplete = passedInStage >= stageGoal;
     if (attempt.stage === 4) {
       const followUp = dialogue
-        ? buildQuestionFromTurn(dialogue, attempt.stage, attempt.questionNo)
+        ? buildQuestionFromTurn(
+            dialogue,
+            attempt.stage,
+            attempt.questionNo,
+            stageGoalPlan
+          )
             ?.followUpResponse
         : null;
       if (followUp) {

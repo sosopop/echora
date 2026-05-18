@@ -38,6 +38,7 @@ import {
   encodeRetryAttemptPrompt,
 } from '../services/attemptPrompt.js';
 import type { SkillEventInput } from '../../shared/skill.js';
+import type { CefrLevel } from '../../shared/api.js';
 
 let db: Db;
 let tmpDir: string;
@@ -121,6 +122,43 @@ function seedAttempt(stage: number, questionNo: number): number {
     stage, questionNo, questionType: 'fill_word', prompt: 'x',
   });
   return a.id;
+}
+
+function seedPassedAttempt(stage: number, questionNo: number): number {
+  const attempt = createAttempt(db, {
+    conversationId,
+    sceneId: 'test',
+    stage,
+    questionNo,
+    questionType: 'x',
+    prompt: 'x',
+  });
+  createGrading(db, {
+    attemptId: attempt.id,
+    score: 100,
+    isCorrect: true,
+    corrections: {},
+  });
+  return attempt.id;
+}
+
+function seedActiveDialogue(
+  difficulty: CefrLevel,
+  turnCount: number
+): void {
+  createSceneDialogue(db, {
+    userId,
+    conversationId,
+    sceneId: 'test',
+    title: `${difficulty} 测试`,
+    difficulty,
+    roles: ['A', 'B'],
+    turns: Array.from({ length: turnCount }, (_, index) => ({
+      role: index % 2 === 0 ? 'A' : 'B',
+      en: `Sentence ${index + 1}.`,
+      zh: `第 ${index + 1} 句。`,
+    })),
+  });
 }
 
 function widgetReadyData<T>(
@@ -411,6 +449,92 @@ describe('grade skill', () => {
     ).toBeDefined();
   });
 
+  it('A1 阶段 2 第 1 题正确 → 自动进入阶段 3', async () => {
+    seedActiveDialogue('A1', 5);
+    for (let q = 1; q <= 2; q++) {
+      seedPassedAttempt(1, q);
+    }
+    const s2q1 = createAttempt(db, {
+      conversationId,
+      sceneId: 'test',
+      stage: 2,
+      questionNo: 1,
+      questionType: 'sentence_translation',
+      prompt: 'x',
+    });
+    const provider = makeProvider({
+      score: 100,
+      is_correct: true,
+      reference_answer: 'Sentence 3.',
+      explanation: '完美',
+      tags: [],
+    });
+
+    const events = await collect(
+      makeCtx(provider, {
+        type: 'submit-answer',
+        payload: { attemptId: s2q1.id, answer: 'Sentence 3.' },
+      })
+    );
+
+    expect(
+      (events.filter((e) => e.type === 'state-transition') as Array<{
+        payload: { nextLearningState: string };
+      }>).some((e) => e.payload.nextLearningState === 'awaiting_next')
+    ).toBe(false);
+    const nextExercise = widgetReadyData<{
+      stage: number;
+      questionNo: number;
+      stageGoal: number;
+      totalQuestions: number;
+    }>(events, 'exercise-card');
+    expect(nextExercise.stage).toBe(3);
+    expect(nextExercise.questionNo).toBe(1);
+    expect(nextExercise.stageGoal).toBe(1);
+    expect(nextExercise.totalQuestions).toBe(5);
+  });
+
+  it('C1 阶段 2 第 2 题正确 → 仍停在阶段 2 第 3 题', async () => {
+    seedActiveDialogue('C1', 10);
+    for (let q = 1; q <= 3; q++) {
+      seedPassedAttempt(1, q);
+    }
+    seedPassedAttempt(2, 1);
+    const s2q2 = createAttempt(db, {
+      conversationId,
+      sceneId: 'test',
+      stage: 2,
+      questionNo: 2,
+      questionType: 'sentence_translation',
+      prompt: 'x',
+    });
+    const provider = makeProvider({
+      score: 100,
+      is_correct: true,
+      reference_answer: 'Sentence 5.',
+      explanation: '完美',
+      tags: [],
+    });
+
+    const events = await collect(
+      makeCtx(provider, {
+        type: 'submit-answer',
+        payload: { attemptId: s2q2.id, answer: 'Sentence 5.' },
+      })
+    );
+
+    const nextExercise = widgetReadyData<{
+      stage: number;
+      questionNo: number;
+      stageGoal: number;
+      totalQuestions: number;
+    }>(events, 'exercise-card');
+    expect(nextExercise.stage).toBe(2);
+    expect(nextExercise.questionNo).toBe(3);
+    expect(nextExercise.stageGoal).toBe(3);
+    expect(nextExercise.totalQuestions).toBe(10);
+  });
+
   it('阶段 4 最后一题正确 → state-transition awaiting_next', async () => {
     for (let stage = 1; stage <= 4; stage++) {
       const maxQ = stage === 4 ? 1 : 2;
@@ -462,6 +586,50 @@ describe('grade skill', () => {
           )
       )
     ).toBeDefined();
+  });
+
+  it('C1 阶段 4 第 2 题正确 → 10 题主线完成', async () => {
+    seedActiveDialogue('C1', 10);
+    for (let q = 1; q <= 3; q++) {
+      seedPassedAttempt(1, q);
+      seedPassedAttempt(2, q);
+    }
+    for (let q = 1; q <= 2; q++) {
+      seedPassedAttempt(3, q);
+    }
+    seedPassedAttempt(4, 1);
+    const s4q2 = createAttempt(db, {
+      conversationId,
+      sceneId: 'test',
+      stage: 4,
+      questionNo: 2,
+      questionType: 'role_reversal',
+      prompt: 'x',
+    });
+    const provider = makeProvider({
+      score: 100,
+      is_correct: true,
+      reference_answer: 'Sentence 2.',
+      explanation: '完美',
+      tags: [],
+    });
+
+    const events = await collect(
+      makeCtx(provider, {
+        type: 'submit-answer',
+        payload: { attemptId: s4q2.id, answer: 'Sentence 2.' },
+      })
+    );
+
+    const transition = events.find((e) => e.type === 'state-transition') as {
+      payload: { nextLearningState: string };
+    };
+    expect(transition.payload.nextLearningState).toBe('awaiting_next');
+    expect(
+      events.find((e) => e.type === 'widget-init' && (
+        e as { payload: { widget: { type: string } } }
+      ).payload.widget.type === 'exercise-card')
+    ).toBeUndefined();
   });
 
   it('阶段 4 答错 → retry_count=1, 保持 practicing', async () => {
