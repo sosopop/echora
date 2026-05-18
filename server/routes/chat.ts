@@ -18,6 +18,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { HttpError } from '../middleware/error.js';
 import { ERROR_CODES } from '../../shared/errors.js';
 import {
+  archiveConversation,
   createConversation,
   getConversation,
   listConversations,
@@ -420,6 +421,18 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
       }
 
       const normalizedInput = normalizeChatSendInput(db, userId, conv, body);
+      const archivedConversationId = shouldStartNewRound(
+        conv,
+        normalizedInput
+      )
+        ? conv.id
+        : null;
+      if (archivedConversationId != null) {
+        archiveConversation(db, archivedConversationId);
+        conv = createConversation(db, userId, {
+          learningState: 'scene_selecting',
+        });
+      }
 
       // 2. 持久化用户消息
       //    text 直接落 content;action 落自然文案;submit-answer 落用户真实答案。
@@ -527,6 +540,9 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
         assistantMessageId: assistantMsg.id,
         streamId,
         decision,
+        ...(archivedConversationId != null
+          ? { archivedConversationId }
+          : {}),
       };
       res.status(202).json({ data: respBody });
     } catch (e) {
@@ -1038,6 +1054,23 @@ function normalizeChatSendInput(
     text,
     userMessageContent: text,
   };
+}
+
+function shouldStartNewRound(
+  conv: ConversationDTO,
+  input: NormalizedChatSendInput
+): boolean {
+  if (
+    conv.status !== 'active' ||
+    (conv.learningState !== 'awaiting_next' &&
+      conv.learningState !== 'reviewing')
+  ) {
+    return false;
+  }
+  const action = input.action ?? (input.decision?.params?.action as
+    | ChatAction
+    | undefined);
+  return action?.type === 'request-new-scenes';
 }
 
 function createDifficultyFeedbackDecision(

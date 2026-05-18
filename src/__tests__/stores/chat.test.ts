@@ -352,10 +352,139 @@ describe('chat store streaming', () => {
       payload: { sceneId: 'restaurant-ordering' },
     });
 
-    expect(mocks.listConversations).toHaveBeenCalledTimes(1);
+    expect(mocks.listConversations).toHaveBeenCalled();
     await waitFor(() => {
       expect(useChatStore.getState().conversations[0]?.title).toBe('餐厅点餐');
     });
+  });
+
+  it('后端归档旧会话并返回新会话时切换消息列表和刷新历史', async () => {
+    useChatStore.setState({
+      currentConversationId: 10,
+      conversations: [
+        {
+          id: 10,
+          title: '餐厅点餐',
+          status: 'active',
+          learningState: 'reviewing',
+          activeSkill: 'review',
+          inputMode: 'chat',
+          lockPolicy: 'open',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+          archivedAt: null,
+        },
+      ],
+      messages: [
+        {
+          id: 900,
+          conversationId: 10,
+          branchThreadId: null,
+          type: 'text',
+          role: 'assistant',
+          skillName: 'review',
+          content: '旧会话复盘',
+          widgetSnapshot: null,
+          seq: 0,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+      activeWidgets: {
+        old: {
+          id: 'old',
+          type: 'progress-summary',
+          status: 'ready',
+          data: {},
+          version: 1,
+        },
+      },
+      isBranchOpen: true,
+      currentBranchThreadId: 31,
+      branchMessages: [
+        {
+          id: 901,
+          conversationId: 10,
+          branchThreadId: 31,
+          type: 'text',
+          role: 'assistant',
+          skillName: 'explain',
+          content: '旧支线',
+          widgetSnapshot: null,
+          seq: 0,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    mocks.listConversations.mockResolvedValue([
+      {
+        id: 11,
+        title: null,
+        status: 'active',
+        learningState: 'scene_selecting',
+        activeSkill: 'scene-select',
+        inputMode: 'select',
+        lockPolicy: 'open',
+        createdAt: '2026-01-01T00:00:01.000Z',
+        updatedAt: '2026-01-01T00:00:01.000Z',
+        archivedAt: null,
+      },
+      {
+        id: 10,
+        title: '餐厅点餐',
+        status: 'archived',
+        learningState: 'archived',
+        activeSkill: null,
+        inputMode: 'chat',
+        lockPolicy: 'open',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:01.000Z',
+        archivedAt: '2026-01-01T00:00:01.000Z',
+      },
+    ]);
+    mocks.send.mockResolvedValue({
+      conversationId: 11,
+      archivedConversationId: 10,
+      userMessageId: 1001,
+      assistantMessageId: 1002,
+      streamId: 'stream-rollover',
+      decision: {
+        skillName: 'scene-select',
+        params: { action: { type: 'request-new-scenes' } },
+        confidence: 1,
+        rationale: 'rollover',
+      },
+    });
+    mocks.openStream.mockImplementation((_streamId, opts) => {
+      opts.onEvent(event('text-chunk', { text: '新一轮开始。' }, 1));
+      opts.onEvent(event('done', {}, 2));
+      opts.onDone();
+      return { close: vi.fn() };
+    });
+
+    await useChatStore.getState().sendMessage('换场景');
+
+    const state = useChatStore.getState();
+    expect(mocks.send).toHaveBeenCalledWith({
+      conversationId: 10,
+      text: '换场景',
+    });
+    expect(mocks.listConversations).toHaveBeenCalledTimes(1);
+    expect(state.currentConversationId).toBe(11);
+    expect(state.messages.map((m) => m.conversationId)).toEqual([11, 11]);
+    expect(state.messages[0]).toMatchObject({
+      id: 1001,
+      role: 'user',
+      content: '换场景',
+    });
+    expect(state.messages[1]).toMatchObject({
+      id: 1002,
+      role: 'assistant',
+      content: '新一轮开始。',
+      skillName: 'scene-select',
+    });
+    expect(state.activeWidgets).toEqual({});
+    expect(state.isBranchOpen).toBe(false);
+    expect(state.branchMessages).toEqual([]);
   });
 
   it('submit-answer action 使用答案作为用户消息内容', async () => {

@@ -78,6 +78,8 @@ type ChatAction =
 
 `action` 与 `text` 二选一,zod refine 校验。前端 widget 交互(点击场景卡片、提交答案、下一题等)统一走 `action` 路径。007 起 action 不再交给 AI Router,而是由后端确定性映射到 Skill:`request-new-scenes` / `select-scene` → `scene-select`,`submit-answer` → `grade`,`next-question` / `skip-question` → `practice`;随后仍校验目标 Skill 是否允许当前 `learningState`。
 
+046 起,`POST /api/chat/send` 响应可能包含 `archivedConversationId?: number`。当当前 active 会话处于 `awaiting_next` 或 `reviewing`,且用户选择继续下一轮/换场景(`request-new-scenes`)时,后端会先归档当前会话,再新建一个 `scene_selecting` 会话执行本次请求;响应中的 `conversationId` 是新会话 id,`archivedConversationId` 是刚归档的旧会话 id。前端收到不同 `conversationId` 时切换当前消息列表,清空旧 active widgets/支线状态,并刷新历史会话列表。
+
 038 起,`select-scene.payload` 兼容两种形态:旧客户端只传 `{ sceneId }`,后端用 sceneId 推导最小场景;新客户端会随场景卡片传 `title/description/knowledgePoint/difficulty/topic`,后端优先使用这些元数据生成 `scene_dialogue` 并更新 `conversations.title`。
 
 008 起,`practicing` 态下的自由文本会先检查当前会话最新 attempt:若最新题仍是 `pending/submitted`,或已 `graded` 但结果错误且 `retry_count < 2`,后端会把非控制指令文本规范化为 `submit-answer` action 并走 `grade`。010 起 answer 绑定只看当前活跃 `scene_dialogue.sceneId` 下的 latest attempt,避免换场景后误提交旧场景题目。`出题` / `开始练习` / `继续` / `下一题` / `go` / `next` 等继续指令在 `practicing` 中确定性映射为 `next-question`,`awaiting_next` / `scene_selecting` / `reviewing` 中映射为 `request-new-scenes`;012 起 `换场景` / `换一批` / `重新生成场景` 在 `practicing` 中也确定性映射为 `request-new-scenes`,避免绕回 AI Router 或被误判为答案。015 起,`awaiting_next` / `reviewing` 下的 `复盘` / `总结` / `学习报告` / `review` 会直接形成 `RouterDecision { skillName: 'review' }`,不新增 ChatAction。042 起,`scene_selecting` / `practicing` / `awaiting_next` / `reviewing` 下的 `太难` / `简单一点` / `too hard` / `easier` 会把用户画像 `level` 下调一档并路由到 `scene-select + request-new-scenes`;`太简单` / `难一点` / `too easy` / `harder` 会上调一档。`decision.params.difficultyFeedback` 携带 `{ direction, previousLevel, nextLevel, changed }`,供 `scene-select` 输出自然解释。
@@ -100,7 +102,7 @@ type ChatAction =
 
 016 起,`awaiting_next` / `reviewing` / `scene_selecting` / `practicing` 下的 `重练` / `重练错题` / `开始重练` / `retry` 会确定性形成 `RouterDecision { skillName: 'retry' }`;`重练 <tag>` 会把 `<tag>` 写入 `decision.params.targetTag`。不新增 ChatAction。若会话 `activeSkill='retry'`,结构化 `{ type: 'next-question' }` 会继续路由 `retry`,否则仍路由 `practice`。
 
-025 起,若会话 `status='archived'` 或 `learningState='archived'`,POST `/api/chat/send` 只允许复盘类文本(`复盘` / `总结` / `学习报告` / `review`)进入 `review`;其他文本或 action 直接返回 `400 VALIDATION_FAILED`,且不会创建新的 message / agent_run / stream。
+025 起,若会话 `status='archived'` 或 `learningState='archived'`,POST `/api/chat/send` 只允许复盘类文本(`复盘` / `总结` / `学习报告` / `review`)进入 `review`;其他文本或 action 直接返回 `400 VALIDATION_FAILED`,且不会创建新的 message / agent_run / stream。046 起,active 的已完成/复盘会话通过 `request-new-scenes` 开新一轮时会自动归档旧会话;已经归档的会话仍保持只读规则。
 
 030 起,辅助追问第一版接入真实 `branch_threads` 与 `messages.branch_thread_id`:
 

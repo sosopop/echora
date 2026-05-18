@@ -350,30 +350,49 @@ async function sendInternal(
   }));
   try {
     const resp = await chatApi.send({ conversationId, ...body });
+    const switchedConversation = resp.conversationId !== conversationId;
+    const nextUserMsg: MessageDTO = {
+      ...optimisticUserMsg,
+      id: resp.userMessageId,
+      conversationId: resp.conversationId,
+    };
+    const nextAssistantMsg: MessageDTO = {
+      ...optimisticAssistantMsg,
+      id: resp.assistantMessageId,
+      conversationId: resp.conversationId,
+      skillName: resp.decision.skillName,
+    };
     set((s) => ({
       currentConversationId: resp.conversationId,
-      messages: s.messages.map((m) => {
-        if (m.id === optimisticUserId) {
-          return {
-            ...m,
-            id: resp.userMessageId,
-            conversationId: resp.conversationId,
-          };
-        }
-        if (m.id === optimisticAssistantId) {
-          return {
-            ...m,
-            id: resp.assistantMessageId,
-            conversationId: resp.conversationId,
-            skillName: resp.decision.skillName,
-          };
-        }
-        return m;
-      }),
+      messages: switchedConversation
+        ? [nextUserMsg, nextAssistantMsg]
+        : s.messages.map((m) => {
+            if (m.id === optimisticUserId) return nextUserMsg;
+            if (m.id === optimisticAssistantId) return nextAssistantMsg;
+            return m;
+          }),
       streamingMessageId: resp.assistantMessageId,
       currentStreamId: resp.streamId,
+      streamBuffer: switchedConversation ? {} : s.streamBuffer,
+      activeWidgets: switchedConversation ? {} : s.activeWidgets,
+      branchThreads: switchedConversation ? [] : s.branchThreads,
+      currentBranchThreadId: switchedConversation
+        ? null
+        : s.currentBranchThreadId,
+      branchSourceMessageId: switchedConversation
+        ? null
+        : s.branchSourceMessageId,
+      branchMessages: switchedConversation ? [] : s.branchMessages,
+      isBranchOpen: switchedConversation ? false : s.isBranchOpen,
+      isBranchLoading: switchedConversation ? false : s.isBranchLoading,
+      isBranchReviewing: switchedConversation ? false : s.isBranchReviewing,
+      branchReviewMessage: switchedConversation ? null : s.branchReviewMessage,
+      branchError: switchedConversation ? null : s.branchError,
       isLoading: false,
     }));
+    if (resp.archivedConversationId != null || switchedConversation) {
+      void useChatStore.getState().loadConversations();
+    }
 
     activeStreamHandle?.close();
     activeStreamHandle = openStream(resp.streamId, {

@@ -156,7 +156,7 @@ provider.route()
 - `practicing` / `grading` 中 router 校验失败时**直接抛错**(不再 fallback,002 patch)
 - AI Provider 抛错时 router 不 catch,直接传播到 chat 路由,返 `502 PROVIDER_ERROR`
 - POST `/api/chat/send` body `text` 与 `action` **二选一**(zod refine);action 由 chat route 确定性映射到 skill,并放入 `decision.params.action`
-- 008 起练习态直接输入答案时,chat route 可能把 `text` 规范化为 `submit-answer` action;消息历史仍保存用户原始输入文本。010 起 `awaiting_next` 下输入 `next` / `START` / `开始练习` 会确定性触发 `request-new-scenes`,减少完成一场景后的断流。012 起 `practicing` 下的换场景类文本也确定性触发 `request-new-scenes`,不再交给 AI Router。015 起 `awaiting_next` / `reviewing` 下的复盘类文本确定性触发 `review`。016 起重练类文本确定性触发 `retry`;若 activeSkill 为 `retry`,结构化 `next-question` 继续走 `retry` 而不是主线 `practice`。019 起解释类文本确定性触发 `explain`,并在练习中优先于自由文本答案兜底,避免"为什么错"被当成答案提交。020 起非锁定态低置信度路由改为 `intent-confirm`;锁定态不允许降级到 `general-chat`。042 起难度反馈文本优先于答案兜底处理,避免 `practicing` 中的"太难/太简单"被当作答案提交。
+- 008 起练习态直接输入答案时,chat route 可能把 `text` 规范化为 `submit-answer` action;消息历史仍保存用户原始输入文本。010 起 `awaiting_next` 下输入 `next` / `START` / `开始练习` 会确定性触发 `request-new-scenes`,减少完成一场景后的断流。012 起 `practicing` 下的换场景类文本也确定性触发 `request-new-scenes`,不再交给 AI Router。015 起 `awaiting_next` / `reviewing` 下的复盘类文本确定性触发 `review`。016 起重练类文本确定性触发 `retry`;若 activeSkill 为 `retry`,结构化 `next-question` 继续走 `retry` 而不是主线 `practice`。019 起解释类文本确定性触发 `explain`,并在练习中优先于自由文本答案兜底,避免"为什么错"被当成答案提交。020 起非锁定态低置信度路由改为 `intent-confirm`;锁定态不允许降级到 `general-chat`。042 起难度反馈文本优先于答案兜底处理,避免 `practicing` 中的"太难/太简单"被当作答案提交。046 起,`awaiting_next` / `reviewing` 下的继续下一轮/换场景请求会触发会话 rollover:旧 active 会话归档,新建 `scene_selecting` 会话并执行本次 `scene-select`;`retry` 和 `review` 不触发归档。
 
 ## 测试入口
 
@@ -169,7 +169,7 @@ provider.route()
 - retry 单测:`server/__tests__/skill-retry.test.ts`(5 测试)
 - explain 单测:`server/__tests__/skill-explain.test.ts`(3 测试,覆盖已批改解释、未批改不泄露答案、无上下文提示)
 - general-chat 单测:`server/__tests__/skill-generalChat.test.ts`(4 测试,覆盖默认文本、真实 provider 流式文本、provider 错误和 intent-confirm widget)
-- learning services 单测:`server/__tests__/learning-services.test.ts`(13 测试,含 learning_state → lock_policy)
+- learning services 单测:`server/__tests__/learning-services.test.ts`(17 测试,含 learning_state → lock_policy)
 - onboarding 端到端:`npm run test:smoke:onboarding`(10 场景)
 - 学习闭环端到端:`npm run test:smoke:learning`(13 场景,覆盖 4 阶段完整闭环、错题重试、explain 追问、低置信度确认、状态拒绝、archived 只读与 provider 错误路径)
 - 真实 Provider 接入:`npm run test:smoke:ai`(需双 key)

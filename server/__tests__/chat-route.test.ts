@@ -900,7 +900,49 @@ describe('POST /api/chat/send', () => {
       skillName: 'scene-select',
       params: { action: { type: 'request-new-scenes' } },
     });
+    expect(res.body.data.conversationId).not.toBe(conversationId);
+    expect(res.body.data.archivedConversationId).toBe(conversationId);
+    expect(getConversation(db, conversationId, userId)).toMatchObject({
+      status: 'archived',
+      learningState: 'archived',
+    });
+    expect(
+      getConversation(db, res.body.data.conversationId, userId)
+    ).toMatchObject({
+      status: 'active',
+      learningState: 'scene_selecting',
+    });
     expect(decideCalls).toHaveLength(0);
+  });
+
+  it('reviewing 中换场景会归档当前复盘会话并新建下一轮', async () => {
+    updateLearningState(db, conversationId, 'reviewing', 'review');
+    appendMessage(db, {
+      conversationId,
+      type: 'text',
+      role: 'assistant',
+      skillName: 'review',
+      content: '本轮复盘',
+    });
+
+    const res = await request(app)
+      .post('/api/chat/send')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ conversationId, text: '换场景' });
+
+    expect(res.status).toBe(202);
+    expect(res.body.data.conversationId).not.toBe(conversationId);
+    expect(res.body.data.archivedConversationId).toBe(conversationId);
+    expect(res.body.data.decision).toMatchObject({
+      skillName: 'scene-select',
+      params: { action: { type: 'request-new-scenes' } },
+    });
+    expect(getMessages(db, conversationId).map((m) => m.content)).toEqual([
+      '本轮复盘',
+    ]);
+    expect(
+      getMessages(db, res.body.data.conversationId).map((m) => m.content)
+    ).toEqual(['换场景', null]);
   });
 
   it('awaiting_next 中复盘直接走 review,不绕 AI Router', async () => {

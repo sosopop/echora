@@ -157,6 +157,7 @@ export interface ChatSendReq {
 
 export interface ChatSendResp {
   conversationId: number;
+  archivedConversationId?: number;
   userMessageId: number;
   assistantMessageId: number;
   streamId: string;
