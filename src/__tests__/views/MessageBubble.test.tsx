@@ -20,4 +20,12 @@ describe('MessageBubble', () => {
 
     expect(screen.getByText(/Echo 正在思考中/)).toBeInTheDocument();
   });
+
+  it('assistant 消息按 Markdown 渲染', () => {
+    render(<MessageBubble role="assistant" text={'**重点**\n- 固定搭配'} />);
+
+    expect(screen.getByText('重点').tagName).toBe('STRONG');
+    expect(screen.getByRole('list')).toBeInTheDocument();
+    expect(screen.getByText('固定搭配')).toBeInTheDocument();
+  });
 });

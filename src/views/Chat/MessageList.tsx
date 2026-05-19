@@ -23,6 +23,7 @@ export default function MessageList(): JSX.Element {
   const activeWidgets = useChatStore((s) => s.activeWidgets);
   const branchSourceMessageId = useChatStore((s) => s.branchSourceMessageId);
   const openBranchForWidget = useChatStore((s) => s.openBranchForWidget);
+  const sendBranchMessage = useChatStore((s) => s.sendBranchMessage);
   const listRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
 
@@ -103,8 +104,13 @@ export default function MessageList(): JSX.Element {
                   widget={widget}
                   onOpenBranch={
                     sourceRef
-                      ? () => {
-                          void openBranchForWidget(m.id, sourceRef);
+                      ? (question) => {
+                          void (async () => {
+                            await openBranchForWidget(m.id, sourceRef);
+                            if (question?.trim()) {
+                              await sendBranchMessage(question);
+                            }
+                          })();
                         }
                       : undefined
                   }

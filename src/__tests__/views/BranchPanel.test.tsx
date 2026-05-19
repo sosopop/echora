@@ -77,4 +77,29 @@ describe('BranchPanel', () => {
 
     expect(screen.queryByRole('button', { name: '加入复盘' })).toBeNull();
   });
+
+  it('支线 assistant 回复按 Markdown 渲染', () => {
+    useChatStore.setState({
+      branchMessages: [
+        {
+          id: 11,
+          conversationId: 1,
+          branchThreadId: 31,
+          type: 'text',
+          role: 'assistant',
+          skillName: 'explain',
+          content: '**重点**\n- How about 后面接名词或动名词',
+          widgetSnapshot: null,
+          seq: 1,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    render(<BranchPanel />);
+
+    expect(screen.getByText('重点').tagName).toBe('STRONG');
+    expect(screen.getByRole('list')).toBeInTheDocument();
+    expect(screen.getByText(/How about/)).toBeInTheDocument();
+  });
 });

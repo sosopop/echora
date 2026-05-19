@@ -74,7 +74,7 @@ export default function GradingResult({
   onOpenBranch,
 }: {
   widget: LearningWidgetInstance;
-  onOpenBranch?: () => void;
+  onOpenBranch?: (question?: string) => void;
 }): JSX.Element | null {
   const data = (widget.data ?? {}) as GradingResultData;
   const category = categoryFromData(data);
@@ -83,6 +83,10 @@ export default function GradingResult({
   }
   const band = bandFor(category);
   const bandLabel = labelFor(category);
+  const followUpSuggestions =
+    onOpenBranch && category === 'incorrect'
+      ? buildFollowUpSuggestions(data)
+      : [];
 
   return (
     <div className={styles.gradingCard}>
@@ -122,6 +126,20 @@ export default function GradingResult({
             ))}
           </div>
         )}
+        {followUpSuggestions.length > 0 && (
+          <div className={styles.gradingFollowUps}>
+            {followUpSuggestions.map((question) => (
+              <button
+                key={question}
+                type="button"
+                className={styles.gradingFollowUpButton}
+                onClick={() => onOpenBranch?.(question)}
+              >
+                {question}
+              </button>
+            ))}
+          </div>
+        )}
         {(category === 'incorrect' || onOpenBranch) && (
           <div className={styles.gradingActions}>
             {category === 'incorrect' && (
@@ -133,7 +151,7 @@ export default function GradingResult({
               <button
                 type="button"
                 className={styles.btnGhost}
-                onClick={onOpenBranch}
+                onClick={() => onOpenBranch()}
               >
                 追问
               </button>
@@ -143,4 +161,41 @@ export default function GradingResult({
       </div>
     </div>
   );
+}
+
+const TAG_FOLLOW_UPS: Record<string, string> = {
+  spelling: '这个拼写错在哪里？',
+  word_order: '这句话的语序应该怎么排？',
+  tense: '这里时态应该怎么判断？',
+  preposition: '这里介词应该怎么选？',
+  article: '为什么这里需要冠词？',
+  subject_verb_agreement: '这里主谓一致怎么看？',
+  auxiliary_verb: '这里为什么需要助动词？',
+  collocation: '为什么这里是固定搭配问题？',
+  politeness: '怎样说会更礼貌自然？',
+  literal_translation: '这句怎样避免直译？',
+  missing_word: '我这句少了哪个成分？',
+  extra_word: '哪个词是多余的？',
+};
+
+function buildFollowUpSuggestions(data: GradingResultData): string[] {
+  const suggestions: string[] = [];
+  for (const tag of data.tags ?? []) {
+    const question = TAG_FOLLOW_UPS[tag];
+    if (question) suggestions.push(question);
+  }
+  if (data.userAnswer && data.referenceAnswer) {
+    suggestions.push(
+      `为什么「${truncateText(data.userAnswer, 20)}」不如参考表达自然？`
+    );
+  }
+  if (data.explanation) {
+    suggestions.push('这次最该记住的规则是什么？');
+  }
+  suggestions.push('能不能用更简单的话解释？');
+  return [...new Set(suggestions)].slice(0, 3);
+}
+
+function truncateText(text: string, maxLength: number): string {
+  return text.length <= maxLength ? text : `${text.slice(0, maxLength - 1)}…`;
 }

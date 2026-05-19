@@ -11,7 +11,7 @@ export default function WidgetSlot({
   onOpenBranch,
 }: {
   widget: LearningWidgetInstance;
-  onOpenBranch?: () => void;
+  onOpenBranch?: (question?: string) => void;
 }): JSX.Element | null {
   if (!shouldRenderWidget(widget)) {
     return null;

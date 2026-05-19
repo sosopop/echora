@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { MessageDTO } from '@shared/api';
+import MarkdownText from '../../components/MarkdownText.js';
 import { useChatStore } from '../../stores/chat.js';
 import styles from './index.module.css';
 
@@ -84,7 +85,14 @@ export default function BranchPanel(): JSX.Element | null {
                   : styles.branchMsgAi
               }
             >
-              {msg.content}
+              {msg.role === 'assistant' ? (
+                <MarkdownText
+                  text={msg.content ?? ''}
+                  className={styles.branchMarkdown}
+                />
+              ) : (
+                msg.content
+              )}
             </div>
           ))
         )}

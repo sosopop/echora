@@ -137,7 +137,7 @@
 
 - 入口:`server/services/branchThread.ts` + `server/routes/chat.ts` 的 `/api/chat/conversations/:id/branch-threads` 与 `/api/chat/branch-threads/:threadId/messages`。
 - 数据模型:支线元信息写 `branch_threads`,支线聊天写 `messages.branch_thread_id`;主线历史查询只返回 `branch_thread_id IS NULL`。
-- 来源校验:创建支线时 `sourceMessageId` 必须属于当前用户当前会话。065 起前端唯一的主线追问入口在 `grading-result` 批改卡片内,普通消息气泡不显示追问按钮;批改卡片支线的 `sourceRef.kind='grading-result'`,携带 widgetId、attemptId、情景对话上下文、AI 提出的问题、用户答案、参考表达、AI 解析和错误标签。
+- 来源校验:创建支线时 `sourceMessageId` 必须属于当前用户当前会话。065 起前端唯一的主线追问入口在 `grading-result` 批改卡片内,普通消息气泡不显示追问按钮;批改卡片支线的 `sourceRef.kind='grading-result'`,携带 widgetId、attemptId、情景对话上下文、AI 提出的问题、用户答案、参考表达、AI 解析和错误标签。067 起错误批改卡片会展示 2-3 个默认追问按钮,点击后自动打开同一支线并发送该追问;点击通用"追问"只打开支线供用户手动输入。
 - 生成回复:032 起若 Provider 支持 `chat()`,支线会用来源上下文 + 用户追问调用真实 LLM;033 起同一支线下最多 20 条历史 user/assistant 消息会一起传给 Provider,支持连续追问。stub 或 Provider 不支持 `chat()` 时返回确定性安全提示。Provider chat 抛错会返回 `502 PROVIDER_ERROR`,不静默降级。
 - 状态隔离:支线发送不会调用 AI Router 或 Skill handler,不会生成 `agent_runs` / SSE,不会改变 `learning_state` / `active_skill` / `input_mode`,普通支线聊天也不会写学习统计。
 - 防泄露:当主会话处于 locked(`practicing` / `grading`)时,普通消息来源的支线 prompt 不携带来源正文,回复不复述来源消息正文,只说明基于第 N 条消息解释,并声明不会泄露标准答案或完整翻译。`grading-result` 来源是已提交后的批改卡片,允许携带该卡片的结构化批改上下文,但不携带当前未提交题目的答案。

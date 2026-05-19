@@ -441,9 +441,13 @@ describe('GradingResult widget', () => {
     };
     render(<GradingResult widget={widget} onOpenBranch={onOpenBranch} />);
 
+    expect(screen.getByText('我这句少了哪个成分？')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('我这句少了哪个成分？'));
+    expect(onOpenBranch).toHaveBeenCalledWith('我这句少了哪个成分？');
+
     fireEvent.click(screen.getByRole('button', { name: '追问' }));
 
-    expect(onOpenBranch).toHaveBeenCalledTimes(1);
+    expect(onOpenBranch).toHaveBeenCalledTimes(2);
     expect(screen.getByText('缺少成分')).toBeInTheDocument();
   });
 });

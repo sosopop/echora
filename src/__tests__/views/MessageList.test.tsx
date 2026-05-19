@@ -154,10 +154,12 @@ describe('MessageList scrolling', () => {
     expect(screen.getByText('餐厅点餐 · 2 道题回看')).toBeInTheDocument();
   });
 
-  it('普通消息不显示追问,批改卡片追问会携带题目和解析上下文', () => {
-    const openBranchForWidget = vi.fn();
+  it('普通消息不显示追问,批改卡片追问会携带题目和解析上下文', async () => {
+    const openBranchForWidget = vi.fn().mockResolvedValue(undefined);
+    const sendBranchMessage = vi.fn().mockResolvedValue(undefined);
     useChatStore.setState({
       openBranchForWidget,
+      sendBranchMessage,
       streamingMessageId: null,
       messages: [
         {
@@ -235,5 +237,10 @@ describe('MessageList scrolling', () => {
         tags: ['collocation', 'missing_word'],
       })
     );
+
+    fireEvent.click(screen.getByText('为什么这里是固定搭配问题？'));
+    await waitFor(() => {
+      expect(sendBranchMessage).toHaveBeenCalledWith('为什么这里是固定搭配问题？');
+    });
   });
 });

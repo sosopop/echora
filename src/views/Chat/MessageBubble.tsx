@@ -4,6 +4,7 @@
 
 import styles from './index.module.css';
 import { describeChatAction, type ChatAction } from '@shared/api';
+import MarkdownText from '../../components/MarkdownText.js';
 
 interface Props {
   role: 'user' | 'assistant' | 'system';
@@ -41,7 +42,11 @@ export default function MessageBubble({
   return (
     <div className={rowCls}>
       <div className={bubbleCls}>
-        {displayText}
+        {isAi ? (
+          <MarkdownText text={displayText} className={styles.messageMarkdown} />
+        ) : (
+          displayText
+        )}
         {streaming && <span className={styles.cursor} />}
       </div>
     </div>

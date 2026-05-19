@@ -19,7 +19,7 @@ import styles from './widgets.module.css';
 
 type WidgetComponent = (props: {
   widget: LearningWidgetInstance;
-  onOpenBranch?: () => void;
+  onOpenBranch?: (question?: string) => void;
 }) => JSX.Element | null;
 
 const REGISTRY: Record<string, WidgetComponent> = {
@@ -40,7 +40,7 @@ export default function WidgetRenderer({
   onOpenBranch,
 }: {
   widget: LearningWidgetInstance;
-  onOpenBranch?: () => void;
+  onOpenBranch?: (question?: string) => void;
 }): JSX.Element {
   const C = REGISTRY[widget.type];
   if (C) return <C widget={widget} onOpenBranch={onOpenBranch} />;

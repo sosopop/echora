@@ -32,6 +32,12 @@ const LEARNING_STATE_LABEL: Record<string, string> = {
   archived: '已归档',
 };
 
+const THEME_OPTIONS: Array<{ value: ThemeMode; label: string; hint: string }> = [
+  { value: 'light', label: '亮色', hint: 'Light' },
+  { value: 'dark', label: '暗色', hint: 'Dark' },
+  { value: 'system', label: '系统', hint: 'Auto' },
+];
+
 export default function Chat(): JSX.Element {
   const learningState = useLearningStateStore((s) => s.state);
   const error = useChatStore((s) => s.error);
@@ -110,40 +116,55 @@ export default function Chat(): JSX.Element {
         <span className={styles.stateBadge}>
           {LEARNING_STATE_LABEL[learningState] ?? learningState}
         </span>
-        <div className={styles.avatar} ref={menuRef}>
-          <span
-            title={user?.email ?? ''}
+        <div className={styles.accountMenu} ref={menuRef}>
+          <button
+            type="button"
+            className={styles.avatarButton}
+            aria-label="打开账号菜单"
+            aria-expanded={menuOpen}
             onClick={() => setMenuOpen((v) => !v)}
           >
             {user?.email?.[0]?.toUpperCase() ?? '?'}
-          </span>
+          </button>
           {menuOpen && (
-            <div className={styles.avatarPopover}>
-              <div className={styles.avatarEmail}>{user?.email ?? ''}</div>
-              <div className={styles.themeRow}>
-                {(['light', 'dark', 'system'] as ThemeMode[]).map((t) => (
+            <div className={styles.accountPopover}>
+              <div className={styles.accountSummary}>
+                <span className={styles.accountAvatar}>
+                  {user?.email?.[0]?.toUpperCase() ?? '?'}
+                </span>
+                <span className={styles.accountText}>
+                  <span className={styles.accountLabel}>当前账号</span>
+                  <span className={styles.accountEmail}>{user?.email ?? ''}</span>
+                </span>
+              </div>
+              <div className={styles.menuSectionLabel}>外观</div>
+              <div className={styles.themeSegment} role="group" aria-label="主题">
+                {THEME_OPTIONS.map((option) => (
                   <button
-                    key={t}
+                    key={option.value}
                     type="button"
                     className={[
                       styles.themeOption,
-                      theme === t ? styles.themeOptionActive : '',
+                      theme === option.value ? styles.themeOptionActive : '',
                     ]
                       .filter(Boolean)
                       .join(' ')}
-                    onClick={() => setTheme(t)}
+                    aria-pressed={theme === option.value}
+                    onClick={() => setTheme(option.value)}
                   >
-                    {t === 'light' ? '亮色' : t === 'dark' ? '暗色' : '跟随系统'}
+                    <span>{option.label}</span>
+                    <span>{option.hint}</span>
                   </button>
                 ))}
               </div>
               <div className={styles.menuDivider} />
               <button
                 type="button"
-                className={[styles.menuItem, styles.menuItemDanger].join(' ')}
+                className={styles.logoutButton}
                 onClick={handleLogout}
               >
-                退出登录
+                <span>退出登录</span>
+                <span>清除本机登录状态</span>
               </button>
             </div>
           )}

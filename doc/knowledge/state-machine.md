@@ -114,7 +114,7 @@ AI 批改卡片内点击追问
   → 主线 learning_state / active_skill / input_mode 不变
 ```
 
-支线消息复用 `messages` 表,但 `GET /api/chat/conversations/:id/messages` 只返回 `branch_thread_id IS NULL` 的主线消息。支线 API 不发 `state-transition`,不生成下一题,不提交答案,普通支线追问也不写 `error_tag_events` / `mastery_records`。044 起,用户在已批改来源的支线中显式点击“加入复盘”时,后端会幂等补写该批改的缺失错误标签事件并更新对应掌握度,但仍不改变主学习状态。065 起普通消息气泡不显示追问入口;批改卡片支线的 `source_ref` 会带上情景对话上下文、AI 问题、用户回答和 AI 解析。锁定态下普通消息来源不复述来源正文,批改卡片来源只携带已提交后的结构化批改上下文,不泄露当前未提交题。
+支线消息复用 `messages` 表,但 `GET /api/chat/conversations/:id/messages` 只返回 `branch_thread_id IS NULL` 的主线消息。支线 API 不发 `state-transition`,不生成下一题,不提交答案,普通支线追问也不写 `error_tag_events` / `mastery_records`。044 起,用户在已批改来源的支线中显式点击“加入复盘”时,后端会幂等补写该批改的缺失错误标签事件并更新对应掌握度,但仍不改变主学习状态。065 起普通消息气泡不显示追问入口;批改卡片支线的 `source_ref` 会带上情景对话上下文、AI 问题、用户回答和 AI 解析。067 起默认追问按钮会在创建/打开支线后立即发送该问题,手动追问按钮只打开支线。锁定态下普通消息来源不复述来源正文,批改卡片来源只携带已提交后的结构化批改上下文,不泄露当前未提交题。
 
 ## 约束与失败点
 

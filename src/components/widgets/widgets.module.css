@@ -354,6 +354,34 @@
   font-size: 12px;
 }
 
+.gradingFollowUps {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.gradingFollowUpButton {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-soft);
+  color: var(--color-body);
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.4;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.gradingFollowUpButton:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: var(--color-canvas);
+}
+
 .gradingActions {
   display: flex;
   gap: 10px;

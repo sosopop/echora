@@ -236,9 +236,14 @@
   font-weight: 500;
 }
 
-.avatar {
+.accountMenu {
+  position: relative;
+}
+
+.avatarButton {
   width: 32px;
   height: 32px;
+  border: 1px solid rgba(204, 120, 92, 0.28);
   border-radius: 50%;
   background: var(--color-primary);
   color: var(--color-on-primary);
@@ -248,53 +253,122 @@
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  position: relative;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.avatarButton:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.avatarButton:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
 }
 
 /* —— avatar menu popover ——————————————————————————— */
-.avatarPopover {
+.accountPopover {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
   z-index: 80;
-  min-width: 220px;
+  width: min(300px, calc(100vw - 32px));
   background: var(--color-canvas);
   border: 1px solid var(--color-hairline);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-popover);
-  padding: 8px;
+  padding: 10px;
 }
 
-.avatarEmail {
-  padding: 8px 12px 10px;
-  font-size: 13px;
+.accountSummary {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-soft);
+}
+
+.accountAvatar {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.accountText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.accountLabel,
+.menuSectionLabel {
+  font-size: 11px;
+  line-height: 1.4;
   color: var(--color-muted);
+}
+
+.accountEmail {
+  color: var(--color-ink);
+  font-size: 13px;
+  line-height: 1.45;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.themeRow {
-  display: flex;
-  gap: 4px;
-  padding: 4px 12px 8px;
+.menuSectionLabel {
+  padding: 12px 4px 6px;
+  font-weight: 700;
+}
+
+.themeSegment {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
 }
 
 .themeOption {
-  flex: 1;
-  height: 32px;
+  min-width: 0;
+  min-height: 48px;
   border: 1px solid var(--color-hairline);
-  border-radius: var(--radius-sm);
-  background: transparent;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-soft);
   color: var(--color-body);
-  font-size: 12px;
-  font-weight: 500;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 10px;
+  text-align: left;
   cursor: pointer;
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
 
+.themeOption span:first-child {
+  color: var(--color-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.themeOption span:last-child {
+  color: var(--color-muted);
+  font-size: 11px;
+}
+
 .themeOption:hover {
-  background: var(--color-surface-soft);
+  border-color: var(--color-primary);
 }
 
 .themeOptionActive {
@@ -303,39 +377,47 @@
   color: var(--color-primary);
 }
 
+.themeOptionActive span:first-child,
+.themeOptionActive span:last-child {
+  color: var(--color-primary);
+}
+
 .menuDivider {
   height: 1px;
   background: var(--color-hairline-soft);
-  margin: 4px 0;
+  margin: 10px 0;
 }
 
-.menuItem {
+.logoutButton {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  font-size: 14px;
-  color: var(--color-body);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  color: var(--color-error);
   cursor: pointer;
   width: 100%;
-  border: 0;
-  background: transparent;
-  text-align: left;
-}
-
-.menuItem:hover {
-  background: var(--color-surface-soft);
-  color: var(--color-ink);
-}
-
-.menuItemDanger {
-  color: var(--color-error);
-}
-
-.menuItemDanger:hover {
+  border: 1px solid transparent;
   background: rgba(198, 69, 69, 0.08);
-  color: var(--color-error);
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.logoutButton span:first-child {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.logoutButton span:last-child {
+  color: var(--color-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.logoutButton:hover {
+  border-color: rgba(198, 69, 69, 0.32);
+  background: rgba(198, 69, 69, 0.12);
 }
 
 .main {
@@ -436,6 +518,99 @@
 .bubbleReferenced {
   outline: 2px solid var(--color-primary);
   outline-offset: 4px;
+}
+
+.messageMarkdown,
+.branchMarkdown {
+  min-width: 0;
+  white-space: normal;
+}
+
+.messageMarkdown p,
+.branchMarkdown p {
+  margin: 0 0 8px;
+}
+
+.messageMarkdown p:last-child,
+.branchMarkdown p:last-child,
+.messageMarkdown ul:last-child,
+.branchMarkdown ul:last-child,
+.messageMarkdown ol:last-child,
+.branchMarkdown ol:last-child,
+.messageMarkdown pre:last-child,
+.branchMarkdown pre:last-child,
+.messageMarkdown blockquote:last-child,
+.branchMarkdown blockquote:last-child {
+  margin-bottom: 0;
+}
+
+.messageMarkdown ul,
+.messageMarkdown ol,
+.branchMarkdown ul,
+.branchMarkdown ol {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.messageMarkdown li,
+.branchMarkdown li {
+  margin: 4px 0;
+}
+
+.messageMarkdown h3,
+.messageMarkdown h4,
+.messageMarkdown h5,
+.branchMarkdown h3,
+.branchMarkdown h4,
+.branchMarkdown h5 {
+  margin: 0 0 8px;
+  color: var(--color-ink);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.messageMarkdown code,
+.branchMarkdown code {
+  border-radius: var(--radius-xs);
+  background: var(--color-surface-soft);
+  color: var(--color-ink);
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.messageMarkdown pre,
+.branchMarkdown pre {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-soft);
+  overflow-x: auto;
+}
+
+.messageMarkdown pre code,
+.branchMarkdown pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.messageMarkdown blockquote,
+.branchMarkdown blockquote {
+  margin: 8px 0;
+  padding-left: 10px;
+  border-left: 3px solid var(--color-primary);
+  color: var(--color-muted);
+}
+
+.messageMarkdown a,
+.branchMarkdown a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.messageMarkdown a:hover,
+.branchMarkdown a:hover {
+  text-decoration: underline;
 }
 
 .msgSystemBubble {
