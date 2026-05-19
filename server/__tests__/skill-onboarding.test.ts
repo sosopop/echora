@@ -161,12 +161,13 @@ describe('onboarding skill', () => {
     const events = await collect(onboardingSkill, makeCtx(provider));
 
     const textChunks = events.filter((e) => e.type === 'text-chunk');
-    expect(textChunks.length).toBeGreaterThanOrEqual(3);
+    expect(textChunks.length).toBeGreaterThanOrEqual(2);
     const text = textChunks
       .map((event) => (event as { payload: { text: string } }).payload.text)
       .join('');
-    expect(text).toContain('你好,我是 Echo!');
-    expect(text).toContain('推荐几个适合练习的场景');
+    expect(text).toContain('已确认称呼是「小李」');
+    expect(text).toContain('英语水平是 B1');
+    expect(text).toContain('准备适合的练习场景');
 
     const transitions = events.filter((e) => e.type === 'state-transition');
     expect(transitions.length).toBe(1);
@@ -189,6 +190,39 @@ describe('onboarding skill', () => {
 
     const dones = events.filter((e) => e.type === 'done');
     expect(dones.length).toBe(1);
+  });
+
+  it('用户用年级描述英语水平时不把它误记为真实年级', async () => {
+    const provider = makeProvider([
+      { type: 'text-delta', text: '好的,那大概是 A1。想先从什么话题开始?' },
+      {
+        type: 'tool-use',
+        toolName: 'update_profile',
+        input: { level: 'A1', grade: '小学六年级' },
+      },
+      { type: 'message-stop', stopReason: 'end_turn' },
+    ]);
+    db.prepare(
+      `UPDATE user_profiles SET name = ? WHERE user_id = ?`
+    ).run('小小', userId);
+
+    const events = await collect(
+      onboardingSkill,
+      makeCtxWithParams(provider, { userText: '小学6年级的水平' })
+    );
+    const profile = getProfile(db, userId);
+    expect(profile?.level).toBe('A1');
+    expect(profile?.grade).toBeNull();
+
+    const text = events
+      .filter((event) => event.type === 'text-chunk')
+      .map((event) => (event as { payload: { text: string } }).payload.text)
+      .join('');
+    expect(text).toContain('英语水平是 A1');
+    expect(text).toContain('准备适合的练习场景');
+    expect(text).not.toContain('小学六年级');
+    expect(text).not.toContain('想先从什么话题开始');
+    expect(events.filter((e) => e.type === 'state-transition')).toHaveLength(1);
   });
 
   it('必填字段不全时不产 state-transition', async () => {

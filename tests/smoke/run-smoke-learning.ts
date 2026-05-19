@@ -92,22 +92,44 @@ async function collectSseEvents(
       ),
     ]);
     const { done, value } = result as { done: boolean; value: Uint8Array | undefined };
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    const parts = buf.split('\n\n');
-    buf = parts.pop() ?? '';
-    for (const part of parts) {
-      const dataLine = part.split('\n').find((l) => l.startsWith('data: '));
-      if (!dataLine) continue;
-      try {
-        const evt = JSON.parse(dataLine.substring(6)) as SkillEvent;
-        events.push(evt);
-        if (evt.type === 'done' || evt.type === 'error') { stopped = true; break; }
-      } catch { /* skip */ }
+    if (!done) {
+      buf += decoder.decode(value, { stream: true });
     }
+    const drained = drainSseBuffer(buf, (evt) => {
+      events.push(evt);
+      if (evt.type === 'done' || evt.type === 'error') {
+        stopped = true;
+      }
+    });
+    buf = drained.rest;
+    if (done) break;
+  }
+  if (!stopped && buf.trim().length > 0) {
+    const drained = drainSseBuffer(`${buf}\n\n`, (evt) => {
+      events.push(evt);
+    });
+    buf = drained.rest;
   }
   try { await reader.cancel(); } catch { /* ignore */ }
   return events;
+}
+
+function drainSseBuffer(
+  buf: string,
+  onEvent: (event: SkillEvent) => void
+): { rest: string } {
+  const parts = buf.split('\n\n');
+  const rest = parts.pop() ?? '';
+  for (const part of parts) {
+    const dataLine = part.split('\n').find((l) => l.startsWith('data: '));
+    if (!dataLine) continue;
+    try {
+      onEvent(JSON.parse(dataLine.substring('data: '.length)) as SkillEvent);
+    } catch {
+      /* skip */
+    }
+  }
+  return { rest };
 }
 
 async function registerUser(
@@ -755,7 +777,7 @@ scenario('I', 'provider chat 抛错 → SkillEvent error 直传客户端', async
 
     const s = await httpJson<{ data: { streamId: string } }>(
       app.baseUrl, 'POST', '/api/chat/send',
-      { token, body: { conversationId: convId, text: '场景' } }
+      { token, body: { conversationId: convId, action: { type: 'request-new-scenes' } } }
     );
     await delay(80);
     const e = await collectSseEvents(app.baseUrl, s.body.data.streamId, token);

@@ -1,8 +1,8 @@
 /**
- * 端到端冒烟脚本(stub provider)
+ * 端到端冒烟脚本(确定性 provider)
  *
  * 流程:
- *   1. startTestApp(stub provider)→ 临时 DB + 随机端口
+ *   1. startTestApp(scripted provider)→ 临时 DB + 随机端口
  *   2. fetch register
  *   3. fetch profile CRUD
  *   4. fetch /me 验证 onboardingCompleted
@@ -15,6 +15,7 @@
 
 import { setTimeout as delay } from 'node:timers/promises';
 import { startTestApp } from './_helpers/testApp.js';
+import { ScriptedProvider } from './_helpers/scriptedProvider.js';
 
 interface SmokeStep {
   name: string;
@@ -22,7 +23,43 @@ interface SmokeStep {
 }
 
 async function main(): Promise<void> {
-  const app = await startTestApp({ tmpPrefix: 'echora-smoke-' });
+  const app = await startTestApp({
+    tmpPrefix: 'echora-smoke-',
+    provider: new ScriptedProvider({
+      chatScripts: [
+        {
+          toolName: 'propose_scenes',
+          match: '',
+          events: [
+            {
+              type: 'tool-use',
+              toolName: 'propose_scenes',
+              input: {
+                scenes: [
+                  { id: 'cafe', topic: 'cafe order', title: '咖啡点单', description: '点饮品/打包', knowledgePoint: '礼貌请求', difficulty: 'B1' },
+                  { id: 'travel', topic: 'travel help', title: '旅行问路', description: '问方向', knowledgePoint: '介词', difficulty: 'B1' },
+                  { id: 'school', topic: 'school chat', title: '校园对话', description: '同学交流', knowledgePoint: '一般疑问句', difficulty: 'B1' },
+                  { id: 'shop', topic: 'shopping basics', title: '商场购物', description: '问价格/换尺码', knowledgePoint: '比较级', difficulty: 'B1' },
+                  { id: 'doctor', topic: 'doctor visit', title: '看病问诊', description: '描述症状', knowledgePoint: '身体表达', difficulty: 'B1' },
+                  { id: 'office', topic: 'office meeting', title: '办公室会议', description: '确认任务', knowledgePoint: '工作协作', difficulty: 'B1' },
+                  { id: 'movie', topic: 'movie plan', title: '看电影约票', description: '约朋友看电影', knowledgePoint: '邀请表达', difficulty: 'B1' },
+                  { id: 'hotel', topic: 'hotel check-in', title: '酒店入住', description: '办理入住', knowledgePoint: '基础问答', difficulty: 'B1' },
+                ],
+              },
+            },
+            { type: 'message-stop', stopReason: 'tool_use' },
+          ],
+        },
+        {
+          match: '',
+          events: [
+            { type: 'text-delta', text: '在的。我们可以继续练英语。' },
+            { type: 'message-stop', stopReason: 'end_turn' },
+          ],
+        },
+      ],
+    }),
+  });
   console.log(`[smoke] 服务已启动 ${app.baseUrl}`);
   const { baseUrl } = app;
 
@@ -152,23 +189,49 @@ async function main(): Promise<void> {
         let buf = '';
         let sawTextChunk = false;
         let sawDone = false;
+        const seenTypes: string[] = [];
         const deadline = Date.now() + 5000;
 
         while (Date.now() < deadline && !(sawTextChunk && sawDone)) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += decoder.decode(value, { stream: true });
-          // 按 \n\n 切分 SSE event
-          const parts = buf.split('\n\n');
-          buf = parts.pop() ?? '';
-          for (const part of parts) {
-            const dataLine = part
-              .split('\n')
-              .find((l) => l.startsWith('data: '));
-            if (!dataLine) continue;
-            const json = dataLine.substring('data: '.length);
+          const remaining = deadline - Date.now();
+          const result = await Promise.race([
+            reader.read(),
+            new Promise<{ done: true; value: undefined }>((resolve) =>
+              setTimeout(
+                () => resolve({ done: true, value: undefined }),
+                Math.max(remaining, 0)
+              )
+            ),
+          ]);
+          const { done, value } = result as {
+            done: boolean;
+            value: Uint8Array | undefined;
+          };
+          if (!done) {
+            buf += decoder.decode(value, { stream: true });
+          }
+          const consumed = drainSseBuffer(buf, (evt) => {
+            seenTypes.push(evt.type);
+            if (evt.type === 'text-chunk') sawTextChunk = true;
+            if (evt.type === 'done') sawDone = true;
+          });
+          buf = consumed.rest;
+          if (done) {
+            break;
+          }
+        }
+
+        if (buf.trim().length > 0) {
+          const consumed = drainSseBuffer(buf, (evt) => {
+            seenTypes.push(evt.type);
+            if (evt.type === 'text-chunk') sawTextChunk = true;
+            if (evt.type === 'done') sawDone = true;
+          });
+          buf = consumed.rest;
+          if (buf.trim().length > 0) {
             try {
-              const evt = JSON.parse(json) as { type: string };
+              const evt = JSON.parse(buf.replace(/^data:\s*/, '')) as { type: string };
+              seenTypes.push(evt.type);
               if (evt.type === 'text-chunk') sawTextChunk = true;
               if (evt.type === 'done') sawDone = true;
             } catch {
@@ -185,7 +248,7 @@ async function main(): Promise<void> {
 
         if (!sawTextChunk || !sawDone) {
           throw new Error(
-            `未收到完整事件流 (text-chunk=${sawTextChunk}, done=${sawDone})`
+            `未收到完整事件流 (text-chunk=${sawTextChunk}, done=${sawDone}, seen=${seenTypes.join(',')})`
           );
         }
       },
@@ -212,6 +275,27 @@ async function main(): Promise<void> {
   }
   console.log(`[smoke] PASSED ${steps.length}/${steps.length}`);
   process.exit(0);
+}
+
+function drainSseBuffer(
+  buf: string,
+  onEvent: (evt: { type: string }) => void
+): { rest: string } {
+  const parts = buf.split('\n\n');
+  const rest = parts.pop() ?? '';
+  for (const part of parts) {
+    const dataLine = part
+      .split('\n')
+      .find((l) => l.startsWith('data: '));
+    if (!dataLine) continue;
+    const json = dataLine.substring('data: '.length);
+    try {
+      onEvent(JSON.parse(json) as { type: string });
+    } catch {
+      /* ignore */
+    }
+  }
+  return { rest };
 }
 
 main().catch((err) => {

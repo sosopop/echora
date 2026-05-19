@@ -58,7 +58,7 @@ export const SceneCardsWidgetSchema = z.object({
   ...widgetBase,
   type: z.literal('scene-cards'),
   data: z.object({
-    cards: z.array(SceneCardSchema).min(1).max(5),
+    cards: z.array(SceneCardSchema).min(1).max(8),
     allowCustom: z.boolean().default(true),
   }),
 });

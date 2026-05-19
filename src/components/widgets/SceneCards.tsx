@@ -4,6 +4,7 @@
  * PRD §4.7;原型 doc/design/widgets/scene-cards.html
  * 数据来源:scene-select skill widget-ready 落到 data.cards
  * 交互:卡片 click → chat.sendAction({ type: 'select-scene', payload: { sceneId, ...card } })
+ *      自定义卡 → 本地切回 chat 输入并聚焦
  *      底部「换一批」→ sendAction({ type: 'request-new-scenes' })
  */
 
@@ -34,10 +35,12 @@ export default function SceneCards({
   widget: LearningWidgetInstance;
 }): JSX.Element | null {
   const sendAction = useChatStore((s) => s.sendAction);
+  const activateChatInput = useChatStore((s) => s.activateChatInput);
   const streaming = useChatStore((s) => s.streamingMessageId !== null);
   const learningState = useLearningStateStore((s) => s.state);
   const data = (widget.data ?? {}) as SceneCardsData;
-  const cards = data.cards ?? [];
+  const cards = (data.cards ?? []).slice(0, 8);
+  const showCustom = data.allowCustom !== false;
   const disabled =
     widget.status !== 'ready' ||
     streaming ||
@@ -72,7 +75,7 @@ export default function SceneCards({
 
   return (
     <div>
-      <div className={styles.sceneCards}>
+      <div className={styles.sceneCards} aria-label="场景选择">
         {cards.map((c) => (
           <button
             key={c.id}
@@ -101,6 +104,24 @@ export default function SceneCards({
             </div>
           </button>
         ))}
+        {showCustom && (
+          <button
+            type="button"
+            className={`${styles.sceneCard} ${styles.sceneCardCustom}`}
+            disabled={disabled}
+            onClick={() => activateChatInput()}
+          >
+            <div className={styles.sceneEmoji}>✏️</div>
+            <div className={styles.sceneTitle}>自定义场景</div>
+            <div className={styles.sceneDesc}>
+              直接描述你想练的真实场景,我来帮你进入练习。
+            </div>
+            <div className={styles.sceneMeta}>
+              <span>自由输入</span>
+              <span>· 你的主题</span>
+            </div>
+          </button>
+        )}
       </div>
       <div className={styles.sceneFoot}>
         <button

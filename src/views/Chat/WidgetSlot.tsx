@@ -8,15 +8,17 @@ import styles from './index.module.css';
 
 export default function WidgetSlot({
   widget,
+  onOpenBranch,
 }: {
   widget: LearningWidgetInstance;
+  onOpenBranch?: () => void;
 }): JSX.Element | null {
   if (!shouldRenderWidget(widget)) {
     return null;
   }
   return (
     <div className={styles.widgetSlot}>
-      <WidgetRenderer widget={widget} />
+      <WidgetRenderer widget={widget} onOpenBranch={onOpenBranch} />
     </div>
   );
 }

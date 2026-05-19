@@ -70,12 +70,14 @@ function makeProvider(opts: {
   dialogue?: { roles: string[]; turns: { role: string; en: string; zh: string }[] };
   proposeShouldThrow?: boolean;
   dialogueShouldThrow?: boolean;
+  toolsSeen?: string[];
 }): AIProvider {
   return {
     name: 'mock',
     async route() { throw new Error('not used'); },
     async *chat(req: ChatRequest): AsyncIterable<ChatStreamEvent> {
       const toolName = req.tools?.[0]?.name;
+      if (toolName) opts.toolsSeen?.push(toolName);
       if (toolName === 'propose_scenes') {
         if (opts.proposeShouldThrow) throw new Error('propose upstream 503');
         yield {
@@ -131,10 +133,13 @@ const MOCK_SCENES = [
   { id: 'school', topic: 'school chat', title: '校园对话', description: '同学之间', knowledgePoint: '礼貌请求', difficulty: 'B1' },
   { id: 'job', topic: 'job interview', title: '工作面试', description: '面试问答', knowledgePoint: '过去时', difficulty: 'B2' },
   { id: 'shop', topic: 'shopping basics', title: '商场购物', description: '挑选/砍价', knowledgePoint: '比较级', difficulty: 'A2' },
+  { id: 'airport', topic: 'airport check-in', title: '机场值机', description: '托运行李', knowledgePoint: '旅行表达', difficulty: 'B1' },
+  { id: 'doctor', topic: 'doctor visit', title: '看病问诊', description: '描述症状', knowledgePoint: '身体表达', difficulty: 'B1' },
+  { id: 'movie', topic: 'movie plan', title: '看电影', description: '约朋友看电影', knowledgePoint: '邀请表达', difficulty: 'B1' },
 ];
 
 describe('sceneSelect skill', () => {
-  it('无 action(默认)→ widget scene-cards + ready', async () => {
+  it('无 action(默认)→ widget scene-cards 返回 8 张推荐 + ready', async () => {
     const provider = makeProvider({ proposeScenes: MOCK_SCENES });
     const events = await collect(makeCtx(provider));
 
@@ -142,10 +147,14 @@ describe('sceneSelect skill', () => {
     expect(init).toBeDefined();
     const ready = events.find((e) => e.type === 'widget-ready');
     expect(ready).toBeDefined();
-    const cards = (ready as { payload: { patch: { data: { cards: unknown[] } } } })
+    const cards = (ready as { payload: { patch: { data: { cards: Array<{ emoji: string }> ; allowCustom: boolean } } } })
       .payload.patch.data.cards;
-    expect(cards.length).toBeGreaterThanOrEqual(3);
-    expect(cards.length).toBeLessThanOrEqual(5);
+    expect(cards).toHaveLength(8);
+    expect(new Set(cards.map((card) => card.emoji)).size).toBe(8);
+    expect(
+      (ready as { payload: { patch: { data: { allowCustom: boolean } } } })
+        .payload.patch.data.allowCustom
+    ).toBe(true);
 
     const mode = events.find((e) => e.type === 'mode-switch');
     expect((mode as { payload: { mode: string } }).payload.mode).toBe('select');
@@ -164,6 +173,25 @@ describe('sceneSelect skill', () => {
     const cards = (ready as { payload: { patch: { data: { cards: { id: string }[] } } } })
       .payload.patch.data.cards;
     expect(cards.find((c) => c.id === 'restaurant')).toBeUndefined();
+    expect(cards).toHaveLength(8);
+  });
+
+  it('候选不足或重复时用确定性兜底补满 8 张', async () => {
+    const provider = makeProvider({
+      proposeScenes: [
+        MOCK_SCENES[0],
+        { ...MOCK_SCENES[0], id: 'restaurant-copy' },
+      ],
+    });
+    const events = await collect(makeCtx(provider));
+
+    const ready = events.find((e) => e.type === 'widget-ready');
+    const cards = (ready as { payload: { patch: { data: { cards: { id: string; title: string; difficulty: string }[] } } } })
+      .payload.patch.data.cards;
+    expect(cards).toHaveLength(8);
+    expect(cards.filter((c) => c.title === '餐厅点餐')).toHaveLength(1);
+    expect(cards.some((c) => c.id === 'cafe-ordering')).toBe(true);
+    expect(cards.every((c) => c.difficulty)).toBe(true);
   });
 
   it('practicing 中 request-new-scenes 会切回 scene_selecting 再展示候选', async () => {
@@ -265,6 +293,55 @@ describe('sceneSelect skill', () => {
     expect(history).toContain('restaurant ordering');
     expect(dialogue!.title).toBe('餐厅点餐');
     expect(getConversation(db, conversationId, userId)?.title).toBe('餐厅点餐');
+  });
+
+  it('自由文本自定义场景 → 直接生成 dialogue,不重新推荐 8 张卡', async () => {
+    const toolsSeen: string[] = [];
+    const provider = makeProvider({
+      toolsSeen,
+      dialogue: {
+        roles: ['Player A', 'Player B'],
+        turns: [
+          { role: 'Player A', en: 'Do you want to play a game?', zh: '你想打游戏吗?' },
+          { role: 'Player B', en: 'Yes, let us play together.', zh: '想,我们一起玩吧。' },
+          { role: 'Player A', en: 'Which game do you like?', zh: '你喜欢哪个游戏?' },
+          { role: 'Player B', en: 'I like this one.', zh: '我喜欢这个。' },
+        ],
+      },
+    });
+    const events = await collect(
+      makeCtx(provider, undefined, 'scene_selecting', {
+        customSceneText: '和朋友打游戏',
+      })
+    );
+
+    expect(toolsSeen).toEqual(['generate_scene_dialogue']);
+    expect(
+      events.find(
+        (e) =>
+          e.type === 'widget-init' &&
+          (e as { payload: { widget: { type: string } } }).payload.widget
+            .type === 'scene-cards'
+      )
+    ).toBeUndefined();
+    const text = events
+      .filter((event) => event.type === 'text-chunk')
+      .map((event) => (event as { payload: { text: string } }).payload.text)
+      .join('');
+    expect(text).toContain('和朋友打游戏');
+    expect(text).not.toContain('准备 8 个场景');
+
+    const dialogue = getActiveSceneDialogue(db, conversationId);
+    expect(dialogue).not.toBeNull();
+    expect(dialogue!.sceneId).toMatch(/^custom-/);
+    expect(dialogue!.title).toBe('和朋友打游戏');
+    expect(listSceneHistory(db, userId)).toContain('和朋友打游戏');
+
+    const transition = events.find((e) => e.type === 'state-transition') as {
+      payload: { nextLearningState: string; activeSkill: string | null };
+    };
+    expect(transition.payload.nextLearningState).toBe('practicing');
+    expect(transition.payload.activeSkill).toBe('practice');
   });
 
   it('propose 失败 → widget error + mode-switch(chat) + yield error', async () => {

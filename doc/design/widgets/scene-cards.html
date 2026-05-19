@@ -23,7 +23,7 @@
           <h1 class="display-md">scene-cards</h1>
           <p class="lead">
             场景推荐卡片组。AI 完成画像收集后调用 scene-select Skill 时输出。
-            水平排列 3-5 张卡片,每张含 emoji、标题、知识点、难度。
+            8 张推荐卡 + 1 张自定义入口,九宫格布局,每张含 emoji、标题、知识点、难度。
           </p>
         </div>
         <div class="tabs">
@@ -46,48 +46,21 @@
             <div class="widget" style="border-left: 3px solid var(--color-primary);">
               <div class="widget-head">
                 <span class="badge badge-coral">推荐场景</span>
-                <span class="caption muted">基于你的画像 · 4 个</span>
+                <span class="caption muted">基于你的画像 · 8 个推荐 + 自定义</span>
                 <span class="spacer"></span>
                 <button class="btn btn-ghost btn-sm">↻ 换一批</button>
               </div>
               <div class="widget-body" style="padding: 16px;">
                 <div class="scene-grid">
-                  <div class="scene-card">
-                    <div class="emoji">🏫</div>
-                    <div class="title">校园对话</div>
-                    <div class="desc">同学之间的日常 · 课堂请假、借东西</div>
-                    <div class="meta">
-                      <span>知识点 · 礼貌请求</span>
-                      <span>难度 · 中</span>
-                    </div>
-                  </div>
-                  <div class="scene-card">
-                    <div class="emoji">🍝</div>
-                    <div class="title">餐厅点餐</div>
-                    <div class="desc">点单、询问做法、结账</div>
-                    <div class="meta">
-                      <span>知识点 · 固定搭配</span>
-                      <span>难度 · 中</span>
-                    </div>
-                  </div>
-                  <div class="scene-card">
-                    <div class="emoji">✈️</div>
-                    <div class="title">旅行问路</div>
-                    <div class="desc">问方向、地铁站、紧急情况</div>
-                    <div class="meta">
-                      <span>知识点 · 介词</span>
-                      <span>难度 · 中</span>
-                    </div>
-                  </div>
-                  <div class="scene-card">
-                    <div class="emoji">🎬</div>
-                    <div class="title">影评讨论</div>
-                    <div class="desc">表达观点、对比、推荐</div>
-                    <div class="meta">
-                      <span>知识点 · 比较级</span>
-                      <span>难度 · 较难</span>
-                    </div>
-                  </div>
+                  <div class="scene-card"><div class="emoji">🏫</div><div class="title">校园对话</div><div class="desc">同学之间的日常 · 课堂请假、借东西</div><div class="meta"><span>知识点 · 礼貌请求</span><span>难度 · 中</span></div></div>
+                  <div class="scene-card"><div class="emoji">🍝</div><div class="title">餐厅点餐</div><div class="desc">点单、询问做法、结账</div><div class="meta"><span>知识点 · 固定搭配</span><span>难度 · 中</span></div></div>
+                  <div class="scene-card"><div class="emoji">✈️</div><div class="title">旅行问路</div><div class="desc">问方向、地铁站、紧急情况</div><div class="meta"><span>知识点 · 介词</span><span>难度 · 中</span></div></div>
+                  <div class="scene-card"><div class="emoji">🎬</div><div class="title">影评讨论</div><div class="desc">表达观点、对比、推荐</div><div class="meta"><span>知识点 · 比较级</span><span>难度 · 较难</span></div></div>
+                  <div class="scene-card"><div class="emoji">🏥</div><div class="title">看病问诊</div><div class="desc">描述症状、预约时间、拿药</div><div class="meta"><span>知识点 · 身体状况</span><span>难度 · 中</span></div></div>
+                  <div class="scene-card"><div class="emoji">🛍️</div><div class="title">商场购物</div><div class="desc">挑选、问价、换尺码</div><div class="meta"><span>知识点 · 比较级</span><span>难度 · 中</span></div></div>
+                  <div class="scene-card"><div class="emoji">💼</div><div class="title">办公室会议</div><div class="desc">安排会议、确认分工和截止时间</div><div class="meta"><span>知识点 · 工作协作</span><span>难度 · 较难</span></div></div>
+                  <div class="scene-card"><div class="emoji">🎉</div><div class="title">朋友邀约</div><div class="desc">约见面、改时间、确认地点</div><div class="meta"><span>知识点 · 社交邀请</span><span>难度 · 中</span></div></div>
+                  <div class="scene-card"><div class="emoji">✏️</div><div class="title">自定义场景</div><div class="desc">直接描述你想练的真实场景,我来帮你现编</div><div class="meta"><span>自由输入</span><span>随时开始</span></div></div>
                 </div>
               </div>
               <div class="widget-foot">
@@ -111,6 +84,12 @@
               </div>
               <div class="widget-body" style="padding: 16px;">
                 <div class="scene-grid">
+                  <div class="skeleton-card"></div>
+                  <div class="skeleton-card"></div>
+                  <div class="skeleton-card"></div>
+                  <div class="skeleton-card"></div>
+                  <div class="skeleton-card"></div>
+                  <div class="skeleton-card"></div>
                   <div class="skeleton-card"></div>
                   <div class="skeleton-card"></div>
                   <div class="skeleton-card"></div>
@@ -142,13 +121,13 @@
       <h3>结构</h3>
       <ul>
         <li><code>widget-head</code>: 标题 + "换一批"按钮</li>
-        <li><code>scene-grid</code>: 3-up 网格 (移动端 1-2 列或水平滑动)</li>
+        <li><code>scene-grid</code>: 3 列九宫格 (移动端 1-2 列)</li>
         <li><code>widget-foot</code>: "自定义场景"自由输入入口</li>
       </ul>
       <h3>状态</h3>
       <ul>
         <li><code>loading</code>: 骨架占位</li>
-        <li><code>ready</code>: 可点击,hover 上浮</li>
+        <li><code>ready</code>: 可点击,hover 上浮,包含 8 推荐卡 + 1 自定义卡</li>
         <li><code>empty</code>: AI 无法推荐时,引导自定义</li>
       </ul>
       <h3>关联 Skill</h3>

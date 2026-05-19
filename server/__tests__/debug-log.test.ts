@@ -41,7 +41,7 @@ beforeEach(() => {
   const userId = Number(user.lastInsertRowid);
   token = signToken({ id: userId, email: 'debug@test.com' }, 'debug-secret');
   conversationId = createConversation(db, userId, {
-    learningState: 'scene_selecting',
+    learningState: 'awaiting_next',
   }).id;
 
   const config: Config = {

@@ -9,6 +9,7 @@ import type { LearningWidgetInstance } from '@shared/skill';
 import { useChatStore } from '../../stores/chat.js';
 import { runWidgetAction } from './actionProtocol.js';
 import styles from './widgets.module.css';
+import { labelForErrorTag, localizeErrorTagText } from './tagLabels.js';
 
 interface MasteryRow {
   tag: string;
@@ -130,7 +131,9 @@ export default function ProgressSummary({
               return (
                 <div key={m.tag} className={styles.masteryItem}>
                   <div className={styles.masteryTop}>
-                    <span className={styles.masteryName}>{m.tag}</span>
+                    <span className={styles.masteryName}>
+                      {labelForErrorTag(m.tag)}
+                    </span>
                     <span className={styles.masteryScore}>{score}</span>
                   </div>
                   <div className={styles.masteryTrack}>
@@ -158,7 +161,7 @@ export default function ProgressSummary({
             {(strongPoints.length > 0 ? strongPoints : ['完成本轮练习']).map(
               (p) => (
                 <span key={p} className={`${styles.summaryChip} ${styles.ok}`}>
-                  {p}
+                  {localizeErrorTagText(p)}
                 </span>
               )
             )}
@@ -170,7 +173,7 @@ export default function ProgressSummary({
             {(weakPoints.length > 0 ? weakPoints : ['暂无集中薄弱点']).map(
               (p) => (
                 <span key={p} className={`${styles.summaryChip} ${styles.bad}`}>
-                  {p}
+                  {localizeErrorTagText(p)}
                 </span>
               )
             )}
@@ -184,8 +187,12 @@ export default function ProgressSummary({
           <div className={styles.suggestionGrid}>
             {nextSuggestions.map((s) => (
               <div key={`${s.title}-${s.action ?? ''}`} className={styles.suggestionItem}>
-                <div className={styles.suggestionTitle}>{s.title}</div>
-                <div className={styles.suggestionDesc}>{s.desc}</div>
+                <div className={styles.suggestionTitle}>
+                  {localizeErrorTagText(s.title)}
+                </div>
+                <div className={styles.suggestionDesc}>
+                  {localizeErrorTagText(s.desc)}
+                </div>
                 <button
                   type="button"
                   className={styles.suggestionButton}

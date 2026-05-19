@@ -4,6 +4,7 @@
 
 import type { LearningWidgetInstance } from '@shared/skill';
 import styles from './widgets.module.css';
+import { labelForErrorTag } from './tagLabels.js';
 
 interface AnswerReviewItem {
   questionNo: number;
@@ -80,7 +81,9 @@ export default function AnswerReview({
                 </span>
                 <span>{labelForQuestionType(item.questionType)}</span>
                 {(item.tags ?? []).map((tag) => (
-                  <span key={tag}>{tag}</span>
+                  <span key={tag} title={tag}>
+                    {labelForErrorTag(tag)}
+                  </span>
                 ))}
               </div>
             </div>

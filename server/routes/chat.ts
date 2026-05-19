@@ -331,11 +331,14 @@ export function createChatRouter(deps: ChatRouterDeps): Router {
       }
       const source = getMessage(db, thread.sourceMessageId);
       const branchHistory = getBranchMessages(db, thread.id, 20);
+      const hideSourceContent =
+        shouldLockHistory(conv) && !isGradingResultSourceRef(thread.sourceRef);
       const assistantText = await buildBranchAssistantText(
         provider,
         text,
         source,
-        shouldLockHistory(conv),
+        hideSourceContent,
+        thread.sourceRef,
         branchHistory,
         branchController.signal,
         logDebug,
@@ -981,6 +984,7 @@ async function buildBranchAssistantText(
   question: string,
   source: MessageDTO | null,
   hideSourceContent: boolean,
+  sourceRef: unknown,
   branchHistory: MessageDTO[],
   signal: AbortSignal,
   logDebug?: DebugLogger,
@@ -997,6 +1001,7 @@ async function buildBranchAssistantText(
             question,
             source,
             hideSourceContent,
+            sourceRef,
             branchHistory
           ),
           maxTokens: 700,
@@ -1024,7 +1029,7 @@ async function buildBranchAssistantText(
     if (text.trim()) return text.trim();
   }
 
-  return buildBranchFallbackText(question, source, hideSourceContent);
+  return buildBranchFallbackText(question, source, hideSourceContent, sourceRef);
 }
 
 function isAbortError(err: unknown): boolean {
@@ -1042,10 +1047,85 @@ function buildBranchSystemPrompt(hideSourceContent: boolean): string {
   ].join('\n');
 }
 
+function isGradingResultSourceRef(sourceRef: unknown): boolean {
+  return isRecord(sourceRef) && sourceRef.kind === 'grading-result';
+}
+
+function formatBranchSourceRef(
+  sourceRef: unknown,
+  hideSourceContent: boolean
+): string {
+  if (hideSourceContent || !isRecord(sourceRef)) {
+    return '结构化来源上下文:已隐藏。';
+  }
+  if (sourceRef.kind !== 'grading-result') {
+    return `结构化来源上下文:${JSON.stringify(sourceRef)}`;
+  }
+
+  const parts = ['结构化来源上下文:AI 批改卡片'];
+  const scenarioContext = stringField(sourceRef, 'scenarioContext');
+  const aiQuestion = stringField(sourceRef, 'aiQuestion');
+  const myAnswer = stringField(sourceRef, 'myAnswer');
+  const referenceAnswer = stringField(sourceRef, 'referenceAnswer');
+  const aiAnalysis = stringField(sourceRef, 'aiAnalysis');
+  const tags = stringArrayField(sourceRef, 'tags');
+  if (scenarioContext) parts.push(`情景对话上下文:\n${scenarioContext}`);
+  if (aiQuestion) parts.push(`AI 提出的问题:\n${aiQuestion}`);
+  if (myAnswer) parts.push(`我的回答:\n${myAnswer}`);
+  if (referenceAnswer) parts.push(`参考表达:\n${referenceAnswer}`);
+  if (aiAnalysis) parts.push(`AI 的解析:\n${aiAnalysis}`);
+  if (tags.length > 0) parts.push(`错误标签:${formatErrorTags(tags)}`);
+  return parts.join('\n');
+}
+
+function stringField(
+  record: Record<string, unknown>,
+  key: string
+): string {
+  const value = record[key];
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function stringArrayField(
+  record: Record<string, unknown>,
+  key: string
+): string[] {
+  const value = record[key];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
+}
+
+const ERROR_TAG_LABELS: Record<string, string> = {
+  spelling: '拼写',
+  word_order: '语序',
+  tense: '时态',
+  preposition: '介词',
+  article: '冠词',
+  subject_verb_agreement: '主谓一致',
+  auxiliary_verb: '助动词',
+  collocation: '固定搭配',
+  politeness: '礼貌表达',
+  literal_translation: '直译',
+  missing_word: '缺少成分',
+  extra_word: '多余词',
+};
+
+function formatErrorTags(tags: string[]): string {
+  return tags
+    .map((tag) => ERROR_TAG_LABELS[tag] ?? tag)
+    .join(' / ');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
 function buildBranchProviderMessages(
   question: string,
   source: MessageDTO | null,
   hideSourceContent: boolean,
+  sourceRef: unknown,
   branchHistory: MessageDTO[]
 ): Array<{ role: 'user' | 'assistant'; content: string }> {
   const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [
@@ -1056,6 +1136,7 @@ function buildBranchProviderMessages(
         source && !hideSourceContent
           ? `来源角色:${source.role};来源技能:${source.skillName ?? 'unknown'};来源正文:${source.content ?? '(无正文)'}`
           : '来源正文:已隐藏。',
+        formatBranchSourceRef(sourceRef, hideSourceContent),
       ].join('\n'),
     },
   ];
@@ -1072,9 +1153,11 @@ function buildBranchProviderMessages(
 function buildBranchFallbackText(
   question: string,
   source: MessageDTO | null,
-  hideSourceContent: boolean
+  hideSourceContent: boolean,
+  sourceRef: unknown
 ): string {
   const sourceSummary = summarizeBranchSource(source, hideSourceContent);
+  const structuredContext = formatBranchSourceRef(sourceRef, hideSourceContent);
   const lower = question.toLowerCase();
   const guidance =
     /为什么|为啥|why|explain|解释|怎么/.test(lower)
@@ -1083,6 +1166,7 @@ function buildBranchFallbackText(
 
   return [
     `${sourceSummary}`,
+    structuredContext,
     '如果来源是还没提交的题目,这里只给提示和概念解释,不会泄露标准答案或完整翻译。',
     `关于“${question}”:${guidance}`,
   ].join('\n');
@@ -1303,6 +1387,15 @@ function normalizeChatSendInput(
     };
   }
 
+  const customSceneDecision = createTextCustomSceneDecision(conv, text);
+  if (customSceneDecision) {
+    return {
+      text,
+      decision: customSceneDecision,
+      userMessageContent: text,
+    };
+  }
+
   const answerAction = createTextAnswerAction(db, conv, text);
   if (answerAction) {
     return {
@@ -1470,6 +1563,19 @@ function createTextControlAction(
     }
   }
   return null;
+}
+
+function createTextCustomSceneDecision(
+  conv: ConversationDTO,
+  text: string
+): RouterDecision | null {
+  if (conv.learningState !== 'scene_selecting' || !text.trim()) return null;
+  return {
+    skillName: 'scene-select',
+    params: { customSceneText: text.trim() },
+    confidence: 1,
+    rationale: 'deterministic text route:custom-scene',
+  };
 }
 
 function createTextAnswerAction(

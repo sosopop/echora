@@ -50,6 +50,7 @@ interface ChatState {
   branchReviewMessage: string | null;
   branchError: string | null;
   inputMode: InputMode;
+  composerFocusRequestId: number;
   isLoading: boolean;
   error: string | null;
 
@@ -59,8 +60,11 @@ interface ChatState {
   deriveConversationFromArchived(id: number): Promise<void>;
   sendMessage(text: string): Promise<void>;
   sendAction(action: ChatAction): Promise<void>;
+  setInputMode(mode: InputMode, options?: { focus?: boolean }): void;
+  activateChatInput(): void;
   stopGenerating(): Promise<void>;
   openBranchForMessage(messageId: number): Promise<void>;
+  openBranchForWidget(messageId: number, sourceRef: unknown): Promise<void>;
   closeBranch(): void;
   sendBranchMessage(text: string): Promise<void>;
   markBranchForReview(): Promise<void>;
@@ -84,6 +88,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   branchReviewMessage: null,
   branchError: null,
   inputMode: 'chat',
+  composerFocusRequestId: 0,
   isLoading: false,
   error: null,
 
@@ -236,6 +241,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
     return await sendInternal({ action }, get, set);
   },
 
+  setInputMode(mode, options) {
+    set((s) => ({
+      inputMode: mode,
+      composerFocusRequestId: options?.focus
+        ? s.composerFocusRequestId + 1
+        : s.composerFocusRequestId,
+    }));
+  },
+
+  activateChatInput() {
+    set((s) => ({
+      inputMode: 'chat',
+      composerFocusRequestId: s.composerFocusRequestId + 1,
+    }));
+  },
+
   async stopGenerating() {
     const streamId = get().currentStreamId;
     const messageId = get().streamingMessageId;
@@ -255,48 +276,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   async openBranchForMessage(messageId: number) {
-    const conversationId = get().currentConversationId;
-    if (!conversationId) {
-      set({ branchError: '请先选择会话' });
-      return;
-    }
-    set({
-      isBranchOpen: true,
-      isBranchLoading: true,
-      isBranchReviewing: false,
-      branchReviewMessage: null,
-      branchError: null,
-      branchSourceMessageId: messageId,
-    });
-    try {
-      const list = await chatApi.listBranchThreads(conversationId);
-      let thread = list.find((t) => t.sourceMessageId === messageId) ?? null;
-      if (!thread) {
-        thread = await chatApi.createBranchThread(conversationId, {
-          sourceMessageId: messageId,
-          sourceRef: { kind: 'message', messageId },
-        });
-      }
-      const nextThreads = list.some((t) => t.id === thread.id)
-        ? list
-        : [...list, thread];
-      const messages = await chatApi.getBranchMessages(thread.id);
-      set({
-        branchThreads: nextThreads,
-        currentBranchThreadId: thread.id,
-        branchSourceMessageId: messageId,
-        branchMessages: messages,
-        isBranchLoading: false,
-        isBranchReviewing: false,
-        branchReviewMessage: null,
-        branchError: null,
-      });
-    } catch (e) {
-      set({
-        isBranchLoading: false,
-        branchError: e instanceof Error ? e.message : '打开辅助追问失败',
-      });
-    }
+    await openBranchInternal(messageId, { kind: 'message', messageId }, get, set);
+  },
+
+  async openBranchForWidget(messageId: number, sourceRef: unknown) {
+    await openBranchInternal(messageId, sourceRef, get, set);
   },
 
   closeBranch() {
@@ -355,6 +339,81 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 }));
+
+async function openBranchInternal(
+  messageId: number,
+  sourceRef: unknown,
+  get: () => ChatState,
+  set: (
+    partial: Partial<ChatState> | ((s: ChatState) => Partial<ChatState>)
+  ) => void
+): Promise<void> {
+    const conversationId = get().currentConversationId;
+    if (!conversationId) {
+      set({ branchError: '请先选择会话' });
+      return;
+    }
+    set({
+      isBranchOpen: true,
+      isBranchLoading: true,
+      isBranchReviewing: false,
+      branchReviewMessage: null,
+      branchError: null,
+      branchSourceMessageId: messageId,
+    });
+    try {
+      const list = await chatApi.listBranchThreads(conversationId);
+      let thread =
+        list.find(
+          (t) =>
+            t.sourceMessageId === messageId &&
+            sourceRefsEqual(t.sourceRef, sourceRef)
+        ) ?? null;
+      if (!thread) {
+        thread = await chatApi.createBranchThread(conversationId, {
+          sourceMessageId: messageId,
+          sourceRef,
+        });
+      }
+      const nextThreads = list.some((t) => t.id === thread.id)
+        ? list
+        : [...list, thread];
+      const messages = await chatApi.getBranchMessages(thread.id);
+      set({
+        branchThreads: nextThreads,
+        currentBranchThreadId: thread.id,
+        branchSourceMessageId: messageId,
+        branchMessages: messages,
+        isBranchLoading: false,
+        isBranchReviewing: false,
+        branchReviewMessage: null,
+        branchError: null,
+      });
+    } catch (e) {
+      set({
+        isBranchLoading: false,
+        branchError: e instanceof Error ? e.message : '打开辅助追问失败',
+      });
+    }
+}
+
+function sourceRefsEqual(a: unknown, b: unknown): boolean {
+  return stableStringify(a) === stableStringify(b);
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value) ?? 'undefined';
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(',')}]`;
+  }
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
+    .join(',')}}`;
+}
 
 let activeStreamHandle: OpenStreamHandle | null = null;
 

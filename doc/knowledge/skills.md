@@ -64,6 +64,8 @@
 - 完成判定:`isOnboardingComplete = !!(name && level)`,完成后先 yield 画像完成说明,再 yield `state-transition('scene_selecting','scene-select')`,并在同一条 assistant 流里继续串接 `scene-select` 的场景推荐结果
 - 拒绝昵称:由 `ExpectedInputPolicy(name)` 明确走 `fallback`,若用户表示不想说称呼(`不告诉/不想说/保密/匿名/随便叫` 等),skill 会用临时称呼 `小伙伴` 写入 `name`,随后继续采集英语水平,避免反复卡在姓名字段
 - 拒绝英语水平:由 `ExpectedInputPolicy(level)` 明确走 `retry`;英语水平决定场景和题目难度,用户说“不知道/你决定/随便”等时不会调用模型猜测,也不会转场,而是给出 A1-C2 和自然语言示例继续追问
+- 年级清洗:用户说“某年级的水平/程度/基础”时只作为英语水平线索,不会写入 `grade`;只有明确表达“我现在上/读/在读/就读某年级”或主动回答年级时才记录真实年级
+- 完成话术:当 `name + level` 齐全时,服务端使用确定性完成提示并进入场景推荐,不会把模型临时生成的“想聊什么话题”类 CTA 展示给用户
 - 兜底:若模型只回文字或工具调用后仍缺 `name` / `level`,skill 会追加确定性下一步引导;若模型文本已在追问同一字段,不会重复追加同义兜底
 - 短路:已完成时跳过 onboarding LLM 调用,直接进入场景推荐链路
 
@@ -71,11 +73,12 @@
 
 - 入口:`server/skills/sceneSelect.ts` + `server/skills/_helpers/sceneSelectFsm.ts`
 - **两分支**(由 `ctx.params.action` 决定):
-  - 默认 / `action=request-new-scenes` → `runScenePropose`(LLM 出 20 候选)→ `selectTopK`(去重 + 难度优先)→ widget scene-cards
+  - 默认 / `action=request-new-scenes` → `runScenePropose`(LLM 出 20 候选)→ `selectTopK`(去重 + 难度优先)→ 8 个推荐场景卡片 + 前端自定义入口
   - `action=select-scene` → `runDialogueGeneration`(LLM 生成完整双语对话)→ `createSceneDialogue` + `appendSceneHistory` → 串接 `practiceSkill.handler` 自动生成第一题
+- 064 起,`scene_selecting` 状态下的自由文本会被 chat route 确定性路由为 `scene-select` 的 `customSceneText`,handler 直接生成该主题的场景对话并进入练习,不再重新生成 8 张通用推荐卡;AI Router 返回的 `scene` / `userInput` 参数也会按同一自定义主题分支处理
 - 工具:`propose_scenes`(批量场景候选)+ `generate_scene_dialogue`(完整对话 JSON)
 - 已用队列:`scene_history` 表 max 10 per user,服务层 prune
-- 036 起,用户选定场景并成功生成 `scene_dialogue` 后,会把 `conversations.title` 更新为当前场景标题,用于历史会话左栏展示。038 起前端 `scene-cards` 点击会把卡片 `title/description/knowledgePoint/difficulty` 一并传给 `select-scene`,后端优先使用这些元数据,旧客户端只传 sceneId 时仍按 sceneId 兼容推导。
+- 036 起,用户选定场景并成功生成 `scene_dialogue` 后,会把 `conversations.title` 更新为当前场景标题,用于历史会话左栏展示。038 起前端 `scene-cards` 点击会把卡片 `title/description/knowledgePoint/difficulty` 一并传给 `select-scene`,后端优先使用这些元数据,旧客户端只传 sceneId 时仍按 sceneId 兼容推导。063 起 `scene-cards` 由 8 张推荐卡 + 1 张前端自定义入口组成,自定义卡只切回 chat 输入并聚焦,不发后端 action。
 - 失败恢复(005):`runScenePropose` 失败时,handler 会把已初始化的 `scene-cards` widget patch 为 `status='error'`,写入空 `cards` 与可读 `message`,随后 `mode-switch('chat')` 再发 `error` 终止。前端遇到历史 loading/空候选 widget 时也允许点击"重新生成场景"或直接输入主题,避免 `select` 输入模式永久卡住。
 - 012 起,用户在 `practicing` 中输入 `换场景` / `换一批` / `重新生成场景` 会确定性路由到 `scene-select`;handler 先发 `state-transition('scene_selecting','scene-select')`,再输出 `mode-switch('select')` 和场景卡片,避免继续保持 practicing 导致卡片不可点。042 起,`awaiting_next` / `reviewing` 等非 `scene_selecting` 状态请求新场景也会统一切回 `scene_selecting`。
 - 042 起,难度反馈文本(`太难` / `简单一点` / `too hard` / `easier` / `太简单` / `难一点` / `too easy` / `harder`)会先在 chat route 中调整 `user_profiles.level`,再携带 `difficultyFeedback` 路由到 `scene-select + request-new-scenes`;`scene-select` 输出等级变化说明后按新 profile 等级生成候选。
@@ -99,6 +102,7 @@
 - 015 起批改后调用 `recordGradingLearningSignals`:根据 `corrections.tags` 写入 `error_tag_events`,并用错误 tag 或题型 fallback 更新 `mastery_records`。正确且无错误标签的题不会生成错误事件,但会更新对应题型掌握度。
 - 主线错题 retry:错答 `incrementRetry`;第 1 次错保持当前题可再次提交,第 2 次错 `markNeedsReview` 后立即调用 `retry` 的 `replacement` 模式生成同知识点降难替换题。替换题通过后 `grade` 自动回到 `practice`,主线根据 `countStageHandled` 继续同阶段下一题。替换题不计入 3 题专项重练额度。
 - 批改分档:021 起 `grade_answer` 输出 `category=exact/similar/incorrect`;`exact` 表示与参考表达完全匹配(忽略大小写、首尾空格、句末标点),`similar` 表示意思相近且语法可接受,`incorrect` 表示语法、拼写或意思不一致。`isCorrect` 仍保留给数据闭环,规则为 `exact/similar=true`,`incorrect=false`;百分制 `score` 只用于内部统计,前端批改卡不展示。
+- 标签展示:065 起前端将 12 类错误标签展示为中文 chip,例如 `collocation` → "固定搭配",`missing_word` → "缺少成分";服务端数据、统计和重练目标仍使用英文枚举。
 - 阶段判断:本题为 `exact/similar` 后,若本阶段未完成会立即调用 `practice` 自动出下一题;若本阶段完成但未到阶段 4,自动进入下一阶段第一题;若 `countStagePassed >= 当前场景阶段题量` 且 `stage >= MAX_STAGE_MVP(4)` → 先检查自动难度升降,再 state-transition('awaiting_next')。阶段 4 答对时如存在下一句对方回应,会在批改后追加自然文本展示。
 - 043 起,阶段 4 完成后调用 `server/services/difficultyAdaptation.ts`:最近 2 个完整场景都 1-4 阶段全题一次通过时,`user_profiles.level` 自动上调一档;最近 2 个完整场景在阶段 1-2 中多数题 `retry_count>=2` 或 `needs_review` 时,自动下调一档。045 起完整场景按该场景自身难度对应的阶段题量判断,避免用户自动升/降级后用新等级重新解释旧场景。
 
@@ -133,10 +137,10 @@
 
 - 入口:`server/services/branchThread.ts` + `server/routes/chat.ts` 的 `/api/chat/conversations/:id/branch-threads` 与 `/api/chat/branch-threads/:threadId/messages`。
 - 数据模型:支线元信息写 `branch_threads`,支线聊天写 `messages.branch_thread_id`;主线历史查询只返回 `branch_thread_id IS NULL`。
-- 来源校验:创建支线时 `sourceMessageId` 必须属于当前用户当前会话;`sourceRef` 可携带 message / widget / attempt / grading 等稳定引用,由调用方决定。
+- 来源校验:创建支线时 `sourceMessageId` 必须属于当前用户当前会话。065 起前端唯一的主线追问入口在 `grading-result` 批改卡片内,普通消息气泡不显示追问按钮;批改卡片支线的 `sourceRef.kind='grading-result'`,携带 widgetId、attemptId、情景对话上下文、AI 提出的问题、用户答案、参考表达、AI 解析和错误标签。
 - 生成回复:032 起若 Provider 支持 `chat()`,支线会用来源上下文 + 用户追问调用真实 LLM;033 起同一支线下最多 20 条历史 user/assistant 消息会一起传给 Provider,支持连续追问。stub 或 Provider 不支持 `chat()` 时返回确定性安全提示。Provider chat 抛错会返回 `502 PROVIDER_ERROR`,不静默降级。
 - 状态隔离:支线发送不会调用 AI Router 或 Skill handler,不会生成 `agent_runs` / SSE,不会改变 `learning_state` / `active_skill` / `input_mode`,普通支线聊天也不会写学习统计。
-- 防泄露:当主会话处于 locked(`practicing` / `grading`)时,支线 prompt 不携带来源正文,回复不复述来源消息正文,只说明基于第 N 条消息解释,并声明不会泄露标准答案或完整翻译。
+- 防泄露:当主会话处于 locked(`practicing` / `grading`)时,普通消息来源的支线 prompt 不携带来源正文,回复不复述来源消息正文,只说明基于第 N 条消息解释,并声明不会泄露标准答案或完整翻译。`grading-result` 来源是已提交后的批改卡片,允许携带该卡片的结构化批改上下文,但不携带当前未提交题目的答案。
 - 加入复盘:044 起,支线来源若是已批改题并带错误标签,右侧面板会显示“加入复盘”。点击后调用 `/api/chat/branch-threads/:threadId/review`,幂等补写缺失的 `error_tag_events(included_in_stats=1)` 并只对新增事件更新 `mastery_records`;普通消息、未批改题或无错误标签批改不会显示按钮,后端也会拒绝加入。
 
 ## general-chat / intent-confirm(020/028 已真实接入)

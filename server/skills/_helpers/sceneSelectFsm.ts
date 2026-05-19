@@ -92,10 +92,15 @@ export function selectTopK(
   k: number,
   preferredLevel: CefrLevel = 'B1'
 ): SceneCandidate[] {
-  const usedSet = new Set(usedTopics.map((s) => s.toLowerCase()));
-  const filtered = candidates.filter(
-    (c) => !usedSet.has(c.topic.toLowerCase())
-  );
+  const usedSet = new Set(usedTopics.map((s) => normalizeSceneTopic(s)));
+  const seenTopics = new Set<string>();
+  const filtered: SceneCandidate[] = [];
+  for (const candidate of candidates) {
+    const topicKey = normalizeSceneTopic(candidate.topic);
+    if (usedSet.has(topicKey) || seenTopics.has(topicKey)) continue;
+    seenTopics.add(topicKey);
+    filtered.push(candidate);
+  }
   // 按难度优先级排序:与用户等级精确匹配 > ±1 级 > 其他
   const levelOrder: CefrLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
   const pref = levelOrder.indexOf(preferredLevel);
@@ -105,6 +110,10 @@ export function selectTopK(
     return ad - bd;
   });
   return filtered.slice(0, k);
+}
+
+export function normalizeSceneTopic(topic: string): string {
+  return topic.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 export async function runScenePropose(

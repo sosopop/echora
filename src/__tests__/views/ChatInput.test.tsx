@@ -90,6 +90,7 @@ beforeEach(() => {
     streamBuffer: {},
     activeWidgets: {},
     inputMode: 'chat',
+    composerFocusRequestId: 0,
     isLoading: false,
     error: null,
   });
@@ -111,6 +112,30 @@ describe('ChatInput scene-select recovery', () => {
 
     expect(screen.getByText(/请在上方点击场景卡片选择/)).toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/场景没加载出来/)).not.toBeInTheDocument();
+  });
+
+  it('自定义场景触发后显示聊天输入并聚焦', async () => {
+    useChatStore.setState({
+      inputMode: 'select',
+      messages: [
+        messageWithSceneWidget('ready', [
+          { id: 'cafe', title: '咖啡店', description: '点单' },
+        ]),
+      ],
+    });
+
+    render(<ChatInput />);
+
+    expect(screen.getByText(/请在上方点击场景卡片选择/)).toBeInTheDocument();
+
+    act(() => {
+      useChatStore.getState().activateChatInput();
+    });
+
+    const textarea = await screen.findByPlaceholderText(
+      /直接打字告诉我/
+    );
+    await waitFor(() => expect(textarea).toHaveFocus());
   });
 
   it('select 模式无候选时恢复文本输入并允许重新生成', () => {

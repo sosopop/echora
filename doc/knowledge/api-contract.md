@@ -84,6 +84,8 @@ type ChatAction =
 
 `start-onboarding` 为 onboarding 页面的内部启动动作,仅用于首次进入 `/onboarding` 时触发 onboarding skill 第一轮采集。服务端会将该启动消息按 `system` 角色落库,前端不展示为普通用户气泡。onboarding 状态下的自由文本也会确定性路由到 `onboarding`,不经过 AI Router 或 `general-chat` 兜底。`onboarding` 在补齐 `name + level` 后不会停在收集完成提示,而是会在同一条 assistant 流中继续发出 `state-transition('scene_selecting','scene-select')` 并接上场景推荐,保证用户不会卡在“已完成但不知道下一步”的空窗。若用户明确拒绝提供称呼,服务端会使用临时 `name='小伙伴'` 继续推进 `level` 采集,避免重复追问昵称。若用户拒绝或要求 AI 代定英语水平(`不知道/你决定/随便` 等),服务端按必填信息处理:不调用模型猜测,不写入 `level`,不转场,只返回继续选择 A1-C2 或自然语言水平描述的追问。
 
+064 起,onboarding 对画像抽取做服务端清洗:用户说“某年级的水平/程度/基础”时只作为英语水平线索,不会把该年级写入 `profile.grade`;完成 `name + level` 后使用确定性完成话术进入场景推荐,避免模型把“想聊什么话题”这类自由聊天 CTA 和场景卡流程混在一起。
+
 046 起,`POST /api/chat/send` 响应可能包含 `archivedConversationId?: number`。当当前 active 会话处于 `awaiting_next` 或 `reviewing`,且用户选择继续下一轮/换场景(`request-new-scenes`)时,后端会先归档当前会话,再新建一个 `scene_selecting` 会话执行本次请求;响应中的 `conversationId` 是新会话 id,`archivedConversationId` 是刚归档的旧会话 id。前端收到不同 `conversationId` 时切换当前消息列表,清空旧 active widgets/支线状态,并刷新历史会话列表。
 
 038 起,`select-scene.payload` 兼容两种形态:旧客户端只传 `{ sceneId }`,后端用 sceneId 推导最小场景;新客户端会随场景卡片传 `title/description/knowledgePoint/difficulty/topic`,后端优先使用这些元数据生成 `scene_dialogue` 并更新 `conversations.title`。
@@ -94,9 +96,13 @@ type ChatAction =
 
 `review` 返回的 `progress-summary` widget 继续使用 `shared/widget.ts` 既有 schema。批改后服务端会把 `grading_results.corrections.tags` 写入 `error_tag_events`,并更新 `mastery_records`;正确且无 tag 的题不会写错误事件,但会以题型作为 fallback tag 更新掌握度。
 
+063 起,`scene-cards.data.cards` 只承载后端推荐场景,数组上限为 8。前端在 `allowCustom !== false` 时额外渲染第 9 张"自定义场景"卡;点击该卡只切回本地 `chat` 输入并聚焦,不发送 `ChatAction`,也不写入后端消息。`allowCustom` 仍默认 `true`,用于旧数据和失败恢复兼容。
+
+064 起,当会话处于 `scene_selecting` 且用户直接发送自由文本时,chat route 会确定性生成 `RouterDecision { skillName: 'scene-select', params: { customSceneText } }`,不再调用 AI Router 重新判断。`scene-select` 收到 `customSceneText` 后直接生成该主题的 `scene_dialogue` 并进入 `practice`,不会再返回一批通用推荐卡。`换场景` / `换一批` / `重新生成场景` 仍走 `request-new-scenes`。
+
 029 起,`progress-summary.data` 增加 `categoryCounts?: { exact; similar; incorrect }`;`averageScore` 继续保留为兼容字段,但正式前端组件优先展示三档分布,不再把平均分作为用户可见主指标。
 
-021 起,`grading-result` widget 的 `data` 增加 `category?: 'exact' | 'similar' | 'incorrect'`。`score/isCorrect` 为兼容历史与统计仍保留,但前端正式卡片只展示三档文案:"完全正确"(exact,与参考表达完全匹配)、"还不错"(similar,意思相近可通过)、"错误"(incorrect,语法/拼写/意思不一致)。`submit-answer` 批改为 exact/similar 后,同一条 SkillEvent 流会继续输出下一题的 `exercise-card`;调用方不需要再触发 `next-question`。
+021 起,`grading-result` widget 的 `data` 增加 `category?: 'exact' | 'similar' | 'incorrect'`。`score/isCorrect` 为兼容历史与统计仍保留,但前端正式卡片只展示三档文案:"完全正确"(exact,与参考表达完全匹配)、"还不错"(similar,意思相近可通过)、"错误"(incorrect,语法/拼写/意思不一致)。065 起前端展示错误标签时使用中文文案,例如 `collocation` → "固定搭配",`missing_word` → "缺少成分";底层 `tags` 仍保留英文枚举用于统计和重练路由。`submit-answer` 批改为 exact/similar 后,同一条 SkillEvent 流会继续输出下一题的 `exercise-card`;调用方不需要再触发 `next-question`。
 
 023 起,`exercise-card` widget 的 `data` 支持 `targetZh?: string`。阶段 4 `role_reversal` 使用该字段突出用户需要表达的中文目标句,例如 `targetZh: "你好！我想买一张票。"`;026 起阶段 3 `dialogue_chain` 也使用该字段突出"目标意思"。角色信息继续放在 `contextZh/hint` 中,不再用醒目的 `contextEn` 块展示 `Your role`。
 
@@ -129,7 +135,9 @@ interface BranchThreadDTO {
 }
 ```
 
-`POST /api/chat/conversations/:id/branch-threads` 会校验来源消息必须属于当前会话。`GET /api/chat/conversations/:id/messages` 默认只返回主线消息(`branch_thread_id IS NULL`),支线消息只能通过 `/api/chat/branch-threads/:threadId/messages` 读取。`POST /api/chat/branch-threads/:threadId/messages` 会同步写入一条支线 user message 与一条支线 assistant message,不创建 `agent_runs`,不触发 `SkillEvent`/SSE,也不改变 `learning_state` / `active_skill` / `input_mode`。032 起,支线回复在 Provider 支持 `chat()` 时使用真实 LLM 生成;stub 或 Provider 不支持 `chat()` 时保留确定性安全提示。033 起,Provider prompt 会携带同一 `branchThreadId` 下最多 20 条历史支线消息,用于连续追问。Provider chat 抛错会返回 `502 PROVIDER_ERROR`,不静默 fallback。主线锁定(`practicing` / `grading`)时,支线 prompt 与回复都不会复述来源消息正文,避免绕过历史答案脱敏。
+`POST /api/chat/conversations/:id/branch-threads` 会校验来源消息必须属于当前会话。`GET /api/chat/conversations/:id/messages` 默认只返回主线消息(`branch_thread_id IS NULL`),支线消息只能通过 `/api/chat/branch-threads/:threadId/messages` 读取。`POST /api/chat/branch-threads/:threadId/messages` 会同步写入一条支线 user message 与一条支线 assistant message,不创建 `agent_runs`,不触发 `SkillEvent`/SSE,也不改变 `learning_state` / `active_skill` / `input_mode`。032 起,支线回复在 Provider 支持 `chat()` 时使用真实 LLM 生成;stub 或 Provider 不支持 `chat()` 时保留确定性安全提示。033 起,Provider prompt 会携带同一 `branchThreadId` 下最多 20 条历史支线消息,用于连续追问。Provider chat 抛错会返回 `502 PROVIDER_ERROR`,不静默 fallback。主线锁定(`practicing` / `grading`)时,普通消息来源的支线 prompt 与回复都不会复述来源消息正文,避免绕过历史答案脱敏。
+
+065 起,前端不再给普通主线消息气泡显示追问按钮,追问入口只放在 `grading-result` 卡片上。批改卡片创建支线时,`sourceRef.kind='grading-result'`,并携带 `widgetId/attemptId/scenarioContext/aiQuestion/myAnswer/referenceAnswer/aiAnalysis/tags`。这类来源是已提交后的批改结果,即使当前主线已进入下一题的 locked 状态,支线 Provider prompt 也会携带这份结构化批改上下文;未批改题或普通消息来源仍按锁定规则隐藏正文。
 
 044 起,`POST /api/chat/branch-threads/:threadId/review` 支持把一条辅助追问显式加入复盘。接口只接受来源消息中能解析到 `grading-result.attemptId` 或 `follow-up-source.data.reviewContext.attemptId` 的支线,且该 attempt 必须已有批改和错误标签;普通消息、未批改题或无错误标签批改会返回 `400 VALIDATION_FAILED`。接口会幂等补写缺失的 `error_tag_events(included_in_stats=1)`,并只对新增事件更新 `mastery_records`,避免重复点击刷高统计。不新增 ChatAction。
 

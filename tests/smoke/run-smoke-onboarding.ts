@@ -115,27 +115,23 @@ async function collectSseEvents(
       done: boolean;
       value: Uint8Array | undefined;
     };
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    const parts = buf.split('\n\n');
-    buf = parts.pop() ?? '';
-    for (const part of parts) {
-      const dataLine = part
-        .split('\n')
-        .find((l) => l.startsWith('data: '));
-      if (!dataLine) continue;
-      const json = dataLine.substring('data: '.length);
-      try {
-        const evt = JSON.parse(json) as SkillEvent;
-        events.push(evt);
-        if (stopAt.includes(evt.type)) {
-          stopped = true;
-          break;
-        }
-      } catch {
-        /* skip */
-      }
+    if (!done) {
+      buf += decoder.decode(value, { stream: true });
     }
+    const drained = drainSseBuffer(buf, (evt) => {
+      events.push(evt);
+      if (stopAt.includes(evt.type)) {
+        stopped = true;
+      }
+    });
+    buf = drained.rest;
+    if (done) break;
+  }
+  if (!stopped && buf.trim().length > 0 && events.length < maxEvents) {
+    const drained = drainSseBuffer(`${buf}\n\n`, (evt) => {
+      events.push(evt);
+    });
+    buf = drained.rest;
   }
   try {
     await reader.cancel();
@@ -143,6 +139,26 @@ async function collectSseEvents(
     /* ignore */
   }
   return events;
+}
+
+function drainSseBuffer(
+  buf: string,
+  onEvent: (event: SkillEvent) => void
+): { rest: string } {
+  const parts = buf.split('\n\n');
+  const rest = parts.pop() ?? '';
+  for (const part of parts) {
+    const dataLine = part
+      .split('\n')
+      .find((l) => l.startsWith('data: '));
+    if (!dataLine) continue;
+    try {
+      onEvent(JSON.parse(dataLine.substring('data: '.length)) as SkillEvent);
+    } catch {
+      /* skip */
+    }
+  }
+  return { rest };
 }
 
 /* ============================================================
@@ -173,7 +189,11 @@ async function registerUser(
 async function createOnboardingConv(
   baseUrl: string,
   token: string,
-  learningState: 'onboarding' | 'practicing' | 'scene_selecting' = 'onboarding'
+  learningState:
+    | 'onboarding'
+    | 'practicing'
+    | 'scene_selecting'
+    | 'awaiting_next' = 'onboarding'
 ): Promise<number> {
   const res = await httpJson<{ data: { id: number } }>(
     baseUrl,
@@ -799,7 +819,7 @@ scenario('G', 'provider.route 抛错时直接 502(无 fallback)', async () => {
   const app = await startTestApp({ provider });
   try {
     const { token } = await registerUser(app.baseUrl);
-    const convId = await createOnboardingConv(app.baseUrl, token, 'scene_selecting');
+    const convId = await createOnboardingConv(app.baseUrl, token, 'awaiting_next');
     const send = await httpJson<{
       error?: { code: string; message: string };
     }>(app.baseUrl, 'POST', '/api/chat/send', {
@@ -998,7 +1018,7 @@ scenario('I', 'state-transition 后下次 send 路由到 scene-select', async ()
       data: { streamId: string; decision: { skillName: string } };
     }>(app.baseUrl, 'POST', '/api/chat/send', {
       token,
-      body: { conversationId: convId, text: '选个场景吧' },
+      body: { conversationId: convId, text: '换一批' },
     });
     assertEq(s2.body.data.decision.skillName, 'scene-select', 'routed to scene-select');
     await delay(80);
@@ -1025,7 +1045,7 @@ scenario('J', '/send 502 时 user 消息已落库但无 assistant(行为快照)'
   const app = await startTestApp({ provider });
   try {
     const { token } = await registerUser(app.baseUrl);
-    const convId = await createOnboardingConv(app.baseUrl, token, 'scene_selecting');
+    const convId = await createOnboardingConv(app.baseUrl, token, 'awaiting_next');
     const send = await httpJson<{ error?: unknown }>(
       app.baseUrl,
       'POST',

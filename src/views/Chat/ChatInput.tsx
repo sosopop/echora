@@ -30,12 +30,14 @@ export default function ChatInput(): JSX.Element {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const shouldRestoreFocusRef = useRef(false);
   const prevStreamingRef = useRef(false);
+  const prevFocusRequestRef = useRef(0);
   const inputMode = useChatStore((s) => s.inputMode);
   const streaming = useChatStore((s) => s.streamingMessageId !== null);
   const isLoading = useChatStore((s) => s.isLoading);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const sendAction = useChatStore((s) => s.sendAction);
   const stopGenerating = useChatStore((s) => s.stopGenerating);
+  const composerFocusRequestId = useChatStore((s) => s.composerFocusRequestId);
   const activeWidgets = useChatStore((s) => s.activeWidgets);
   const messages = useChatStore((s) => s.messages);
   const learningState = useLearningStateStore((s) => s.state);
@@ -56,6 +58,10 @@ export default function ChatInput(): JSX.Element {
   const menuSections = buildLearningMenuSections(learningState, inputMode);
 
   useEffect(() => {
+    if (composerFocusRequestId > prevFocusRequestRef.current) {
+      shouldRestoreFocusRef.current = true;
+      prevFocusRequestRef.current = composerFocusRequestId;
+    }
     // When streaming just ended, force the restore flag so focus is always
     // restored even if the flag was consumed by an intermediate render.
     if (prevStreamingRef.current && !streaming) {
@@ -76,7 +82,15 @@ export default function ChatInput(): JSX.Element {
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [inputMode, isLoading, learningState, shouldShowSelectHint, streaming, text]);
+  }, [
+    composerFocusRequestId,
+    inputMode,
+    isLoading,
+    learningState,
+    shouldShowSelectHint,
+    streaming,
+    text,
+  ]);
 
   useEffect(() => {
     if (!menuOpen) return;

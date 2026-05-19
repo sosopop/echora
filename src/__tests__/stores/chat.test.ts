@@ -853,6 +853,56 @@ describe('chat store streaming', () => {
     expect(state.messages).toHaveLength(1);
   });
 
+  it('打开批改卡片追问会用 widget sourceRef 匹配或创建支线', async () => {
+    const sourceRef = {
+      kind: 'grading-result',
+      messageId: 7,
+      widgetId: 'grading-1',
+      attemptId: 9,
+      scenarioContext: '你和朋友约打牌。',
+      aiQuestion: 'AI 提出的问题',
+      myAnswer: 'How about play card game?',
+      aiAnalysis: '需要使用固定搭配。',
+      tags: ['collocation'],
+    };
+    useChatStore.setState({
+      currentConversationId: 10,
+      messages: [
+        {
+          id: 7,
+          conversationId: 10,
+          branchThreadId: null,
+          type: 'text',
+          role: 'assistant',
+          skillName: 'grade',
+          content: '这里是批改解释',
+          widgetSnapshot: null,
+          seq: 3,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    mocks.listBranchThreads.mockResolvedValue([]);
+    mocks.createBranchThread.mockResolvedValue({
+      id: 32,
+      userId: 1,
+      conversationId: 10,
+      sourceMessageId: 7,
+      sourceRef,
+      status: 'open',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    mocks.getBranchMessages.mockResolvedValue([]);
+
+    await useChatStore.getState().openBranchForWidget(7, sourceRef);
+
+    expect(mocks.createBranchThread).toHaveBeenCalledWith(10, {
+      sourceMessageId: 7,
+      sourceRef,
+    });
+    expect(useChatStore.getState().currentBranchThreadId).toBe(32);
+  });
+
   it('加入复盘会调用支线确认接口并显示结果', async () => {
     useChatStore.setState({
       currentBranchThreadId: 31,

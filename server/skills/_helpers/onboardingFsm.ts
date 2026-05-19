@@ -72,6 +72,9 @@ export function buildSystemPrompt(
     '- 「六级优秀/雅思 7+/能流畅交流」→ C1',
     '- 「接近母语/留学多年」→ C2',
     '若用户表达模糊,先给 2-3 个 CEFR 级别让用户选,不要硬猜。',
+    '当用户说“某年级的水平/程度/基础”时,这只是英语水平线索,不要把它记录为真实年级。',
+    '只有用户明确说明“我现在上/读/在读/就读某年级”或主动回答年级时,才记录 grade。',
+    '当 name + level 已齐全时,不要再问“想聊什么话题”;只简短确认信息,说明系统会进入场景推荐。',
     '',
     '工具使用规则:',
     '- 用户每次提供新信息后,**必须立即** 调用 `update_profile` 工具记录。',
@@ -123,7 +126,8 @@ export const updateProfileTool: ToolDef = {
       },
       grade: {
         type: 'string',
-        description: '年级或在学/工作状态,自然语言原文',
+        description:
+          '用户明确提供的真实年级或在学/工作状态。不要把“某年级的水平/基础”记录为 grade。',
         minLength: 1,
         maxLength: 64,
       },

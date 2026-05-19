@@ -29,6 +29,7 @@ beforeEach(() => {
     streamBuffer: {},
     activeWidgets: {},
     inputMode: 'select',
+    composerFocusRequestId: 0,
     isLoading: false,
     error: null,
   });
@@ -49,35 +50,70 @@ describe('SceneCards widget', () => {
     expect(screen.queryByText(/还没有可用场景/)).not.toBeInTheDocument();
   });
 
-  it('渲染 N 张卡片 + click 触发 sendAction(select-scene)', () => {
+  it('渲染 8 张推荐卡 + 自定义卡,click 推荐触发 sendAction(select-scene)', () => {
     const sendAction = vi.fn();
     useChatStore.setState({ sendAction });
+    const cards = Array.from({ length: 8 }, (_, index) => ({
+      id: `scene-${index + 1}`,
+      title: `场景 ${index + 1}`,
+      description: `描述 ${index + 1}`,
+      knowledgePoint: `知识点 ${index + 1}`,
+      difficulty: 'B1',
+      emoji: ['☕', '🚕', '🏫', '🍝', '✈️', '🛍️', '🏥', '🎬'][index],
+    }));
     const widget: LearningWidgetInstance = {
       id: 'w1',
       type: 'scene-cards',
       status: 'ready',
       data: {
-        cards: [
-          { id: 'cafe', title: '咖啡店', description: '点单', difficulty: 'B1', emoji: '☕' },
-          { id: 'taxi', title: '打车', description: '问路', difficulty: 'B1' },
-        ],
+        cards,
       },
       version: 1,
     };
     render(<SceneCards widget={widget} />);
-    expect(screen.getByText('咖啡店')).toBeInTheDocument();
-    expect(screen.getByText('打车')).toBeInTheDocument();
-    fireEvent.click(screen.getByText('咖啡店'));
+    expect(screen.getAllByRole('button')).toHaveLength(10);
+    expect(screen.getByText('场景 1')).toBeInTheDocument();
+    expect(screen.getByText('场景 8')).toBeInTheDocument();
+    expect(screen.getByText('自定义场景')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('场景 1'));
     expect(sendAction).toHaveBeenCalledWith({
       type: 'select-scene',
       payload: {
-        sceneId: 'cafe',
-        title: '咖啡店',
-        description: '点单',
+        sceneId: 'scene-1',
+        title: '场景 1',
+        description: '描述 1',
         difficulty: 'B1',
-        knowledgePoint: undefined,
+        knowledgePoint: '知识点 1',
       },
     });
+  });
+
+  it('点击自定义卡只切回 chat 输入并请求聚焦', () => {
+    const sendAction = vi.fn();
+    useChatStore.setState({
+      sendAction,
+      inputMode: 'select',
+      composerFocusRequestId: 0,
+    });
+    const widget: LearningWidgetInstance = {
+      id: 'w-custom',
+      type: 'scene-cards',
+      status: 'ready',
+      data: {
+        cards: [
+          { id: 'a', title: 'A', description: 'x', knowledgePoint: '问句', difficulty: 'B1', emoji: '☕' },
+        ],
+        allowCustom: true,
+      },
+      version: 1,
+    };
+    render(<SceneCards widget={widget} />);
+
+    fireEvent.click(screen.getByText('自定义场景'));
+
+    expect(sendAction).not.toHaveBeenCalled();
+    expect(useChatStore.getState().inputMode).toBe('chat');
+    expect(useChatStore.getState().composerFocusRequestId).toBe(1);
   });
 
   it('换一批按钮 → sendAction(request-new-scenes)', () => {
@@ -359,7 +395,7 @@ describe('GradingResult widget', () => {
     expect(screen.getByText(/意思相近/)).toBeInTheDocument();
   });
 
-  it('wrong 状态渲染错误标签 chips', () => {
+  it('wrong 状态渲染中文错误标签 chips', () => {
     const widget: LearningWidgetInstance = {
       id: 'g2',
       type: 'grading-result',
@@ -378,10 +414,37 @@ describe('GradingResult widget', () => {
     render(<GradingResult widget={widget} />);
     expect(screen.queryByText('40')).not.toBeInTheDocument();
     expect(screen.getByText('错误')).toBeInTheDocument();
-    expect(screen.getByText('tense')).toBeInTheDocument();
-    expect(screen.getByText('preposition')).toBeInTheDocument();
+    expect(screen.getByText('时态')).toBeInTheDocument();
+    expect(screen.getByText('介词')).toBeInTheDocument();
+    expect(screen.queryByText('tense')).not.toBeInTheDocument();
+    expect(screen.queryByText('preposition')).not.toBeInTheDocument();
     expect(screen.getAllByText(/改一句再提交/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/跳过到下一题/)).not.toBeInTheDocument();
+  });
+
+  it('有支线回调时只在批改卡片内显示追问按钮', () => {
+    const onOpenBranch = vi.fn();
+    const widget: LearningWidgetInstance = {
+      id: 'g-branch',
+      type: 'grading-result',
+      status: 'ready',
+      data: {
+        attemptId: 43,
+        score: 40,
+        isCorrect: false,
+        category: 'incorrect',
+        userAnswer: 'wrong answer',
+        explanation: '动词错',
+        tags: ['missing_word'],
+      },
+      version: 1,
+    };
+    render(<GradingResult widget={widget} onOpenBranch={onOpenBranch} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '追问' }));
+
+    expect(onOpenBranch).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('缺少成分')).toBeInTheDocument();
   });
 });
 
@@ -438,8 +501,8 @@ describe('ProgressSummary widget', () => {
     expect(screen.getByText('还不错')).toBeInTheDocument();
     expect(screen.getByText('错误')).toBeInTheDocument();
     expect(screen.getByText('fill_word')).toBeInTheDocument();
-    expect(screen.getByText('missing_word · 出现 1 次')).toBeInTheDocument();
-    expect(screen.getByText('重练 missing_word')).toBeInTheDocument();
+    expect(screen.getByText('缺少成分 · 出现 1 次')).toBeInTheDocument();
+    expect(screen.getByText('重练 缺少成分')).toBeInTheDocument();
     fireEvent.click(screen.getByText('开始'));
     expect(sendMessage).toHaveBeenCalledWith('重练 missing_word');
   });
@@ -510,7 +573,7 @@ describe('AnswerReview widget', () => {
     expect(screen.getByText('Q1')).toBeInTheDocument();
     expect(screen.getByText('✓ 92')).toBeInTheDocument();
     expect(screen.getByText('整句翻译')).toBeInTheDocument();
-    expect(screen.getByText('missing_word')).toBeInTheDocument();
+    expect(screen.getByText('缺少成分')).toBeInTheDocument();
     expect(screen.getByText(/2 题平均 74 分/)).toBeInTheDocument();
   });
 

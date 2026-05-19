@@ -8,6 +8,7 @@
 
 import type { LearningWidgetInstance } from '@shared/skill';
 import styles from './widgets.module.css';
+import { labelForErrorTag } from './tagLabels.js';
 
 type GradingCategory = 'exact' | 'similar' | 'incorrect';
 
@@ -70,8 +71,10 @@ function descFor(category: GradingCategory): string {
 
 export default function GradingResult({
   widget,
+  onOpenBranch,
 }: {
   widget: LearningWidgetInstance;
+  onOpenBranch?: () => void;
 }): JSX.Element | null {
   const data = (widget.data ?? {}) as GradingResultData;
   const category = categoryFromData(data);
@@ -113,15 +116,28 @@ export default function GradingResult({
         {data.tags && data.tags.length > 0 && (
           <div className={styles.gradingTags}>
             {data.tags.map((t) => (
-              <span key={t} className={styles.gradingTag}>
-                {t}
+              <span key={t} className={styles.gradingTag} title={t}>
+                {labelForErrorTag(t)}
               </span>
             ))}
           </div>
         )}
-        {category === 'incorrect' && (
-          <div className={styles.gradingRetryHint}>
-            可以在底部改一句再提交。
+        {(category === 'incorrect' || onOpenBranch) && (
+          <div className={styles.gradingActions}>
+            {category === 'incorrect' && (
+              <div className={styles.gradingRetryHint}>
+                可以在底部改一句再提交。
+              </div>
+            )}
+            {onOpenBranch && (
+              <button
+                type="button"
+                className={styles.btnGhost}
+                onClick={onOpenBranch}
+              >
+                追问
+              </button>
+            )}
           </div>
         )}
       </div>

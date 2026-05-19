@@ -8,6 +8,8 @@ export default function BranchPanel(): JSX.Element | null {
   const isLoading = useChatStore((s) => s.isBranchLoading);
   const error = useChatStore((s) => s.branchError);
   const sourceMessageId = useChatStore((s) => s.branchSourceMessageId);
+  const branchThreads = useChatStore((s) => s.branchThreads);
+  const currentBranchThreadId = useChatStore((s) => s.currentBranchThreadId);
   const mainMessages = useChatStore((s) => s.messages);
   const branchMessages = useChatStore((s) => s.branchMessages);
   const isBranchReviewing = useChatStore((s) => s.isBranchReviewing);
@@ -20,11 +22,13 @@ export default function BranchPanel(): JSX.Element | null {
   if (!isOpen) return null;
 
   const source = mainMessages.find((m) => m.id === sourceMessageId);
+  const currentThread = branchThreads.find((t) => t.id === currentBranchThreadId);
   const sourceText = source?.content?.trim()
     ? truncateText(source.content.trim(), 96)
     : source
     ? `第 ${source.seq} 条消息`
     : '当前消息';
+  const sourceLabel = describeSourceRef(currentThread?.sourceRef) ?? sourceText;
   const canJoinReview = canJoinSourceReview(source);
 
   async function submit(): Promise<void> {
@@ -51,7 +55,7 @@ export default function BranchPanel(): JSX.Element | null {
 
       <div className={styles.branchSource}>
         <div className={styles.branchSourceLabel}>来自主线</div>
-        <div>{sourceText}</div>
+        <div>{sourceLabel}</div>
         {canJoinReview && (
           <button
             className={styles.branchReviewButton}
@@ -120,6 +124,20 @@ export default function BranchPanel(): JSX.Element | null {
   );
 }
 
+function describeSourceRef(sourceRef: unknown): string | null {
+  if (!isRecord(sourceRef) || sourceRef.kind !== 'grading-result') {
+    return null;
+  }
+  const aiQuestion =
+    typeof sourceRef.aiQuestion === 'string' ? sourceRef.aiQuestion : '';
+  const myAnswer =
+    typeof sourceRef.myAnswer === 'string' ? sourceRef.myAnswer : '';
+  const summary = aiQuestion || myAnswer;
+  return summary.trim()
+    ? `这次批改 · ${truncateText(summary.replace(/\s+/g, ' '), 96)}`
+    : '这次批改';
+}
+
 function truncateText(value: string, maxLength: number): string {
   return value.length <= maxLength
     ? value
@@ -168,5 +186,9 @@ function widgetSnapshotToArray(
 function isWidgetLike(
   value: unknown
 ): value is { type?: string; data?: Record<string, unknown> } {
+  return typeof value === 'object' && value !== null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }

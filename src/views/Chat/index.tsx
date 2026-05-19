@@ -10,10 +10,12 @@
  * 子组件:ProgressBanner / MessageList / ChatInput
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useChatStore } from '../../stores/chat.js';
 import { useLearningStateStore } from '../../stores/learningState.js';
 import { useAuthStore } from '../../stores/auth.js';
+import { useThemeStore, type ThemeMode } from '../../stores/theme.js';
 import MessageList from './MessageList.js';
 import ChatInput from './ChatInput.js';
 import BranchPanel from './BranchPanel.js';
@@ -37,8 +39,30 @@ export default function Chat(): JSX.Element {
   const currentId = useChatStore((s) => s.currentConversationId);
   const isBranchOpen = useChatStore((s) => s.isBranchOpen);
   const user = useAuthStore((s) => s.user);
+  const theme = useThemeStore((s) => s.theme);
+  const setTheme = useThemeStore((s) => s.setTheme);
+  const logout = useAuthStore((s) => s.logout);
+  const navigate = useNavigate();
   const initRef = useRef(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const handleLogout = useCallback(() => {
+    logout();
+    navigate('/login');
+  }, [logout, navigate]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [menuOpen]);
 
   useEffect(() => {
     if (initRef.current) return;
@@ -86,9 +110,44 @@ export default function Chat(): JSX.Element {
         <span className={styles.stateBadge}>
           {LEARNING_STATE_LABEL[learningState] ?? learningState}
         </span>
-        <span className={styles.avatar} title={user?.email ?? ''}>
-          {user?.email?.[0]?.toUpperCase() ?? '?'}
-        </span>
+        <div className={styles.avatar} ref={menuRef}>
+          <span
+            title={user?.email ?? ''}
+            onClick={() => setMenuOpen((v) => !v)}
+          >
+            {user?.email?.[0]?.toUpperCase() ?? '?'}
+          </span>
+          {menuOpen && (
+            <div className={styles.avatarPopover}>
+              <div className={styles.avatarEmail}>{user?.email ?? ''}</div>
+              <div className={styles.themeRow}>
+                {(['light', 'dark', 'system'] as ThemeMode[]).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    className={[
+                      styles.themeOption,
+                      theme === t ? styles.themeOptionActive : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                    onClick={() => setTheme(t)}
+                  >
+                    {t === 'light' ? '亮色' : t === 'dark' ? '暗色' : '跟随系统'}
+                  </button>
+                ))}
+              </div>
+              <div className={styles.menuDivider} />
+              <button
+                type="button"
+                className={[styles.menuItem, styles.menuItemDanger].join(' ')}
+                onClick={handleLogout}
+              >
+                退出登录
+              </button>
+            </div>
+          )}
+        </div>
       </header>
 
       <div className={styles.workspace}>

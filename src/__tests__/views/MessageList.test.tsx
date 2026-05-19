@@ -154,13 +154,86 @@ describe('MessageList scrolling', () => {
     expect(screen.getByText('餐厅点餐 · 2 道题回看')).toBeInTheDocument();
   });
 
-  it('点击消息追问按钮会打开对应支线', () => {
-    const openBranchForMessage = vi.fn();
-    useChatStore.setState({ openBranchForMessage, streamingMessageId: null });
+  it('普通消息不显示追问,批改卡片追问会携带题目和解析上下文', () => {
+    const openBranchForWidget = vi.fn();
+    useChatStore.setState({
+      openBranchForWidget,
+      streamingMessageId: null,
+      messages: [
+        {
+          id: 1,
+          conversationId: 1,
+          branchThreadId: null,
+          type: 'text',
+          role: 'assistant',
+          skillName: 'practice',
+          content: '请完成这一题',
+          widgetSnapshot: {
+            id: 'exercise-1',
+            type: 'exercise-card',
+            status: 'ready',
+            data: {
+              attemptId: 9,
+              stage: 3,
+              questionNo: 1,
+              questionType: 'dialogue_chain',
+              contextZh: '你和朋友约打牌。',
+              contextEn: 'Friend: Do you want to play cards?',
+              targetZh: '问对方要不要玩纸牌。',
+              inputMode: 'chat',
+            },
+            version: 1,
+          },
+          seq: 1,
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: 2,
+          conversationId: 1,
+          branchThreadId: null,
+          type: 'text',
+          role: 'assistant',
+          skillName: 'grade',
+          content: '正在批改...',
+          widgetSnapshot: {
+            id: 'grading-1',
+            type: 'grading-result',
+            status: 'ready',
+            data: {
+              attemptId: 9,
+              score: 40,
+              isCorrect: false,
+              category: 'incorrect',
+              userAnswer: 'How about play card game?',
+              referenceAnswer: 'How about a card game?',
+              explanation: '"How about" 后面需要接名词或动名词。',
+              tags: ['collocation', 'missing_word'],
+            },
+            version: 1,
+          },
+          seq: 2,
+          createdAt: new Date().toISOString(),
+        },
+      ],
+    });
 
     render(<MessageList />);
 
     fireEvent.click(screen.getByRole('button', { name: '追问' }));
-    expect(openBranchForMessage).toHaveBeenCalledWith(1);
+    expect(openBranchForWidget).toHaveBeenCalledWith(
+      2,
+      expect.objectContaining({
+        kind: 'grading-result',
+        messageId: 2,
+        widgetId: 'grading-1',
+        attemptId: 9,
+        scenarioContext: expect.stringContaining('你和朋友约打牌。'),
+        aiQuestion: expect.stringContaining('对话接龙'),
+        myAnswer: 'How about play card game?',
+        referenceAnswer: 'How about a card game?',
+        aiAnalysis: '"How about" 后面需要接名词或动名词。',
+        tags: ['collocation', 'missing_word'],
+      })
+    );
   });
 });

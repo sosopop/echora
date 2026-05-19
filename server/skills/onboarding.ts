@@ -215,9 +215,8 @@ export const onboardingSkill: Skill = {
         if (ctx.signal.aborted) break;
         if (ev.type === 'text-delta') {
           emittedText += ev.text;
-          yield { type: 'text-chunk', payload: { text: ev.text } };
         } else if (ev.type === 'tool-use' && ev.toolName === 'update_profile') {
-          collected = mergeProfileFields(collected, ev.input);
+          collected = mergeProfileFields(collected, ev.input, userText);
         }
       }
     } catch (err) {
@@ -233,7 +232,12 @@ export const onboardingSkill: Skill = {
       };
       return;
     }
-    if (ctx.signal.aborted) return;
+    if (ctx.signal.aborted) {
+      if (emittedText.trim()) {
+        yield { type: 'text-chunk', payload: { text: emittedText } };
+      }
+      return;
+    }
 
     // 5. 落库
     if (Object.keys(collected).length > 0) {
@@ -242,37 +246,34 @@ export const onboardingSkill: Skill = {
       if (isOnboardingComplete(updated)) {
         yield {
           type: 'text-chunk',
-          payload: {
-            text: appendGuidance(
-              emittedText,
-              '画像够用了,我现在给你推荐几个适合练习的场景。'
-            ),
-          },
+          payload: { text: buildCompletionReply(updated, collected) },
         };
         yield* continueToSceneSelection(ctx);
         return;
       }
 
       const nextPrompt = buildRequiredFieldPrompt(updated);
+      let responseText = emittedText;
       if (
         nextPrompt &&
         shouldAppendExpectedInputPrompt(nextPrompt.policy, emittedText)
       ) {
-        yield {
-          type: 'text-chunk',
-          payload: { text: appendGuidance(emittedText, nextPrompt.text) },
-        };
+        responseText += appendGuidance(emittedText, nextPrompt.text);
+      }
+      if (responseText.trim()) {
+        yield { type: 'text-chunk', payload: { text: responseText } };
       }
     } else {
       const fallbackPrompt = buildRequiredFieldPrompt(profile);
+      let responseText = emittedText;
       if (
         fallbackPrompt &&
         shouldAppendExpectedInputPrompt(fallbackPrompt.policy, emittedText)
       ) {
-        yield {
-          type: 'text-chunk',
-          payload: { text: appendGuidance(emittedText, fallbackPrompt.text) },
-        };
+        responseText += appendGuidance(emittedText, fallbackPrompt.text);
+      }
+      if (responseText.trim()) {
+        yield { type: 'text-chunk', payload: { text: responseText } };
       }
     }
 
@@ -288,7 +289,8 @@ export const onboardingSkill: Skill = {
  */
 function mergeProfileFields(
   prev: ProfileUpdateReq,
-  raw: Record<string, unknown>
+  raw: Record<string, unknown>,
+  userText = ''
 ): ProfileUpdateReq {
   const next: ProfileUpdateReq = { ...prev };
   if (typeof raw.name === 'string' && raw.name.trim()) {
@@ -297,7 +299,11 @@ function mergeProfileFields(
   if (typeof raw.age === 'number' && Number.isInteger(raw.age) && raw.age > 0) {
     next.age = raw.age;
   }
-  if (typeof raw.grade === 'string' && raw.grade.trim()) {
+  if (
+    typeof raw.grade === 'string' &&
+    raw.grade.trim() &&
+    shouldAcceptGrade(raw.grade, userText)
+  ) {
     next.grade = raw.grade.trim();
   }
   if (
@@ -307,6 +313,55 @@ function mergeProfileFields(
     next.level = raw.level as ProfileUpdateReq['level'];
   }
   return next;
+}
+
+function shouldAcceptGrade(rawGrade: string, userText: string): boolean {
+  const text = userText.trim();
+  if (!text) return true;
+  const compact = text.replace(/\s+/g, '');
+  const grade = rawGrade.trim().replace(/\s+/g, '');
+  if (!grade) return false;
+
+  const gradeLikeLevel =
+    /(小学|初中|高中|大学|大专|本科|年级|高一|高二|高三|初一|初二|初三|大一|大二|大三|大四)[^，。,.!?！？]{0,8}(水平|程度|基础|能力)/.test(
+      compact
+    ) ||
+    new RegExp(`${escapeRegExp(grade)}[^，。,.!?！？]{0,8}(水平|程度|基础|能力)`).test(
+      compact
+    );
+  if (gradeLikeLevel) return false;
+
+  const hasLevelQualifier = /(水平|程度|基础|能力)/.test(compact);
+  const hasExplicitGradeMarker =
+    /(我|本人|孩子|小孩|学生).{0,8}(在读|就读|正在读|读|上|是)/.test(
+      compact
+    ) ||
+    /(年级|在读|就读|学校|工作|在职)[:：是为]?/.test(compact);
+  if (hasLevelQualifier && !hasExplicitGradeMarker) return false;
+
+  return true;
+}
+
+function buildCompletionReply(
+  profile: ProfileDTO,
+  collected: ProfileUpdateReq
+): string {
+  const parts: string[] = [];
+  if (collected.name && profile.name) {
+    parts.push(`称呼是「${profile.name}」`);
+  }
+  if (collected.level && profile.level) {
+    parts.push(`英语水平是 ${profile.level}`);
+  }
+  if (collected.grade && profile.grade) {
+    parts.push(`阶段是「${profile.grade}」`);
+  }
+  const summary = parts.length > 0 ? `已确认${parts.join('、')}` : '信息已经够用了';
+  return `${summary}。我来给你准备适合的练习场景。`;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 async function* continueToSceneSelection(

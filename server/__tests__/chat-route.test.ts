@@ -484,6 +484,51 @@ describe('branch follow-up threads', () => {
     expect(capturedUserPrompt).toContain('来源正文:已隐藏');
   });
 
+  it('批改卡片追问在锁定态仍携带已批改上下文', async () => {
+    const source = appendMessage(db, {
+      conversationId,
+      type: 'text',
+      role: 'assistant',
+      skillName: 'grade',
+      content: '正在批改...',
+    });
+    const sourceRef = {
+      kind: 'grading-result',
+      messageId: source.id,
+      widgetId: 'grading-1',
+      attemptId: 9,
+      scenarioContext: '你和朋友约打牌。',
+      aiQuestion: 'AI 提出的问题:问对方要不要玩纸牌。',
+      myAnswer: 'How about play card game?',
+      referenceAnswer: 'How about a card game?',
+      aiAnalysis: '"How about" 后面需要接名词或动名词。',
+      tags: ['collocation', 'missing_word'],
+    };
+    let capturedUserPrompt = '';
+    providerChatImpl = async function* (req) {
+      capturedUserPrompt = req.messages[0]?.content ?? '';
+      yield { type: 'text-delta', text: '基于批改继续解释。' };
+    };
+    const createRes = await request(app)
+      .post(`/api/chat/conversations/${conversationId}/branch-threads`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ sourceMessageId: source.id, sourceRef });
+
+    const sendRes = await request(app)
+      .post(`/api/chat/branch-threads/${createRes.body.data.id}/messages`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ text: '为什么不能这样说?' });
+
+    expect(sendRes.status).toBe(201);
+    expect(capturedUserPrompt).toContain('情景对话上下文');
+    expect(capturedUserPrompt).toContain('你和朋友约打牌。');
+    expect(capturedUserPrompt).toContain('AI 提出的问题');
+    expect(capturedUserPrompt).toContain('How about play card game?');
+    expect(capturedUserPrompt).toContain('AI 的解析');
+    expect(capturedUserPrompt).toContain('固定搭配 / 缺少成分');
+    expect(capturedUserPrompt).not.toContain('来源正文:已隐藏');
+  });
+
   it('支线 provider.chat 会携带同一支线历史消息', async () => {
     updateLearningState(db, conversationId, 'awaiting_next', null);
     const source = appendMessage(db, {
@@ -1080,6 +1125,25 @@ describe('POST /api/chat/send', () => {
     });
     expect(getProfile(db, userId)?.level).toBe('B2');
     expect(decideCalls).toHaveLength(0);
+  });
+
+  it('scene_selecting 中自由文本按自定义场景处理,不再绕 AI Router 重新推荐', async () => {
+    updateLearningState(db, conversationId, 'scene_selecting', 'scene-select');
+
+    const res = await request(app)
+      .post('/api/chat/send')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ conversationId, text: '和朋友打游戏' });
+
+    expect(res.status).toBe(202);
+    expect(res.body.data.decision).toMatchObject({
+      skillName: 'scene-select',
+      params: { customSceneText: '和朋友打游戏' },
+      confidence: 1,
+    });
+    expect(decideCalls).toHaveLength(0);
+    const user = getMessages(db, conversationId).find((m) => m.role === 'user');
+    expect(user?.content).toBe('和朋友打游戏');
   });
 
   it('awaiting_next 中 START 直接进入换场景', async () => {

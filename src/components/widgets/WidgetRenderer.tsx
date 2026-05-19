@@ -19,6 +19,7 @@ import styles from './widgets.module.css';
 
 type WidgetComponent = (props: {
   widget: LearningWidgetInstance;
+  onOpenBranch?: () => void;
 }) => JSX.Element | null;
 
 const REGISTRY: Record<string, WidgetComponent> = {
@@ -36,11 +37,13 @@ const REGISTRY: Record<string, WidgetComponent> = {
 
 export default function WidgetRenderer({
   widget,
+  onOpenBranch,
 }: {
   widget: LearningWidgetInstance;
+  onOpenBranch?: () => void;
 }): JSX.Element {
   const C = REGISTRY[widget.type];
-  if (C) return <C widget={widget} />;
+  if (C) return <C widget={widget} onOpenBranch={onOpenBranch} />;
   return (
     <div className={styles.fallback}>
       [未实现 widget: {widget.type}]{'\n'}

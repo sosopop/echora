@@ -10,7 +10,6 @@ interface Props {
   text: string;
   streaming?: boolean;
   referenced?: boolean;
-  onOpenBranch?: () => void;
 }
 
 export default function MessageBubble({
@@ -18,7 +17,6 @@ export default function MessageBubble({
   text,
   streaming,
   referenced,
-  onOpenBranch,
 }: Props): JSX.Element | null {
   const isAi = role === 'assistant';
   const displayText =
@@ -45,15 +43,6 @@ export default function MessageBubble({
       <div className={bubbleCls}>
         {displayText}
         {streaming && <span className={styles.cursor} />}
-        {onOpenBranch && !streaming && (
-          <button
-            className={styles.branchOpenBtn}
-            type="button"
-            onClick={onOpenBranch}
-          >
-            追问
-          </button>
-        )}
       </div>
     </div>
   );

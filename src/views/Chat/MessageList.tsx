@@ -13,6 +13,7 @@ import { useChatStore } from '../../stores/chat.js';
 import MessageBubble from './MessageBubble.js';
 import WidgetSlot from './WidgetSlot.js';
 import type { LearningWidgetInstance } from '@shared/skill';
+import type { MessageDTO } from '@shared/api';
 import styles from './index.module.css';
 
 export default function MessageList(): JSX.Element {
@@ -21,7 +22,7 @@ export default function MessageList(): JSX.Element {
   const streamBuffer = useChatStore((s) => s.streamBuffer);
   const activeWidgets = useChatStore((s) => s.activeWidgets);
   const branchSourceMessageId = useChatStore((s) => s.branchSourceMessageId);
-  const openBranchForMessage = useChatStore((s) => s.openBranchForMessage);
+  const openBranchForWidget = useChatStore((s) => s.openBranchForWidget);
   const listRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
 
@@ -93,22 +94,143 @@ export default function MessageList(): JSX.Element {
               text={text}
               streaming={isStreaming}
               referenced={branchSourceMessageId === m.id}
-              onOpenBranch={
-                m.role === 'system'
-                  ? undefined
-                  : () => {
-                      void openBranchForMessage(m.id);
-                    }
-              }
             />
-            {widgets.map((widget) => (
-              <WidgetSlot key={widget.id} widget={widget} />
-            ))}
+            {widgets.map((widget) => {
+              const sourceRef = buildWidgetSourceRef(m, widget, visible);
+              return (
+                <WidgetSlot
+                  key={widget.id}
+                  widget={widget}
+                  onOpenBranch={
+                    sourceRef
+                      ? () => {
+                          void openBranchForWidget(m.id, sourceRef);
+                        }
+                      : undefined
+                  }
+                />
+              );
+            })}
           </div>
         );
       })}
     </div>
   );
+}
+
+function buildWidgetSourceRef(
+  msg: MessageDTO,
+  widget: LearningWidgetInstance,
+  messages: MessageDTO[]
+): Record<string, unknown> | null {
+  if (widget.type !== 'grading-result' || widget.status !== 'ready') {
+    return null;
+  }
+  const grading = (widget.data ?? {}) as Record<string, unknown>;
+  const attemptId =
+    typeof grading.attemptId === 'number' ? grading.attemptId : null;
+  const exercise = findExerciseWidget(messages, attemptId);
+  return {
+    kind: 'grading-result',
+    messageId: msg.id,
+    widgetId: widget.id,
+    ...(attemptId != null ? { attemptId } : {}),
+    scenarioContext: buildScenarioContext(exercise),
+    aiQuestion: buildAiQuestion(exercise),
+    myAnswer:
+      typeof grading.userAnswer === 'string' ? grading.userAnswer : '',
+    referenceAnswer:
+      typeof grading.referenceAnswer === 'string'
+        ? grading.referenceAnswer
+        : '',
+    aiAnalysis:
+      typeof grading.explanation === 'string' ? grading.explanation : '',
+    tags: Array.isArray(grading.tags)
+      ? grading.tags.filter((tag): tag is string => typeof tag === 'string')
+      : [],
+  };
+}
+
+function findExerciseWidget(
+  messages: MessageDTO[],
+  attemptId: number | null
+): LearningWidgetInstance | null {
+  for (const message of messages) {
+    for (const widget of widgetSnapshotToArray(message.widgetSnapshot)) {
+      if (widget.type !== 'exercise-card') continue;
+      const data = (widget.data ?? {}) as Record<string, unknown>;
+      if (
+        attemptId == null ||
+        (typeof data.attemptId === 'number' && data.attemptId === attemptId)
+      ) {
+        return {
+          id: widget.id ?? 'exercise-card',
+          type: widget.type,
+          status: widget.status ?? 'ready',
+          data: widget.data ?? {},
+          version: widget.version ?? 1,
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function buildScenarioContext(widget: LearningWidgetInstance | null): string {
+  const data = (widget?.data ?? {}) as Record<string, unknown>;
+  return [
+    typeof data.contextZh === 'string' ? data.contextZh : '',
+    typeof data.contextEn === 'string' ? data.contextEn : '',
+  ]
+    .filter((part) => part.trim().length > 0)
+    .join('\n');
+}
+
+function buildAiQuestion(widget: LearningWidgetInstance | null): string {
+  const data = (widget?.data ?? {}) as Record<string, unknown>;
+  return [
+    typeof data.stage === 'number' && typeof data.questionNo === 'number'
+      ? `阶段 ${data.stage} · 第 ${data.questionNo} 题`
+      : '',
+    typeof data.questionType === 'string'
+      ? `题型:${labelForQuestionType(data.questionType)}`
+      : '',
+    typeof data.targetZh === 'string' ? `请表达:${data.targetZh}` : '',
+    typeof data.prompt === 'string' ? `题目:${data.prompt}` : '',
+    typeof data.hint === 'string' ? `提示:${data.hint}` : '',
+  ]
+    .filter((part) => part.trim().length > 0)
+    .join('\n');
+}
+
+function labelForQuestionType(questionType: string): string {
+  switch (questionType) {
+    case 'fill_word':
+      return '单词填空';
+    case 'sentence_translation':
+      return '整句翻译';
+    case 'dialogue_chain':
+      return '对话接龙';
+    case 'role_reversal':
+      return '角色互换';
+    default:
+      return '练习题';
+  }
+}
+
+function widgetSnapshotToArray(
+  snapshot: unknown
+): Partial<LearningWidgetInstance>[] {
+  if (Array.isArray(snapshot)) {
+    return snapshot.filter(
+      (widget): widget is Partial<LearningWidgetInstance> =>
+        typeof widget === 'object' && widget !== null
+    );
+  }
+  if (typeof snapshot === 'object' && snapshot !== null) {
+    return [snapshot as Partial<LearningWidgetInstance>];
+  }
+  return [];
 }
 
 interface MessageWithWidget {
