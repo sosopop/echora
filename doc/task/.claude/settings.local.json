@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx vitest *)",
+      "Bash(node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand)"
+    ]
+  }
+}

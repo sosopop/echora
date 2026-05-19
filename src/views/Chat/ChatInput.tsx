@@ -29,6 +29,7 @@ export default function ChatInput(): JSX.Element {
   const [menuNotice, setMenuNotice] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const shouldRestoreFocusRef = useRef(false);
+  const prevStreamingRef = useRef(false);
   const inputMode = useChatStore((s) => s.inputMode);
   const streaming = useChatStore((s) => s.streamingMessageId !== null);
   const isLoading = useChatStore((s) => s.isLoading);
@@ -55,6 +56,13 @@ export default function ChatInput(): JSX.Element {
   const menuSections = buildLearningMenuSections(learningState, inputMode);
 
   useEffect(() => {
+    // When streaming just ended, force the restore flag so focus is always
+    // restored even if the flag was consumed by an intermediate render.
+    if (prevStreamingRef.current && !streaming) {
+      shouldRestoreFocusRef.current = true;
+    }
+    prevStreamingRef.current = streaming;
+
     if (!shouldRestoreFocusRef.current) return;
     if (streaming || isLoading || shouldShowSelectHint) return;
 

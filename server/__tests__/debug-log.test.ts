@@ -153,7 +153,7 @@ describe('debug log', () => {
     expect(text).toContain('请求体: conversationId');
     expect(text).toContain('password: <REDACTED>');
     expect(text).toContain('调用 AI 聊天接口');
-    expect(text).toContain('最后一条用户消息: hello debug');
+    expect(text).toContain('[user] hello debug');
     expect(text).toContain('AI 聊天最终输出');
     expect(text).toContain('最终文本: 收到:hello debug');
     expect(text).toContain('流式分片: textDelta=1');

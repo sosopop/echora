@@ -236,20 +236,26 @@ function formatChatRequest(requestValue: unknown): string[] {
   const request = toRecord(requestValue);
   if (!request) return [`AI 请求: ${formatValue(requestValue)}`];
   const messages = Array.isArray(request.messages) ? request.messages : [];
-  const lastUser = [...messages]
-    .reverse()
-    .map((msg) => toRecord(msg))
-    .find((msg) => msg?.role === 'user');
   const tools = Array.isArray(request.tools)
     ? request.tools
         .map((tool) => toRecord(tool)?.name)
         .filter((name): name is string => typeof name === 'string')
     : [];
-  return [
-    `System 提示: ${formatText(request.system, 800)}`,
-    `历史消息: ${messages.length} 条; 最后一条用户消息: ${formatText(lastUser?.content)}`,
-    `工具: ${tools.length > 0 ? tools.join(', ') : '无'}; toolChoice=${request.toolChoice ?? '未指定'}; maxTokens=${request.maxTokens ?? '未指定'}`,
+  const lines = [
+    `System 提示: ${formatText(request.system, 2000)}`,
+    `历史消息: ${messages.length} 条`,
   ];
+  for (const msg of messages) {
+    const m = toRecord(msg);
+    if (!m) continue;
+    const role = m.role ?? '?';
+    const content = typeof m.content === 'string' ? m.content : formatValue(m.content);
+    lines.push(`  [${role}] ${formatText(content, 300)}`);
+  }
+  lines.push(
+    `工具: ${tools.length > 0 ? tools.join(', ') : '无'}; toolChoice=${formatValue(request.toolChoice)}; maxTokens=${request.maxTokens ?? '未指定'}`
+  );
+  return lines;
 }
 
 function formatToolUses(toolUsesValue: unknown): string {
@@ -306,14 +312,14 @@ function formatValue(value: unknown, depth = 0): string {
   if (typeof value === 'bigint') return value.toString();
   if (Array.isArray(value)) {
     if (value.length === 0) return '空';
-    if (depth >= 2) return `${value.length} 项`;
+    if (depth >= 4) return `${value.length} 项`;
     return `${value.length} 项: ${value
-      .slice(0, 8)
+      .slice(0, 12)
       .map((item) => formatValue(item, depth + 1))
-      .join('; ')}${value.length > 8 ? `; 另有 ${value.length - 8} 项` : ''}`;
+      .join('; ')}${value.length > 12 ? `; 另有 ${value.length - 12} 项` : ''}`;
   }
   if (typeof value === 'object') {
-    if (depth >= 2) return '对象';
+    if (depth >= 4) return '对象';
     const entries = Object.entries(value as Record<string, unknown>);
     if (entries.length === 0) return '空';
     return entries
